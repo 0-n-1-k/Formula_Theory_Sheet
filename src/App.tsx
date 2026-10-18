@@ -27,7 +27,9 @@ import {
   renderTextWithMath,
 } from './utils/mathParser';
 import {
+  BUET_LOGO_ASCII_ART,
   DEFAULT_APP_STATE,
+  resetToHomeFormulasState,
   safeReadStorage,
   safeWriteStorage,
   validateJsonImportPayload,
@@ -536,6 +538,22 @@ export default function App() {
     setPersisted((prev) => ({ ...prev, goalOpen: !prev.goalOpen }));
   }, []);
 
+  const handleBrandReset = useCallback(() => {
+    setPersisted((prev) => resetToHomeFormulasState(prev));
+    setSearchInput('');
+    setToolsOpen(false);
+    setModalOpen(false);
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll<HTMLDetailsElement>('details.fmt, details.fmd').forEach((d) => {
+        d.open = false;
+      });
+    }
+    if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    showToast('RESET TO FORMULAS // ALL RETRACTED');
+  }, [showToast]);
+
   const handleToggleStar = useCallback((id: string) => {
     setPersisted((prev) => {
       const nextStarred = { ...prev.starred };
@@ -601,7 +619,32 @@ export default function App() {
               [INDEX]
             </button>
             <div className="brand-wrap">
-              <div className="brand-titles">
+              <div className="ntype-emblem" aria-hidden="true">
+                {':: BUET.EEE ::\nL-1 // T-1 SYS'}
+              </div>
+              <pre
+                className="buet-ascii-art"
+                id="buetAsciiArt"
+                aria-hidden="true"
+                title="BUET Seal ASCII Art"
+              >
+                {BUET_LOGO_ASCII_ART}
+              </pre>
+              <div
+                className="brand-titles"
+                id="brandResetBtn"
+                role="button"
+                tabIndex={0}
+                title="Return to Formulas (All Courses) and retract all sections"
+                aria-label="BUET L-1/T-1 EEE — Formula & Theorem Sheet: Return to Formulas for all courses and retract all sections"
+                onClick={handleBrandReset}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleBrandReset();
+                  }
+                }}
+              >
                 <h1 className="brand-title">BUET L-1/T-1 EEE — Formula &amp; Theorem Sheet</h1>
                 <p className="brand-sub">EEE 101 · MATH 157 · MATH 159 · PHY 121/165 · CSE 109</p>
               </div>

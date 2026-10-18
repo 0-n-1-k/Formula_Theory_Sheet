@@ -32,6 +32,28 @@ export const DEFAULT_APP_STATE: PersistedAppState = {
   starred: {},
 };
 
+export const BUET_LOGO_ASCII_ART = [
+  '    .:=**#**=:.    ',
+  '  .+%%##++**#%%+.  ',
+  ' -%@#--#*+-===+@%- ',
+  ':%@@#*+%@*======%%:',
+  '=@**+*+*#======-+@=',
+  ':%%---=-===++==-%%:',
+  ' -@@%%%#@*-===+%@- ',
+  '  .*@@@@@#+*#%%*.  ',
+  '    .-+#*%*#+-.    ',
+].join('\n');
+
+export function resetToHomeFormulasState(prev: PersistedAppState): PersistedAppState {
+  return {
+    ...prev,
+    tab: 'fm',
+    course: 'ALL',
+    status: 'all',
+    goalOpen: false,
+  };
+}
+
 export function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

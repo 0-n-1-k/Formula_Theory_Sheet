@@ -9,6 +9,9 @@
   <meta property="og:description" content="Interactive formula and theorem reference sheet for BUET Level-1 Term-1 EEE courses (EEE 101, MATH 157, MATH 159, PHY 121, CSE 109)." />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
@@ -256,8 +259,49 @@ code, pre, .fmcode, kbd {
   box-shadow: var(--inner-top);
 }
 
+.buet-ascii-art {
+  margin: 0;
+  padding: 3px 6px;
+  font-family: var(--font-mono);
+  font-size: 4.1px;
+  line-height: 0.92;
+  letter-spacing: 0.04em;
+  color: #ff6961;
+  background: rgba(172, 31, 36, 0.14);
+  border: 1px solid rgba(255, 105, 97, 0.34);
+  border-radius: 7px;
+  white-space: pre;
+  user-select: none;
+  flex-shrink: 0;
+  box-shadow: 0 0 12px rgba(172, 31, 36, 0.2), var(--inner-top);
+  text-shadow: 0 0 6px rgba(255, 105, 97, 0.35);
+}
+
 .brand-titles {
   min-width: 0;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+.brand-titles:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.brand-titles:hover .brand-title {
+  color: var(--accent-hover);
+}
+
+.brand-titles:active {
+  transform: scale(0.985);
+}
+
+.brand-titles:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .brand-title {
@@ -269,6 +313,7 @@ code, pre, .fmcode, kbd {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: color var(--dur-fast) var(--ease-out);
 }
 
 .brand-sub {
@@ -1847,6 +1892,11 @@ details.fmd[open] > summary::after {
     display: none;
   }
 
+  .buet-ascii-art {
+    font-size: 3.1px;
+    padding: 2px 4px;
+  }
+
   .brand-title {
     font-size: 13.5px;
   }
@@ -2070,7 +2120,16 @@ details.fmd[open] > summary::after {
         <div class="brand-wrap">
           <div class="ntype-emblem" aria-hidden="true">:: BUET.EEE ::
 L-1 // T-1 SYS</div>
-          <div class="brand-titles">
+          <pre class="buet-ascii-art" id="buetAsciiArt" aria-hidden="true" title="BUET Seal ASCII Art">    .:=**#**=:.    
+  .+%%##++**#%%+.  
+ -%@#--#*+-===+@%- 
+:%@@#*+%@*======%%:
+=@**+*+*#======-+@=
+:%%---=-===++==-%%:
+ -@@%%%#@*-===+%@- 
+  .*@@@@@#+*#%%*.  
+    .-+#*%*#+-.    </pre>
+          <div class="brand-titles" id="brandResetBtn" role="button" tabindex="0" title="Return to Formulas (All Courses) and retract all sections" aria-label="BUET L-1/T-1 EEE — Formula &amp; Theorem Sheet: Return to Formulas for all courses and retract all sections">
             <h1 class="brand-title">BUET L-1/T-1 EEE — Formula &amp; Theorem Sheet</h1>
             <p class="brand-sub">EEE 101 · MATH 157 · MATH 159 · PHY 121/165 · CSE 109</p>
           </div>
@@ -2829,7 +2888,8 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
     modalClose: document.getElementById('modalClose'),
     prevTopicBtn: document.getElementById('prevTopicBtn'),
     nextTopicBtn: document.getElementById('nextTopicBtn'),
-    pagerInfo: document.getElementById('pagerInfo')
+    pagerInfo: document.getElementById('pagerInfo'),
+    brandResetBtn: document.getElementById('brandResetBtn')
   };
 
   // Dynamically calculate and update --chrome-h and --fmbar-h on resize and when .goal opens/closes
@@ -3678,6 +3738,73 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
       applyFiltersAndCounts();
     }
   });
+
+  // Brand title click -> Return to Formulas tab for ALL courses and retract everything
+  function resetToFormulasHome() {
+    if (searchRafId !== null) {
+      cancelAnimationFrame(searchRafId);
+      searchRafId = null;
+    }
+    state.tab = 'fm';
+    state.course = 'ALL';
+    state.status = 'all';
+    state.query = '';
+    state.goalOpen = false;
+    wasSearching = false;
+    if (dom.fmq) dom.fmq.value = '';
+    if (dom.fmqClear) dom.fmqClear.hidden = true;
+    if (dom.searchWrap) {
+      dom.searchWrap.classList.remove('has-query', 'zero-match');
+    }
+
+    closeModal();
+    closeToolsDropdown();
+    if (window.innerWidth <= 1024 && dom.sidebar) {
+      dom.sidebar.classList.remove('mobile-open');
+    }
+
+    document.querySelectorAll('.fmlink.active').forEach(function (el) {
+      el.classList.remove('active');
+    });
+    document.querySelectorAll('details.fmt.index-selected').forEach(function (el) {
+      el.classList.remove('index-selected');
+    });
+    document.querySelectorAll('.fmi.revealed').forEach(function (el) {
+      el.classList.remove('revealed');
+    });
+
+    isProgrammaticToggle = true;
+    document.querySelectorAll('details.fmt').forEach(function (d) {
+      d.removeAttribute('data-presearch-open');
+      d.open = false;
+    });
+    document.querySelectorAll('details.fmd').forEach(function (d) {
+      d.open = false;
+    });
+    isProgrammaticToggle = false;
+
+    saveState();
+    applyFiltersAndCounts();
+    syncPagerToggleBtn();
+    syncStickyHeights();
+    syncMenuButtonHighlights();
+
+    if (history.replaceState && window.location.hash) {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast('RESET TO FORMULAS // ALL RETRACTED');
+  }
+
+  if (dom.brandResetBtn) {
+    dom.brandResetBtn.addEventListener('click', resetToFormulasHome);
+    dom.brandResetBtn.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        resetToFormulasHome();
+      }
+    });
+  }
 
   // Tab buttons
   dom.tabFm.addEventListener('click', function () {

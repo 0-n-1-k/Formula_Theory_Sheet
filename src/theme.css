@@ -235,8 +235,49 @@ code, pre, .fmcode, kbd {
   box-shadow: var(--inner-top);
 }
 
+.buet-ascii-art {
+  margin: 0;
+  padding: 3px 6px;
+  font-family: var(--font-mono);
+  font-size: 4.1px;
+  line-height: 0.92;
+  letter-spacing: 0.04em;
+  color: #ff6961;
+  background: rgba(172, 31, 36, 0.14);
+  border: 1px solid rgba(255, 105, 97, 0.34);
+  border-radius: 7px;
+  white-space: pre;
+  user-select: none;
+  flex-shrink: 0;
+  box-shadow: 0 0 12px rgba(172, 31, 36, 0.2), var(--inner-top);
+  text-shadow: 0 0 6px rgba(255, 105, 97, 0.35);
+}
+
 .brand-titles {
   min-width: 0;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+.brand-titles:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.brand-titles:hover .brand-title {
+  color: var(--accent-hover);
+}
+
+.brand-titles:active {
+  transform: scale(0.985);
+}
+
+.brand-titles:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .brand-title {
@@ -248,6 +289,7 @@ code, pre, .fmcode, kbd {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: color var(--dur-fast) var(--ease-out);
 }
 
 .brand-sub {
@@ -1815,6 +1857,11 @@ details.fmd[open] > summary::after {
   .brand-sub,
   .course-selector-label {
     display: none;
+  }
+
+  .buet-ascii-art {
+    font-size: 3.1px;
+    padding: 2px 4px;
   }
 
   .brand-title {

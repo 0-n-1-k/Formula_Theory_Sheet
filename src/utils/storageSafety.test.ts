@@ -1,12 +1,41 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  BUET_LOGO_ASCII_ART,
   DEFAULT_APP_STATE,
+  resetToHomeFormulasState,
   sanitizePersistedState,
   safeReadStorage,
   safeWriteStorage,
   validateJsonImportPayload,
 } from './storageSafety.ts';
+
+test('BUET_LOGO_ASCII_ART has 9 balanced lines of 19 characters with zero emojis', () => {
+  const lines = BUET_LOGO_ASCII_ART.split('\n');
+  assert.equal(lines.length, 9);
+  for (const line of lines) {
+    assert.equal(line.length, 19);
+  }
+});
+
+test('resetToHomeFormulasState returns user to Formulas tab for ALL courses with drawers retracted while preserving progress', () => {
+  const dirtyState = {
+    ...DEFAULT_APP_STATE,
+    tab: 'thm' as const,
+    course: 'M159' as const,
+    status: 'starred' as const,
+    goalOpen: true,
+    learned: { 'eee-1': true },
+    starred: { 'm159-1': true },
+  };
+  const next = resetToHomeFormulasState(dirtyState);
+  assert.equal(next.tab, 'fm');
+  assert.equal(next.course, 'ALL');
+  assert.equal(next.status, 'all');
+  assert.equal(next.goalOpen, false);
+  assert.deepEqual(next.learned, { 'eee-1': true });
+  assert.deepEqual(next.starred, { 'm159-1': true });
+});
 
 test('sanitizePersistedState falls back safely when raw data is null, primitive, array, or corrupted', () => {
   assert.deepEqual(sanitizePersistedState(null), DEFAULT_APP_STATE);
