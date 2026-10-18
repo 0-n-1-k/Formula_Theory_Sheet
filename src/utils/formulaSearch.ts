@@ -1,9 +1,12 @@
+export type TheoremCategoryFilter = 'all' | 'theorems' | 'definitions';
+
 export interface FormulaCardRecord {
   id: string;
   course: string;
   topicId: string;
   topicTitle: string;
   title: string;
+  badge?: string;
   keywords: string;
   rawLatex: string;
   bodyText: string;
@@ -19,6 +22,30 @@ export interface FilterState {
   course: string;
   status: 'all' | 'starred' | 'unlearned';
   query: string;
+  thmFilter?: TheoremCategoryFilter;
+}
+
+/**
+ * Determines whether a theorem/definition card badge represents a Definition
+ * (as opposed to Law, Theorem, Principle, Rule, Postulate, Identity, etc.).
+ */
+export function isDefinitionBadge(badge?: string): boolean {
+  return (badge || '').trim().toLowerCase() === 'definition';
+}
+
+/**
+ * Checks whether a card in the Theorems & Definitions section matches the 2-button filter:
+ * - 'definitions': keeps only Definition cards
+ * - 'theorems': filters out Definitions and keeps Laws, Theorems, Principles, Rules, and everything else
+ * - 'all': keeps all cards
+ */
+export function matchesTheoremCategoryFilter(
+  badge: string | undefined,
+  thmFilter: TheoremCategoryFilter = 'all'
+): boolean {
+  if (!thmFilter || thmFilter === 'all') return true;
+  const isDef = isDefinitionBadge(badge);
+  return thmFilter === 'definitions' ? isDef : !isDef;
 }
 
 export interface TopicFilterSummary {
@@ -155,10 +182,12 @@ export function filterFormulaCards(
       if (state.status === 'starred') statusMatch = !!card.isStarred;
       else if (state.status === 'unlearned') statusMatch = !card.isLearned;
 
+      const thmMatch = matchesTheoremCategoryFilter(card.badge, state.thmFilter || 'all');
+
       const idx = buildFormulaSearchIndex(card);
       const queryMatch = matchesSearchTokens(idx, tokens);
 
-      const showCard = courseMatch && statusMatch && queryMatch;
+      const showCard = courseMatch && statusMatch && thmMatch && queryMatch;
       if (showCard) {
         secVisible++;
         visibleCards++;

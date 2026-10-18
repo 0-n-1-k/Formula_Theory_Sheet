@@ -6,6 +6,8 @@ import {
   tokenizeSearchQuery,
   matchesSearchTokens,
   filterFormulaCards,
+  isDefinitionBadge,
+  matchesTheoremCategoryFilter,
   type FormulaCardRecord,
 } from './formulaSearch.ts';
 
@@ -16,6 +18,7 @@ const SAMPLE_CARDS: FormulaCardRecord[] = [
     topicId: 'fm-eee-thev',
     topicTitle: 'Network theorems: Thevenin, Norton, superposition',
     title: 'Thevenin Equivalent Voltage & Resistance',
+    badge: 'Theorem',
     keywords: 'thevenin voc rth open circuit equivalent',
     rawLatex: 'V_{\\text{th}} = V_{\\text{oc}}, \\quad R_{\\text{th}} = \\frac{V_{\\text{oc}}}{I_{\\text{sc}}}',
     bodyText: 'Where V_oc is open-circuit terminal voltage and I_sc is short-circuit current.',
@@ -28,6 +31,7 @@ const SAMPLE_CARDS: FormulaCardRecord[] = [
     topicId: 'fm-eee-ac',
     topicTitle: 'AC phasors, impedance, complex power, PF correction',
     title: 'Complex Power & Power Factor',
+    badge: 'Definition',
     keywords: 'complex power apparent active reactive pf cos theta',
     rawLatex: 'S = P + jQ = V_{\\text{rms}} I_{\\text{rms}}^*',
     bodyText: 'Used for AC power triangle and capacitor bank power factor correction.',
@@ -40,6 +44,7 @@ const SAMPLE_CARDS: FormulaCardRecord[] = [
     topicId: 'fm-m157-limits',
     topicTitle: "Limits, continuity, differentiability, L'Hôpital",
     title: "L'Hôpital's Rule for Indeterminate Forms",
+    badge: 'Rule',
     keywords: 'lhopital limit 0/0 inf/inf derivative',
     rawLatex: '\\lim_{x \\to a} \\frac{f(x)}{g(x)} = \\lim_{x \\to a} \\frac{f\'(x)}{g\'(x)}',
     bodyText: 'Applies when f(a)/g(a) yields 0/0 or infinity/infinity.',
@@ -109,3 +114,38 @@ test('filterFormulaCards dynamically filters by real-time query, course scope, a
   assert.equal(res4.visibleTopics, 0);
   assert.ok(res4.topics.every((t) => t.hidden));
 });
+
+test('matchesTheoremCategoryFilter separates Definitions from Theorems, Laws, Principles, and Rules', () => {
+  assert.equal(isDefinitionBadge('Definition'), true);
+  assert.equal(isDefinitionBadge('Theorem'), false);
+  assert.equal(isDefinitionBadge('Law'), false);
+  assert.equal(isDefinitionBadge('Principle'), false);
+
+  assert.equal(matchesTheoremCategoryFilter('Definition', 'definitions'), true);
+  assert.equal(matchesTheoremCategoryFilter('Theorem', 'definitions'), false);
+  assert.equal(matchesTheoremCategoryFilter('Law', 'definitions'), false);
+
+  assert.equal(matchesTheoremCategoryFilter('Definition', 'theorems'), false);
+  assert.equal(matchesTheoremCategoryFilter('Theorem', 'theorems'), true);
+  assert.equal(matchesTheoremCategoryFilter('Law', 'theorems'), true);
+  assert.equal(matchesTheoremCategoryFilter('Principle', 'theorems'), true);
+  assert.equal(matchesTheoremCategoryFilter('Rule', 'theorems'), true);
+
+  const defOnly = filterFormulaCards(SAMPLE_CARDS, {
+    course: 'ALL',
+    status: 'all',
+    query: '',
+    thmFilter: 'definitions',
+  });
+  assert.equal(defOnly.visibleCards, 1);
+  assert.deepEqual(defOnly.topics[1].visibleCardIds, ['eee-ac-1']);
+
+  const thmAndLawsOnly = filterFormulaCards(SAMPLE_CARDS, {
+    course: 'ALL',
+    status: 'all',
+    query: '',
+    thmFilter: 'theorems',
+  });
+  assert.equal(thmAndLawsOnly.visibleCards, 2);
+});
+

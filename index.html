@@ -170,9 +170,8 @@ code, pre, .fmcode, kbd {
 
 /* ======================== TOP CHROME & HEADER ======================== */
 .top-chrome {
-  position: sticky;
-  top: 0;
-  z-index: 120;
+  position: relative;
+  z-index: 210;
   background: var(--glass-chrome);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
@@ -617,8 +616,7 @@ code, pre, .fmcode, kbd {
 
 /* ======================== CONTROL BAR (#fmbar) ======================== */
 #fmbar {
-  position: sticky;
-  top: var(--chrome-h);
+  position: relative;
   z-index: 110;
   background: var(--glass-chrome);
   backdrop-filter: blur(24px) saturate(180%);
@@ -888,6 +886,10 @@ mark.search-hl {
   gap: 2px;
 }
 
+.chip-group[hidden] {
+  display: none !important;
+}
+
 .chip-btn {
   display: inline-flex;
   align-items: center;
@@ -1073,19 +1075,21 @@ mark.search-hl {
   align-items: start;
 }
 
-.app-layout.sidebar-collapsed {
-  grid-template-columns: minmax(0, 1fr);
-}
+@media (min-width: 1025px) {
+  .app-layout.sidebar-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
 
-.app-layout.sidebar-collapsed .sidebar {
-  display: none;
+  .app-layout.sidebar-collapsed .sidebar {
+    display: none;
+  }
 }
 
 .sidebar {
   position: sticky;
-  top: calc(var(--chrome-h) + var(--fmbar-h) + 12px);
+  top: 16px;
   z-index: 90;
-  max-height: calc(100vh - var(--chrome-h) - var(--fmbar-h) - 24px);
+  max-height: calc(100vh - 32px);
   overflow-y: auto;
   padding: 14px;
   border-radius: 16px;
@@ -1245,7 +1249,7 @@ mark.search-hl {
 }
 
 details.fmt {
-  scroll-margin-top: calc(var(--chrome-h) + var(--fmbar-h) + 16px);
+  scroll-margin-top: 16px;
   border-radius: 16px;
   background: var(--glass-card);
   backdrop-filter: blur(16px);
@@ -1858,27 +1862,87 @@ details.fmd[open] > summary::after {
   gap: 10px;
 }
 
-/* ======================== RESPONSIVE & MOBILE DRAWER (320px to 768px) ======================== */
+/* ======================== RESPONSIVE & MOBILE DRAWER (320px to 1024px) ======================== */
+.sidebar-backdrop {
+  display: none;
+}
+
+.sb-close-btn {
+  display: none;
+}
+
 @media (max-width: 1024px) {
   .app-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .sidebar {
+  .sidebar-backdrop {
     position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: min(320px, 86vw);
-    max-height: 100vh;
-    z-index: 130;
-    border-radius: 0 18px 18px 0;
-    transform: translateX(-104%);
-    transition: transform var(--dur-med) var(--ease-out);
+    inset: 0;
+    z-index: 195;
+    background: rgba(3, 3, 5, 0.62);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-fast) var(--ease-out);
   }
 
-  .sidebar.mobile-open {
-    transform: translateX(0);
+  .sidebar-backdrop.open {
+    display: block;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .sidebar,
+  .app-layout.sidebar-collapsed .sidebar {
+    display: flex !important;
+    flex-direction: column;
+    position: fixed;
+    top: var(--sidebar-top, 0px);
+    left: 0;
+    bottom: 0;
+    width: min(320px, 88vw);
+    max-height: calc(100vh - var(--sidebar-top, 0px));
+    z-index: 200;
+    border-radius: 0 18px 18px 0;
+    transform: translate3d(-105%, 0, 0);
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform var(--dur-med) var(--ease-out), visibility var(--dur-med) var(--ease-out);
+  }
+
+  .sidebar.mobile-open,
+  .app-layout.sidebar-collapsed .sidebar.mobile-open {
+    transform: translate3d(0, 0, 0);
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .sb-close-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 214, 10, 0.55);
+    background: rgba(255, 214, 10, 0.16);
+    color: #ffd60a;
+    font-family: var(--font-dot);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+  }
+
+  .sb-close-btn:hover {
+    background: rgba(255, 214, 10, 0.28);
+  }
+
+  .sb-close-btn:active {
+    transform: scale(0.95);
   }
 }
 
@@ -2224,6 +2288,11 @@ L-1 // T-1 SYS</div>
             <button type="button" class="chip-btn" data-status="unlearned" aria-pressed="false" aria-label="Show unlearned items only">Unlearned</button>
           </div>
 
+          <div class="chip-group" id="thmTypeGroup" role="group" aria-label="Filter Theorems and Definitions by category" hidden>
+            <button type="button" class="chip-btn" id="btnFilterTheorems" data-thm-type="theorems" aria-pressed="false" aria-label="Keep Theorems, Laws, Principles and everything else">Theorems &amp; Laws</button>
+            <button type="button" class="chip-btn" id="btnFilterDefinitions" data-thm-type="definitions" aria-pressed="false" aria-label="Keep Definitions only">Definitions</button>
+          </div>
+
           <div class="tools-menu-wrap" id="toolsMenuWrap">
             <button type="button" class="tools-trigger" id="toolsMenuBtn" aria-expanded="false" aria-haspopup="menu" aria-label="Study Tools and View Options Menu">
               <span>Study Tools &amp; View Options</span>
@@ -2278,10 +2347,12 @@ L-1 // T-1 SYS</div>
 
   <!-- Main Two-Column Application Layout -->
   <div class="app-layout" id="appLayout">
+    <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
     <aside class="sidebar" id="sidebar" aria-label="Topic Navigation">
       <div class="focus-pill">
         <span class="focus-pill-tag">ACTIVE SCOPE</span>
         <strong id="focusPillText">ALL COURSES</strong>
+        <button type="button" class="sb-close-btn" id="sidebarCloseBtn" aria-label="Close Topic Index Sidebar">[CLOSE]</button>
       </div>
       <nav class="fmnav" id="navF"><div class="fmnavrow" data-c="EEE"><b>EEE</b> <a href="#fm-eee-basic" class="fmlink">Basic laws, dividers, series–parallel</a> <a href="#fm-eee-delta" class="fmlink">Source transformation, Y–Δ, equivalent resistanc…</a> <a href="#fm-eee-nodal" class="fmlink">Nodal &amp; mesh analysis (supernode, supermesh, dep…</a> <a href="#fm-eee-thev" class="fmlink">Network theorems: Thevenin, Norton, superposition</a> <a href="#fm-eee-maxp" class="fmlink">Maximum power transfer</a> <a href="#fm-eee-lc" class="fmlink">Inductors &amp; capacitors</a> <a href="#fm-eee-trans" class="fmlink">First-order transients (RC / RL)</a> <a href="#fm-eee-ac" class="fmlink">AC phasors, impedance, complex power, PF correct…</a> <a href="#fm-eee-wave" class="fmlink">Waveforms: average, RMS, step expressions</a> <a href="#fm-eee-mag" class="fmlink">Magnetic circuits (mmf, flux, B–H curve)</a> <a href="#fm-eee-dual" class="fmlink">Duality, Millman (new in 2024-25)</a></div><div class="fmnavrow" data-c="M157"><b>M157</b> <a href="#fm-m157-limits" class="fmlink">Limits, continuity, differentiability, L'Hôpital</a> <a href="#fm-m157-mvt" class="fmlink">Mean value theorems</a> <a href="#fm-m157-succ" class="fmlink">Successive differentiation, Leibnitz, Taylor &amp; M…</a> <a href="#fm-m157-partial" class="fmlink">Partial derivatives, Euler's theorem, chain rule…</a> <a href="#fm-m157-maxmin" class="fmlink">Maxima/minima &amp; optimisation</a> <a href="#fm-m157-curv" class="fmlink">Curvature, tangents, pedal equation, asymptotes</a> <a href="#fm-m157-integ" class="fmlink">Integration: standard integrals, substitutions, …</a> <a href="#fm-m157-reduc" class="fmlink">Reduction formulae &amp; Wallis</a> <a href="#fm-m157-def" class="fmlink">Definite integrals, limit of a sum, improper int…</a> <a href="#fm-m157-gamma" class="fmlink">Beta &amp; Gamma functions</a> <a href="#fm-m157-appl" class="fmlink">Area, volume, surface of revolution, arc length …</a></div><div class="fmnavrow" data-c="M159"><b>M159</b> <a href="#fm-m159-complexnum" class="fmlink">Complex numbers: forms, roots, loci, elementary …</a> <a href="#fm-m159-analytic" class="fmlink">Analytic functions, Cauchy–Riemann, harmonic fun…</a> <a href="#fm-m159-cint" class="fmlink">Complex integration, Cauchy's theorem, ML inequa…</a> <a href="#fm-m159-conseq" class="fmlink">Consequences of Cauchy's theorem</a> <a href="#fm-m159-series" class="fmlink">Taylor &amp; Laurent series, singularities, residues</a> <a href="#fm-m159-real" class="fmlink">Real integrals by contour integration</a> <a href="#fm-m159-bilin" class="fmlink">Bilinear (Möbius) transformation</a> <a href="#fm-m159-vec" class="fmlink">Vector algebra, lines, planes, linear dependence</a> <a href="#fm-m159-curves" class="fmlink">Space curves &amp; vector differentiation</a> <a href="#fm-m159-ops" class="fmlink">Gradient, divergence, curl, potentials</a> <a href="#fm-m159-int" class="fmlink">Line, surface &amp; volume integrals</a> <a href="#fm-m159-thm" class="fmlink">Green's, Stokes' and Gauss' theorems</a></div><div class="fmnavrow" data-c="PHY"><b>PHY</b> <a href="#fm-phy-shm" class="fmlink">SHM, springs, Lissajous, reduced mass</a> <a href="#fm-phy-damp" class="fmlink">Damped oscillations</a> <a href="#fm-phy-forced" class="fmlink">Forced oscillations &amp; resonance</a> <a href="#fm-phy-wave" class="fmlink">Waves: velocity, group velocity, standing waves,…</a> <a href="#fm-phy-interf" class="fmlink">Interference (Young, biprism, Lloyd, thin films,…</a> <a href="#fm-phy-diff" class="fmlink">Diffraction: slit, double slit, grating, circula…</a> <a href="#fm-phy-polar" class="fmlink">Polarisation, double refraction, optical activity</a> <a href="#fm-phy-aber" class="fmlink">Lens aberrations, dispersion, achromatism</a> <a href="#fm-phy-thermo" class="fmlink">Thermodynamic processes, Carnot cycle, second law</a> <a href="#fm-phy-entropy" class="fmlink">Entropy</a> <a href="#fm-phy-maxwell" class="fmlink">Thermodynamic potentials, Maxwell relations, Cla…</a> <a href="#fm-phy-kinetic" class="fmlink">Kinetic theory, equipartition, mean free path, r…</a> <a href="#fm-phy-acoustic" class="fmlink">Acoustics, reverberation, intensity level</a></div><div class="fmnavrow" data-c="CSE"><b>CSE</b> <a href="#fm-cse-c" class="fmlink">C basics: types, operators, printf, control flow</a> <a href="#fm-cse-lib" class="fmlink">Standard-library quick reference</a> <a href="#fm-cse-ptr" class="fmlink">Pointers, dynamic memory, call by value / addres…</a> <a href="#fm-cse-ds" class="fmlink">Linked lists &amp; binary search trees (basics)</a> <a href="#fm-cse-str" class="fmlink">Arrays &amp; strings (manual implementations)</a> <a href="#fm-cse-file" class="fmlink">Structures &amp; file I/O</a> <a href="#fm-cse-bit" class="fmlink">Bitwise operators, unions, enums</a> <a href="#fm-cse-num" class="fmlink">Number systems, ASCII &amp; type conversion</a> <a href="#fm-cse-algo" class="fmlink">Functions, recursion &amp; standard programs</a> <a href="#fm-cse-pat" class="fmlink">Common programming patterns (digits, patterns, m…</a> <a href="#fm-cse-cpp" class="fmlink">C++: classes, copy control, operator overloading…</a> <a href="#fm-cse-cpp2" class="fmlink">C++ extras: I/O, static &amp; const members, templat…</a></div><div class="fmnavrow" data-c="GEN"><b>GEN</b> <a href="#fm-gen-math" class="fmlink">Mathematics quick reference</a> <a href="#fm-gen-const" class="fmlink">Constants, units &amp; conversions</a></div></nav>
     <nav class="fmnav" id="navT" hidden><div class="fmnavrow" data-c="EEE"><b>EEE</b> <a href="#t-eee1" class="fmlink">DC circuit laws, analysis methods &amp; network theorems</a> <a href="#t-eee2" class="fmlink">Capacitors, inductors, transients &amp; magnetic circuits</a></div><div class="fmnavrow" data-c="M157"><b>M157</b> <a href="#t-m1571" class="fmlink">Limits, continuity, differentiation &amp; mean value theorems</a> <a href="#t-m1572" class="fmlink">Partial derivatives, curves &amp; geometry</a> <a href="#t-m1573" class="fmlink">Integral calculus, Beta–Gamma functions &amp; improper integra…</a></div><div class="fmnavrow" data-c="M159"><b>M159</b> <a href="#t-m1591" class="fmlink">Complex numbers, analytic functions &amp; conformal mapping</a> <a href="#t-m1592" class="fmlink">Complex integration, series &amp; residues</a> <a href="#t-m1593" class="fmlink">Vector algebra, vector calculus &amp; integral theorems</a></div><div class="fmnavrow" data-c="PHY"><b>PHY</b> <a href="#t-phy1" class="fmlink">Oscillations &amp; waves</a> <a href="#t-phy2" class="fmlink">Optics</a> <a href="#t-phy3" class="fmlink">Thermodynamics &amp; kinetic theory of gases</a></div><div class="fmnavrow" data-c="CSE"><b>CSE</b> <a href="#t-cse1" class="fmlink">C programming: definitions</a> <a href="#t-cse2" class="fmlink">C++ and object-oriented programming: definitions</a></div></nav>
@@ -2703,11 +2774,13 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
   const VALID_TABS = ['fm', 'thm'];
   const VALID_COURSES = ['ALL', 'EEE', 'M157', 'M159', 'PHY', 'CSE', 'GEN'];
   const VALID_STATUSES = ['all', 'starred', 'unlearned'];
+  const VALID_THM_FILTERS = ['all', 'theorems', 'definitions'];
 
   const DEFAULT_STATE = {
     tab: 'fm',
     course: 'ALL',
     status: 'all',
+    thmFilter: 'all',
     query: '',
     selfTest: false,
     hideDetails: false,
@@ -2748,6 +2821,7 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
         tab: DEFAULT_STATE.tab,
         course: DEFAULT_STATE.course,
         status: DEFAULT_STATE.status,
+        thmFilter: DEFAULT_STATE.thmFilter,
         query: '',
         selfTest: DEFAULT_STATE.selfTest,
         hideDetails: DEFAULT_STATE.hideDetails,
@@ -2762,6 +2836,7 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
       tab: VALID_TABS.indexOf(raw.tab) !== -1 ? raw.tab : DEFAULT_STATE.tab,
       course: VALID_COURSES.indexOf(raw.course) !== -1 ? raw.course : DEFAULT_STATE.course,
       status: VALID_STATUSES.indexOf(raw.status) !== -1 ? raw.status : DEFAULT_STATE.status,
+      thmFilter: VALID_THM_FILTERS.indexOf(raw.thmFilter) !== -1 ? raw.thmFilter : DEFAULT_STATE.thmFilter,
       query: typeof raw.query === 'string' ? raw.query : '',
       selfTest: typeof raw.selfTest === 'boolean' ? raw.selfTest : DEFAULT_STATE.selfTest,
       hideDetails: typeof raw.hideDetails === 'boolean' ? raw.hideDetails : DEFAULT_STATE.hideDetails,
@@ -2791,6 +2866,7 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
         tab: clean.tab,
         course: clean.course,
         status: clean.status,
+        thmFilter: clean.thmFilter,
         selfTest: clean.selfTest,
         hideDetails: clean.hideDetails,
         singleCol: clean.singleCol,
@@ -2864,12 +2940,15 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
     resetSearchBtn: document.getElementById('resetSearchBtn'),
     fmchips: document.getElementById('fmchips'),
     statusGroup: document.getElementById('statusGroup'),
+    thmTypeGroup: document.getElementById('thmTypeGroup'),
     toolsWrap: document.getElementById('toolsMenuWrap'),
     toolsBtn: document.getElementById('toolsMenuBtn'),
     toolsDropdown: document.getElementById('toolsDropdown'),
     sbBtn: document.getElementById('sbBtn'),
     appLayout: document.getElementById('appLayout'),
     sidebar: document.getElementById('sidebar'),
+    sidebarBackdrop: document.getElementById('sidebarBackdrop'),
+    sidebarCloseBtn: document.getElementById('sidebarCloseBtn'),
     focusPillText: document.getElementById('focusPillText'),
     viewBannerStatus: document.getElementById('viewBannerStatus'),
     activeModeChips: document.getElementById('activeModeChips'),
@@ -2892,14 +2971,17 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
     brandResetBtn: document.getElementById('brandResetBtn')
   };
 
-  // Dynamically calculate and update --chrome-h and --fmbar-h on resize and when .goal opens/closes
+  // Dynamically calculate --chrome-h, --fmbar-h, and --sidebar-top
   function syncStickyHeights() {
     try {
       if (dom.topChrome) {
-        const ch = Math.ceil(dom.topChrome.getBoundingClientRect().height);
+        const rect = dom.topChrome.getBoundingClientRect();
+        const ch = Math.ceil(rect.height);
         if (ch > 0) {
           document.documentElement.style.setProperty('--chrome-h', ch + 'px');
         }
+        const visibleBottom = Math.max(0, Math.ceil(rect.bottom));
+        document.documentElement.style.setProperty('--sidebar-top', visibleBottom + 'px');
       }
       if (dom.fmbar) {
         const bh = Math.ceil(dom.fmbar.getBoundingClientRect().height);
@@ -3071,11 +3153,24 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
     }
   }
 
+  function isCompactViewport() {
+    if (typeof window.matchMedia === 'function') {
+      return window.matchMedia('(max-width: 1024px)').matches || window.innerWidth <= 1024;
+    }
+    return window.innerWidth <= 1024;
+  }
+
   function isSidebarVisible() {
-    if (window.innerWidth <= 1024) {
+    if (isCompactViewport()) {
       return Boolean(dom.sidebar && dom.sidebar.classList.contains('mobile-open'));
     }
     return Boolean(dom.appLayout && !dom.appLayout.classList.contains('sidebar-collapsed'));
+  }
+
+  function closeMobileSidebar() {
+    if (dom.sidebar) dom.sidebar.classList.remove('mobile-open');
+    if (dom.sidebarBackdrop) dom.sidebarBackdrop.classList.remove('open');
+    syncMenuButtonHighlights();
   }
 
   function syncMenuButtonHighlights() {
@@ -3083,6 +3178,9 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
     if (dom.sbBtn) {
       dom.sbBtn.classList.toggle('active', sbOpen);
       dom.sbBtn.setAttribute('aria-expanded', String(sbOpen));
+    }
+    if (dom.sidebarBackdrop) {
+      dom.sidebarBackdrop.classList.toggle('open', isCompactViewport() && sbOpen);
     }
     if (dom.goalToggleBtn) {
       const gOpen = Boolean(state.goalOpen);
@@ -3120,12 +3218,14 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
     const badgeEl = fmnEl.querySelector('.thty');
     if (badgeEl) {
       fmnEl.setAttribute('data-orig-badge', badgeEl.outerHTML);
+      fmnEl.setAttribute('data-badge-type', (badgeEl.textContent || '').trim().toLowerCase());
       const clone = fmnEl.cloneNode(true);
       const bClone = clone.querySelector('.thty');
       if (bClone) bClone.remove();
       fmnEl.setAttribute('data-orig-title', (clone.textContent || '').trim());
     } else {
       fmnEl.setAttribute('data-orig-title', (fmnEl.textContent || '').trim());
+      fmnEl.setAttribute('data-badge-type', '');
     }
   }
 
@@ -3232,10 +3332,14 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
               card.setAttribute('data-search-full', searchHay);
             }
 
+            const badgeType = fmnEl ? (fmnEl.getAttribute('data-badge-type') || '') : '';
+            const isDefinition = badgeType === 'definition';
+
             const itemRecord = {
               card: card,
               key: k,
               title: cleanTitle,
+              isDefinition: isDefinition,
               fmnEl: fmnEl,
               starBtn: starBtn,
               ckInput: ckInput,
@@ -3422,13 +3526,23 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
         btn.setAttribute('aria-pressed', String(active));
       });
 
-      // 4. Update Status Pod active button
+      // 4. Update Status Pod active button & Theorems/Definitions 2-button filter pod
       dom.statusGroup.querySelectorAll('.chip-btn').forEach(function (btn) {
         const s = btn.getAttribute('data-status');
         const active = s === state.status;
         btn.classList.toggle('active', active);
         btn.setAttribute('aria-pressed', String(active));
       });
+
+      if (dom.thmTypeGroup) {
+        dom.thmTypeGroup.hidden = isFm;
+        dom.thmTypeGroup.querySelectorAll('.chip-btn').forEach(function (btn) {
+          const t = btn.getAttribute('data-thm-type');
+          const active = !isFm && t === state.thmFilter;
+          btn.classList.toggle('active', active);
+          btn.setAttribute('aria-pressed', String(active));
+        });
+      }
 
       // 5. Update Dropdown items active states
       document.querySelectorAll('[data-tool-toggle]').forEach(function (btn) {
@@ -3447,6 +3561,7 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
       const qTokens = q ? q.split(/\s+/).filter(Boolean) : [];
       const cleanTokens = qTokens.map(function (t) { return t.replace(/^\\+/, ''); });
       const isSearchingNow = qTokens.length > 0;
+      const isThmTypeFiltered = !isFm && state.thmFilter && state.thmFilter !== 'all';
 
       if (isSearchingNow && !wasSearching) {
         for (let si = 0; si < activeTopics.length; si++) {
@@ -3486,6 +3601,11 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
           if (state.status === 'starred') statusMatch = isStarred;
           else if (state.status === 'unlearned') statusMatch = !isLearned;
 
+          let thmTypeMatch = true;
+          if (isThmTypeFiltered) {
+            thmTypeMatch = state.thmFilter === 'definitions' ? Boolean(rec.isDefinition) : !rec.isDefinition;
+          }
+
           let queryMatch = true;
           if (isSearchingNow) {
             const hay = rec.searchHay;
@@ -3499,7 +3619,7 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
             }
           }
 
-          const showCard = courseMatch && statusMatch && queryMatch;
+          const showCard = courseMatch && statusMatch && thmTypeMatch && queryMatch;
           const hideCard = !showCard;
           if (rec.isHidden !== hideCard) {
             rec.isHidden = hideCard;
@@ -3525,7 +3645,7 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
         }
 
         if (topic.cntEl) {
-          const nextCnt = isSearchingNow
+          const nextCnt = (isSearchingNow || isThmTypeFiltered)
             ? (secVisible + '/' + cards.length + ' MATCH')
             : (secLearned + '/' + cards.length);
           if (topic.cntEl.textContent !== nextCnt) {
@@ -3541,7 +3661,7 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
         }
         if (!secHidden) {
           visibleTopics++;
-          if (isSearchingNow || state.status !== 'all') {
+          if (isSearchingNow || state.status !== 'all' || isThmTypeFiltered) {
             if (!sec.open) sec.open = true;
           } else if (!isSearchingNow && wasSearching && sec.hasAttribute('data-presearch-open')) {
             const targetOpen = sec.getAttribute('data-presearch-open') === '1';
@@ -3614,6 +3734,9 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
       if (dom.activeModeChips) {
         const chips = [];
         chips.push('<span class="mode-chip">COURSE: ' + state.course + '</span>');
+        if (!isFm && state.thmFilter !== 'all') {
+          chips.push('<span class="mode-chip">TYPE: ' + (state.thmFilter === 'definitions' ? 'DEFINITIONS ONLY' : 'THEOREMS &amp; LAWS') + '</span>');
+        }
         if (q) chips.push('<span class="mode-chip">SEARCH: "' + q.replace(/[<>&"]/g, '') + '"</span>');
         if (state.status !== 'all') chips.push('<span class="mode-chip">FILTER: ' + state.status.toUpperCase() + '</span>');
         if (state.selfTest) chips.push('<span class="mode-chip">SELF-TEST: BLUR ON</span>');
@@ -3664,16 +3787,15 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
       closeToolsDropdown();
     }
 
-    // Close mobile sidebar if clicked outside on mobile
+    // Close mobile sidebar if clicked outside on mobile/tablet
     if (
-      window.innerWidth <= 1024 &&
+      isCompactViewport() &&
       dom.sidebar &&
       dom.sidebar.classList.contains('mobile-open') &&
       !dom.sidebar.contains(target) &&
       (!dom.sbBtn || !dom.sbBtn.contains(target))
     ) {
-      dom.sidebar.classList.remove('mobile-open');
-      syncMenuButtonHighlights();
+      closeMobileSidebar();
     }
 
     // Copy LaTeX / Code button (.fmcp)
@@ -3748,6 +3870,7 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
     state.tab = 'fm';
     state.course = 'ALL';
     state.status = 'all';
+    state.thmFilter = 'all';
     state.query = '';
     state.goalOpen = false;
     wasSearching = false;
@@ -3759,8 +3882,8 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
 
     closeModal();
     closeToolsDropdown();
-    if (window.innerWidth <= 1024 && dom.sidebar) {
-      dom.sidebar.classList.remove('mobile-open');
+    if (isCompactViewport()) {
+      closeMobileSidebar();
     }
 
     document.querySelectorAll('.fmlink.active').forEach(function (el) {
@@ -3835,6 +3958,25 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
     saveState();
     applyFiltersAndCounts();
   });
+
+  // Theorems & Definitions 2-button category filter pod (Theorems & Laws vs Definitions)
+  if (dom.thmTypeGroup) {
+    dom.thmTypeGroup.addEventListener('click', function (e) {
+      const btn = e.target.closest('.chip-btn');
+      if (!btn) return;
+      const clickedType = btn.getAttribute('data-thm-type') || 'all';
+      state.thmFilter = state.thmFilter === clickedType ? 'all' : clickedType;
+      saveState();
+      applyFiltersAndCounts();
+      showToast(
+        state.thmFilter === 'definitions'
+          ? 'FILTER: DEFINITIONS ONLY'
+          : state.thmFilter === 'theorems'
+          ? 'FILTER: THEOREMS & LAWS'
+          : 'SHOWING ALL THEOREMS & DEFINITIONS'
+      );
+    });
+  }
 
   // Real-time search input & clear handlers (Optimization C: non-blocking input + instant clear)
   function clearSearchQuery() {
@@ -3920,7 +4062,9 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
 
   // Index link click -> open target section & apply golden accent border highlight
   dom.sidebar.addEventListener('click', function (e) {
-    const link = e.target.closest('.fmlink');
+    const rawTarget = e.target && e.target.nodeType === 3 ? e.target.parentElement : e.target;
+    if (!rawTarget || typeof rawTarget.closest !== 'function') return;
+    const link = rawTarget.closest('.fmlink');
     if (!link) return;
     const href = link.getAttribute('href') || '';
     if (!href.startsWith('#') || href.length < 2) return;
@@ -3940,26 +4084,47 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
     targetSec.open = true;
     if (typeof syncPagerToggleBtn === 'function') syncPagerToggleBtn();
 
-    if (window.innerWidth <= 1024) {
-      dom.sidebar.classList.remove('mobile-open');
-      syncMenuButtonHighlights();
+    if (isCompactViewport()) {
+      closeMobileSidebar();
     }
     syncStickyHeights();
-    targetSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    requestAnimationFrame(function () {
+      targetSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
     if (history.replaceState) {
       history.replaceState(null, '', href);
     }
   });
 
-  // Sidebar toggle
-  dom.sbBtn.addEventListener('click', function () {
-    if (window.innerWidth <= 1024) {
-      dom.sidebar.classList.toggle('mobile-open');
+  // Sidebar toggle (#sbBtn, #sidebarCloseBtn, #sidebarBackdrop)
+  dom.sbBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    syncStickyHeights();
+    if (isCompactViewport()) {
+      dom.appLayout.classList.remove('sidebar-collapsed');
+      const willOpen = !dom.sidebar.classList.contains('mobile-open');
+      dom.sidebar.classList.toggle('mobile-open', willOpen);
+      if (dom.sidebarBackdrop) dom.sidebarBackdrop.classList.toggle('open', willOpen);
     } else {
+      dom.sidebar.classList.remove('mobile-open');
+      if (dom.sidebarBackdrop) dom.sidebarBackdrop.classList.remove('open');
       dom.appLayout.classList.toggle('sidebar-collapsed');
     }
     syncMenuButtonHighlights();
   });
+
+  if (dom.sidebarCloseBtn) {
+    dom.sidebarCloseBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      closeMobileSidebar();
+    });
+  }
+
+  if (dom.sidebarBackdrop) {
+    dom.sidebarBackdrop.addEventListener('click', function () {
+      closeMobileSidebar();
+    });
+  }
 
   // Goal drawer toggle & exam date
   dom.goalToggleBtn.addEventListener('click', function () {
@@ -4033,8 +4198,12 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
 
   // Back to top button
   window.addEventListener('scroll', function () {
-    if (!dom.totop) return;
-    dom.totop.classList.toggle('vis', window.scrollY > 360);
+    if (dom.totop) {
+      dom.totop.classList.toggle('vis', window.scrollY > 360);
+    }
+    if (isCompactViewport()) {
+      syncStickyHeights();
+    }
   }, { passive: true });
   dom.totop.addEventListener('click', function () {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -4223,8 +4392,7 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
         return;
       }
       if (dom.sidebar && dom.sidebar.classList.contains('mobile-open')) {
-        dom.sidebar.classList.remove('mobile-open');
-        syncMenuButtonHighlights();
+        closeMobileSidebar();
         return;
       }
       if (activeEl === dom.fmq) {

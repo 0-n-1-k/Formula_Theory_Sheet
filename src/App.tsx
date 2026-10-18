@@ -21,6 +21,7 @@ import {
   matchesSearchTokens,
   tokenizeSearchQuery,
   type FormulaCardRecord,
+  type TheoremCategoryFilter,
 } from './utils/formulaSearch';
 import {
   renderLatexCached,
@@ -401,6 +402,7 @@ export default function App() {
   const deferredQuery = useDeferredValue(searchInput);
 
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+  const [thmFilter, setThmFilter] = useState<TheoremCategoryFilter>('all');
   const [toolsOpen, setToolsOpen] = useState<boolean>(false);
   const [modalOpen, setModalOpen] = useState<boolean>(false);
   const [flashcardHtml, setFlashcardHtml] = useState<string>('');
@@ -518,8 +520,9 @@ export default function App() {
         course: persisted.course,
         status: persisted.status,
         query: deferredQuery,
+        thmFilter: persisted.tab === 'thm' ? thmFilter : 'all',
       }),
-    [sampleCards, persisted.course, persisted.status, deferredQuery]
+    [sampleCards, persisted.course, persisted.status, deferredQuery, persisted.tab, thmFilter]
   );
 
   const handleTabChange = useCallback((tab: TabMode) => {
@@ -540,6 +543,7 @@ export default function App() {
 
   const handleBrandReset = useCallback(() => {
     setPersisted((prev) => resetToHomeFormulasState(prev));
+    setThmFilter('all');
     setSearchInput('');
     setToolsOpen(false);
     setModalOpen(false);
@@ -755,6 +759,41 @@ export default function App() {
               </div>
 
               <div
+                className="chip-group"
+                id="thmTypeGroup"
+                role="group"
+                aria-label="Filter Theorems and Definitions by category"
+                hidden={persisted.tab !== 'thm'}
+              >
+                <button
+                  type="button"
+                  className={`chip-btn${thmFilter === 'theorems' ? ' active' : ''}`}
+                  id="btnFilterTheorems"
+                  data-thm-type="theorems"
+                  aria-pressed={thmFilter === 'theorems'}
+                  aria-label="Keep Theorems, Laws, Principles and everything else"
+                  onClick={() =>
+                    setThmFilter((prev) => (prev === 'theorems' ? 'all' : 'theorems'))
+                  }
+                >
+                  Theorems &amp; Laws
+                </button>
+                <button
+                  type="button"
+                  className={`chip-btn${thmFilter === 'definitions' ? ' active' : ''}`}
+                  id="btnFilterDefinitions"
+                  data-thm-type="definitions"
+                  aria-pressed={thmFilter === 'definitions'}
+                  aria-label="Keep Definitions only"
+                  onClick={() =>
+                    setThmFilter((prev) => (prev === 'definitions' ? 'all' : 'definitions'))
+                  }
+                >
+                  Definitions
+                </button>
+              </div>
+
+              <div
                 ref={toolsWrapRef}
                 className={`tools-menu-wrap${toolsOpen ? ' open' : ''}`}
               >
@@ -805,7 +844,12 @@ export default function App() {
         className={`app-layout${sidebarOpen ? '' : ' sidebar-collapsed'}`}
         id="appLayout"
       >
-        <aside className="sidebar" id="sidebar" aria-label="Topic Navigation" hidden={!sidebarOpen} />
+        <aside
+          className={`sidebar${sidebarOpen ? ' mobile-open' : ''}`}
+          id="sidebar"
+          aria-label="Topic Navigation"
+          hidden={!sidebarOpen}
+        />
         <div className="content-col">
           <WorkspaceErrorBoundary fallbackLabel="Formula Workspace (#fmroot)">
             <main id="fmroot" hidden={persisted.tab !== 'fm'}>
