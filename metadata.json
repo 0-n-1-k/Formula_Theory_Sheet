@@ -1,0 +1,6 @@
+{
+  "name": "BUET L-1/T-1 EEE — Formula & Theorem Sheet",
+  "description": "Interactive formula and theorem reference sheet for BUET Level-1 Term-1 EEE courses (EEE 101, MATH 157, MATH 159, PHY 121, CSE 109) with Apple dark glassmorphism and NType82 dot-matrix accents.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
