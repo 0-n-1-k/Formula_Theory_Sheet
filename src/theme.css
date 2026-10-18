@@ -203,6 +203,15 @@ code, pre, .fmcode, kbd {
   transform: scale(0.97);
 }
 
+#sbBtn.active,
+.sb-btn.active,
+#sbBtn[aria-expanded="true"] {
+  color: #ffd60a;
+  background: rgba(255, 214, 10, 0.14);
+  border-color: rgba(255, 214, 10, 0.62);
+  box-shadow: 0 0 14px rgba(255, 214, 10, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
 .brand-wrap {
   display: flex;
   align-items: center;
@@ -342,6 +351,25 @@ code, pre, .fmcode, kbd {
 
 .goal-toggle-btn:active {
   transform: scale(0.97);
+}
+
+.goal-toggle-btn .ntype-badge {
+  color: inherit;
+}
+
+#goalToggleBtn.active,
+.goal-toggle-btn.active,
+.goal-toggle-btn[aria-expanded="true"] {
+  color: #ffd60a;
+  background: rgba(255, 214, 10, 0.14);
+  border-color: rgba(255, 214, 10, 0.62);
+  box-shadow: 0 0 14px rgba(255, 214, 10, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+#goalToggleBtn.active .ntype-badge,
+.goal-toggle-btn.active .ntype-badge,
+.goal-toggle-btn[aria-expanded="true"] .ntype-badge {
+  color: #ffd60a !important;
 }
 
 .goal {
@@ -1172,6 +1200,7 @@ details.fmt {
   transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 
+details.fmt.hidden,
 details.fmt[hidden] {
   display: none !important;
 }
@@ -1295,6 +1324,7 @@ body.single-col .fmgrid {
   transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
 }
 
+.fmi.hidden,
 .fmi[hidden] {
   display: none !important;
 }

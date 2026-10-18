@@ -7,6 +7,7 @@ import React, {
   Component,
   memo,
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -14,11 +15,17 @@ import React, {
   type ErrorInfo,
   type ReactNode,
 } from 'react';
-import katex from 'katex';
 import {
+  buildFormulaSearchIndex,
   filterFormulaCards,
+  matchesSearchTokens,
+  tokenizeSearchQuery,
   type FormulaCardRecord,
 } from './utils/formulaSearch';
+import {
+  renderLatexCached,
+  renderTextWithMath,
+} from './utils/mathParser';
 import {
   DEFAULT_APP_STATE,
   safeReadStorage,
@@ -121,16 +128,10 @@ export const KatexMathBlock = memo(function KatexMathBlock({
   latex,
   displayMode = true,
 }: KatexMathBlockProps) {
-  const renderedHtml = useMemo(() => {
-    try {
-      return katex.renderToString(latex, {
-        displayMode,
-        throwOnError: false,
-      });
-    } catch {
-      return '';
-    }
-  }, [latex, displayMode]);
+  const renderedHtml = useMemo(
+    () => renderLatexCached(latex, displayMode),
+    [latex, displayMode]
+  );
 
   return (
     <KatexErrorBoundary rawLatex={latex}>
@@ -148,27 +149,169 @@ export const KatexMathBlock = memo(function KatexMathBlock({
   );
 });
 
+export interface SecondaryMathTextProps {
+  className: string;
+  content: string;
+  as?: 'div' | 'li' | 'span';
+}
+
+export const SecondaryMathText = memo(function SecondaryMathText({
+  className,
+  content,
+  as: Tag = 'div',
+}: SecondaryMathTextProps) {
+  const parsedHtml = useMemo(() => renderTextWithMath(content), [content]);
+  return (
+    <Tag
+      className={className}
+      dangerouslySetInnerHTML={{ __html: parsedHtml }}
+    />
+  );
+});
+
+function formatDoomsdayParts(examDate: string, nowMs: number) {
+  if (!examDate) return null;
+  const target = new Date(`${examDate}T09:00:00`);
+  const diff = target.getTime() - nowMs;
+  if (Number.isNaN(diff)) return null;
+  const absDiff = Math.abs(diff);
+  const totalSec = Math.floor(absDiff / 1000);
+  const days = String(Math.floor(totalSec / 86400)).padStart(2, '0');
+  const hrs = String(Math.floor((totalSec % 86400) / 3600)).padStart(2, '0');
+  const mins = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+  const secs = String(totalSec % 60).padStart(2, '0');
+  const prefix = diff >= 0 ? 'DOOMSDAY // T-MINUS' : 'DOOMSDAY // T-PLUS';
+  return { days, hrs, mins, secs, prefix };
+}
+
+/**
+ * Optimization D: Isolated Doomsday Countdown Button & Drawer Clock
+ * Houses its own 1-second setInterval so every-second ticks never re-render the search bar,
+ * sidebar, or formula/theorem card grids.
+ */
+export interface DoomsdayToggleButtonProps {
+  examDate: string;
+  goalOpen: boolean;
+  onToggle: () => void;
+}
+
+export const DoomsdayToggleButton = memo(function DoomsdayToggleButton({
+  examDate,
+  goalOpen,
+  onToggle,
+}: DoomsdayToggleButtonProps) {
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (!document.hidden) {
+        setNowMs(Date.now());
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const parts = formatDoomsdayParts(examDate, nowMs);
+  const label = parts
+    ? `DOOMSDAY // ${parts.days}D : ${parts.hrs}H : ${parts.mins}M : ${parts.secs}S`
+    : 'GOAL // TIMER';
+
+  return (
+    <button
+      type="button"
+      className={`goal-toggle-btn${goalOpen ? ' active' : ''}`}
+      id="goalToggleBtn"
+      aria-label="Toggle Study Progress and Exam Countdown Drawer"
+      aria-expanded={goalOpen}
+      onClick={onToggle}
+    >
+      <span className="ntype-badge">{label}</span>
+    </button>
+  );
+});
+
+export const DoomsdayDrawerClock = memo(function DoomsdayDrawerClock({
+  examDate,
+}: {
+  examDate: string;
+}) {
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (!document.hidden) {
+        setNowMs(Date.now());
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const parts = formatDoomsdayParts(examDate, nowMs);
+  if (!parts) {
+    return (
+      <span id="cdt">
+        <span className="doomsday-tag">STANDBY</span>
+        <span>SET EXAM DATE TO ARM DOOMSDAY CLOCK</span>
+      </span>
+    );
+  }
+
+  return (
+    <span id="cdt">
+      <span className="doomsday-tag">{parts.prefix}</span>
+      <span className="doomsday-segments">
+        <span className="dd-seg">
+          <span className="dd-val">{parts.days}</span>
+          <span className="dd-unit">D</span>
+        </span>
+        <span className="dd-sep">:</span>
+        <span className="dd-seg">
+          <span className="dd-val">{parts.hrs}</span>
+          <span className="dd-unit">H</span>
+        </span>
+        <span className="dd-sep">:</span>
+        <span className="dd-seg">
+          <span className="dd-val">{parts.mins}</span>
+          <span className="dd-unit">M</span>
+        </span>
+        <span className="dd-sep">:</span>
+        <span className="dd-seg">
+          <span className="dd-val">{parts.secs}</span>
+          <span className="dd-unit">S</span>
+        </span>
+      </span>
+    </span>
+  );
+});
+
 export interface FormulaCardViewProps {
   card: FormulaCardRecord;
   isLearned: boolean;
   isStarred: boolean;
+  isHidden?: boolean;
   onToggleStar: (id: string) => void;
   onToggleLearned: (id: string, checked: boolean) => void;
   onCopyLatex: (latex: string) => void;
 }
 
+/**
+ * Optimization A & B: Kept mounted in DOM and toggles `.hidden` class instead of unmounting/remounting.
+ * Applies `renderTextWithMath` across `.fmw`, `.fmu`, `.fmsteps li`, `.fmnote`, and `.thsee`.
+ */
 export const FormulaCardView = memo(function FormulaCardView({
   card,
   isLearned,
   isStarred,
+  isHidden = false,
   onToggleStar,
   onToggleLearned,
   onCopyLatex,
 }: FormulaCardViewProps) {
   return (
     <div
-      className={`fmi tex${isStarred ? ' starred' : ''}${isLearned ? ' learned' : ''}`}
+      className={`fmi tex${isStarred ? ' starred' : ''}${isLearned ? ' learned' : ''}${isHidden ? ' hidden' : ''}`}
       data-k={card.id}
+      hidden={isHidden}
     >
       <div className="fmh">
         <span className="fmn">{card.title}</span>
@@ -206,8 +349,32 @@ export const FormulaCardView = memo(function FormulaCardView({
       <div className="fmbody">
         <KatexMathBlock latex={card.rawLatex} displayMode />
         <div className="fmdet">
-          <div className="fmw">{card.bodyText}</div>
+          <SecondaryMathText className="fmw" content={card.bodyText} />
+          {card.useText ? (
+            <SecondaryMathText className="fmu" content={card.useText} />
+          ) : null}
         </div>
+        {card.note ? (
+          <SecondaryMathText className="fmnote" content={card.note} />
+        ) : null}
+        {card.seeAlso ? (
+          <SecondaryMathText className="thsee" content={card.seeAlso} />
+        ) : null}
+        {card.steps && card.steps.length > 0 ? (
+          <details className="fmd">
+            <summary>Proof &amp; derivation steps</summary>
+            <ol className="fmsteps">
+              {card.steps.map((step, idx) => (
+                <SecondaryMathText
+                  key={idx}
+                  as="li"
+                  className=""
+                  content={step}
+                />
+              ))}
+            </ol>
+          </details>
+        ) : null}
       </div>
     </div>
   );
@@ -227,9 +394,14 @@ export default function App() {
   const [persisted, setPersisted] = useState<PersistedAppState>(() =>
     safeReadStorage(STORAGE_KEY, DEFAULT_APP_STATE)
   );
-  const [query, setQuery] = useState<string>('');
+  // Optimization C: Immediate local state for 60fps search input + useDeferredValue for non-blocking filter calculation
+  const [searchInput, setSearchInput] = useState<string>('');
+  const deferredQuery = useDeferredValue(searchInput);
+
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
   const [toolsOpen, setToolsOpen] = useState<boolean>(false);
   const [modalOpen, setModalOpen] = useState<boolean>(false);
+  const [flashcardHtml, setFlashcardHtml] = useState<string>('');
   const [importJsonText, setImportJsonText] = useState<string>('');
   const [toastMsg, setToastMsg] = useState<string>('');
 
@@ -296,8 +468,8 @@ export default function App() {
         searchInputRef.current?.focus();
         searchInputRef.current?.select();
       } else if (e.key === 'Escape') {
-        if (document.activeElement === searchInputRef.current && query) {
-          setQuery('');
+        if (document.activeElement === searchInputRef.current && searchInput) {
+          setSearchInput('');
         }
         setToolsOpen(false);
         setModalOpen(false);
@@ -320,18 +492,32 @@ export default function App() {
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('click', handleDocumentClick);
     };
-  }, [query]);
+  }, [searchInput]);
 
   const sampleCards = useMemo<FormulaCardRecord[]>(() => [], []);
+
+  const preindexedCards = useMemo(
+    () =>
+      sampleCards.map((c) => ({
+        card: c,
+        searchIndex: buildFormulaSearchIndex(c),
+      })),
+    [sampleCards]
+  );
+
+  const deferredTokens = useMemo(
+    () => tokenizeSearchQuery(deferredQuery),
+    [deferredQuery]
+  );
 
   const filterSummary = useMemo(
     () =>
       filterFormulaCards(sampleCards, {
         course: persisted.course,
         status: persisted.status,
-        query,
+        query: deferredQuery,
       }),
-    [sampleCards, persisted.course, persisted.status, query]
+    [sampleCards, persisted.course, persisted.status, deferredQuery]
   );
 
   const handleTabChange = useCallback((tab: TabMode) => {
@@ -345,6 +531,38 @@ export default function App() {
   const handleStatusChange = useCallback((status: StatusFilter) => {
     setPersisted((prev) => ({ ...prev, status }));
   }, []);
+
+  const handleToggleGoal = useCallback(() => {
+    setPersisted((prev) => ({ ...prev, goalOpen: !prev.goalOpen }));
+  }, []);
+
+  const handleToggleStar = useCallback((id: string) => {
+    setPersisted((prev) => {
+      const nextStarred = { ...prev.starred };
+      if (nextStarred[id]) delete nextStarred[id];
+      else nextStarred[id] = true;
+      return { ...prev, starred: nextStarred };
+    });
+  }, []);
+
+  const handleToggleLearned = useCallback((id: string, checked: boolean) => {
+    setPersisted((prev) => {
+      const nextLearned = { ...prev.learned };
+      if (checked) nextLearned[id] = true;
+      else delete nextLearned[id];
+      return { ...prev, learned: nextLearned };
+    });
+  }, []);
+
+  const handleCopyLatex = useCallback(
+    (latex: string) => {
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(latex).catch(() => {});
+      }
+      showToast('COPIED TO CLIPBOARD');
+    },
+    [showToast]
+  );
 
   const handleImportSubmit = useCallback(() => {
     const validation = validateJsonImportPayload(importJsonText);
@@ -362,6 +580,11 @@ export default function App() {
     showToast('PROGRESS RESTORED');
   }, [importJsonText, showToast]);
 
+  const parsedFlashcardHtml = useMemo(
+    () => renderTextWithMath(flashcardHtml),
+    [flashcardHtml]
+  );
+
   return (
     <WorkspaceErrorBoundary fallbackLabel="BUET L-1/T-1 EEE Sheet">
       <header className="top-chrome" ref={topChromeRef}>
@@ -369,9 +592,11 @@ export default function App() {
           <div className="hd-left">
             <button
               type="button"
-              className="sb-btn"
+              className={`sb-btn${sidebarOpen ? ' active' : ''}`}
               id="sbBtn"
               aria-label="Toggle Topic Index Sidebar"
+              aria-expanded={sidebarOpen}
+              onClick={() => setSidebarOpen((open) => !open)}
             >
               [INDEX]
             </button>
@@ -405,17 +630,11 @@ export default function App() {
                 <span>Theorems &amp; Definitions</span>
               </button>
             </div>
-            <button
-              type="button"
-              className="goal-toggle-btn"
-              aria-label="Toggle Study Progress and Exam Countdown Drawer"
-              aria-expanded={persisted.goalOpen}
-              onClick={() =>
-                setPersisted((prev) => ({ ...prev, goalOpen: !prev.goalOpen }))
-              }
-            >
-              <span className="ntype-badge">GOAL // TIMER</span>
-            </button>
+            <DoomsdayToggleButton
+              examDate={persisted.examDate}
+              goalOpen={persisted.goalOpen}
+              onToggle={handleToggleGoal}
+            />
           </div>
         </div>
         <div className="goal" hidden={!persisted.goalOpen}>
@@ -424,6 +643,9 @@ export default function App() {
             <div id="pb" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={0}>
               <div id="pf" />
             </div>
+          </div>
+          <div className="cdrow">
+            <DoomsdayDrawerClock examDate={persisted.examDate} />
           </div>
         </div>
       </header>
@@ -460,8 +682,8 @@ export default function App() {
                 ref={searchInputRef}
                 type="search"
                 id="fmq"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Search formulas, theorems, symbols, C/C++ syntax, or exam use..."
                 aria-label="Search formulas and theorems (Press / or Ctrl+K to focus)"
                 autoComplete="off"
@@ -510,6 +732,7 @@ export default function App() {
                     role="menuitem"
                     aria-label="Export or Import Progress JSON"
                     onClick={() => {
+                      setFlashcardHtml('');
                       setImportJsonText(
                         JSON.stringify(
                           {
@@ -535,10 +758,44 @@ export default function App() {
         </div>
       </section>
 
-      <div className="app-layout" id="appLayout">
+      <div
+        className={`app-layout${sidebarOpen ? '' : ' sidebar-collapsed'}`}
+        id="appLayout"
+      >
+        <aside className="sidebar" id="sidebar" aria-label="Topic Navigation" hidden={!sidebarOpen} />
         <div className="content-col">
           <WorkspaceErrorBoundary fallbackLabel="Formula Workspace (#fmroot)">
-            <main id="fmroot" hidden={persisted.tab !== 'fm'} />
+            <main id="fmroot" hidden={persisted.tab !== 'fm'}>
+              {preindexedCards.map(({ card, searchIndex }) => {
+                const isLearned = Boolean(persisted.learned[card.id]);
+                const isStarred = Boolean(persisted.starred[card.id]);
+                const courseMatch =
+                  persisted.course === 'ALL' || card.course === persisted.course;
+                const statusMatch =
+                  persisted.status === 'all'
+                    ? true
+                    : persisted.status === 'starred'
+                    ? isStarred
+                    : !isLearned;
+                const queryMatch = matchesSearchTokens(
+                  searchIndex,
+                  deferredTokens
+                );
+                const isHidden = !(courseMatch && statusMatch && queryMatch);
+                return (
+                  <FormulaCardView
+                    key={card.id}
+                    card={card}
+                    isLearned={isLearned}
+                    isStarred={isStarred}
+                    isHidden={isHidden}
+                    onToggleStar={handleToggleStar}
+                    onToggleLearned={handleToggleLearned}
+                    onCopyLatex={handleCopyLatex}
+                  />
+                );
+              })}
+            </main>
           </WorkspaceErrorBoundary>
           <WorkspaceErrorBoundary fallbackLabel="Theorem Workspace (#thmroot)">
             <main id="thmroot" hidden={persisted.tab !== 'thm'} />
@@ -555,19 +812,28 @@ export default function App() {
         hidden={!modalOpen}
       >
         <div className="fcb">
-          <textarea
-            aria-label="Backup JSON state"
-            value={importJsonText}
-            onChange={(e) => setImportJsonText(e.target.value)}
-          />
-          <button
-            type="button"
-            className="course-pill active"
-            aria-label="Import JSON state"
-            onClick={handleImportSubmit}
-          >
-            IMPORT STATE
-          </button>
+          {parsedFlashcardHtml ? (
+            <div
+              className="fcbody"
+              dangerouslySetInnerHTML={{ __html: parsedFlashcardHtml }}
+            />
+          ) : (
+            <>
+              <textarea
+                aria-label="Backup JSON state"
+                value={importJsonText}
+                onChange={(e) => setImportJsonText(e.target.value)}
+              />
+              <button
+                type="button"
+                className="course-pill active"
+                aria-label="Import JSON state"
+                onClick={handleImportSubmit}
+              >
+                IMPORT STATE
+              </button>
+            </>
+          )}
         </div>
       </div>
 

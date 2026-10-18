@@ -224,6 +224,15 @@ code, pre, .fmcode, kbd {
   transform: scale(0.97);
 }
 
+#sbBtn.active,
+.sb-btn.active,
+#sbBtn[aria-expanded="true"] {
+  color: #ffd60a;
+  background: rgba(255, 214, 10, 0.14);
+  border-color: rgba(255, 214, 10, 0.62);
+  box-shadow: 0 0 14px rgba(255, 214, 10, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
 .brand-wrap {
   display: flex;
   align-items: center;
@@ -363,6 +372,25 @@ code, pre, .fmcode, kbd {
 
 .goal-toggle-btn:active {
   transform: scale(0.97);
+}
+
+.goal-toggle-btn .ntype-badge {
+  color: inherit;
+}
+
+#goalToggleBtn.active,
+.goal-toggle-btn.active,
+.goal-toggle-btn[aria-expanded="true"] {
+  color: #ffd60a;
+  background: rgba(255, 214, 10, 0.14);
+  border-color: rgba(255, 214, 10, 0.62);
+  box-shadow: 0 0 14px rgba(255, 214, 10, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+#goalToggleBtn.active .ntype-badge,
+.goal-toggle-btn.active .ntype-badge,
+.goal-toggle-btn[aria-expanded="true"] .ntype-badge {
+  color: #ffd60a !important;
 }
 
 .goal {
@@ -1183,6 +1211,7 @@ details.fmt {
   transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 
+details.fmt.hidden,
 details.fmt[hidden] {
   display: none !important;
 }
@@ -1306,6 +1335,7 @@ body.single-col .fmgrid {
   transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
 }
 
+.fmi.hidden,
 .fmi[hidden] {
   display: none !important;
 }
@@ -2846,26 +2876,119 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
     }, 2200);
   }
 
-  const KATEX_OPTS = {
-    delimiters: [
-      { left: '$$', right: '$$', display: true },
-      { left: '$', right: '$', display: false },
-      { left: '\\(', right: '\\)', display: false },
-      { left: '\\[', right: '\\]', display: true }
-    ],
-    throwOnError: false
-  };
+  // Session-wide memoized KaTeX string cache (Optimization B)
+  const katexStringCache = new Map();
 
-  // Isolated per-node KaTeX ErrorBoundary so a malformed LaTeX string never white-screens the app
+  function decodeHtmlEntities(str) {
+    return String(str)
+      .replace(/&lt;/g, '\x3c')
+      .replace(/&gt;/g, '\x3e')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;|&#x27;/gi, "'");
+  }
+
+  function renderLatexCached(latex, displayMode) {
+    const clean = decodeHtmlEntities(latex).trim();
+    if (!clean) return '';
+    const cacheKey = (displayMode ? 'D:' : 'I:') + clean;
+    if (katexStringCache.has(cacheKey)) {
+      return katexStringCache.get(cacheKey);
+    }
+    let rendered = '';
+    try {
+      if (typeof katex !== 'undefined' && typeof katex.renderToString === 'function') {
+        rendered = katex.renderToString(clean, {
+          displayMode: Boolean(displayMode),
+          throwOnError: false,
+          strict: false
+        });
+      } else {
+        rendered = clean;
+      }
+    } catch (err) {
+      rendered = clean;
+    }
+    katexStringCache.set(cacheKey, rendered);
+    return rendered;
+  }
+
+  // Universal math-text parser for mixed HTML + $$...$$ and $...$ math segments
+  function renderTextWithMath(input) {
+    if (
+      !input ||
+      (input.indexOf('$') === -1 &&
+        input.indexOf('\\(') === -1 &&
+        input.indexOf('\\[') === -1)
+    ) {
+      return input || '';
+    }
+    const protectedBlocks = [];
+
+    // 1. Protect <pre> and <code> blocks so C/C++ code is never altered
+    let masked = String(input).replace(
+      /\x3c(pre|code)(?:\s[^\x3c\x3e]*)?\x3e[\s\S]*?\x3c\/\1\x3e/gi,
+      function (m) {
+        const idx = protectedBlocks.length;
+        protectedBlocks.push(m);
+        return '\u0000PROT_' + idx + '\u0000';
+      }
+    );
+
+    // 2. Protect HTML tags (e.g. <b>, <i>, <sub>, <sup>, <br>, <td>) so $...$ never spans across tags
+    masked = masked.replace(
+      /\x3c\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^\x3c\x3e]*)?\x3e/g,
+      function (m) {
+        const idx = protectedBlocks.length;
+        protectedBlocks.push(m);
+        return '\u0000PROT_' + idx + '\u0000';
+      }
+    );
+
+    // 3. Convert display and inline math segments via memoized katex.renderToString
+    const processed = masked
+      .replace(/\$\$([\s\S]+?)\$\$/g, function (_, math) {
+        return renderLatexCached(math, true);
+      })
+      .replace(/\\\[([\s\S]+?)\\\]/g, function (_, math) {
+        return renderLatexCached(math, true);
+      })
+      .replace(/\\\(([\s\S]+?)\\\)/g, function (_, math) {
+        return renderLatexCached(math, false);
+      })
+      .replace(/\$([^$\n\u0000]+?)\$/g, function (_, math) {
+        return renderLatexCached(math, false);
+      });
+
+    // 4. Restore protected HTML tags and code blocks
+    return processed.replace(/\u0000PROT_(\d+)\u0000/g, function (_, idxStr) {
+      return protectedBlocks[Number(idxStr)] || '';
+    });
+  }
+
+  // Isolated per-node KaTeX ErrorBoundary & universal secondary text math renderer
   function renderMathInContainer(el) {
-    if (typeof renderMathInElement !== 'function' || !el) return;
-    const mathNodes = el.querySelectorAll('.fmm, .fmhtml, .fmsteps, td');
+    if (!el) return;
+    const selector = '.fmm, .fmhtml, .fmw, .fmu, .fmsteps li, .fmnote, .thsee, .fcbody, td';
+    const mathNodes = el.querySelectorAll(selector);
     if (mathNodes.length > 0) {
       for (let i = 0; i < mathNodes.length; i++) {
         const node = mathNodes[i];
         if (node.getAttribute('data-math-rendered') === '1') continue;
+        // Skip container .fcbody if its child nodes are also in mathNodes
+        if (node.classList.contains('fcbody') && node.querySelector('.fmm, .fmw, .fmu, .fmhtml')) {
+          continue;
+        }
         try {
-          renderMathInElement(node, KATEX_OPTS);
+          const rawHtml = node.innerHTML;
+          if (
+            rawHtml &&
+            (rawHtml.indexOf('$') !== -1 ||
+              rawHtml.indexOf('\\(') !== -1 ||
+              rawHtml.indexOf('\\[') !== -1)
+          ) {
+            node.innerHTML = renderTextWithMath(rawHtml);
+          }
           node.setAttribute('data-math-rendered', '1');
         } catch (err) {
           node.classList.add('math-error-fallback');
@@ -2873,12 +2996,42 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
       }
     } else {
       try {
-        renderMathInElement(el, KATEX_OPTS);
+        const rawHtml = el.innerHTML;
+        if (
+          rawHtml &&
+          (rawHtml.indexOf('$') !== -1 ||
+            rawHtml.indexOf('\\(') !== -1 ||
+            rawHtml.indexOf('\\[') !== -1)
+        ) {
+          el.innerHTML = renderTextWithMath(rawHtml);
+        }
       } catch (err) {
         /* ignore math parse error */
       }
     }
   }
+
+  function isSidebarVisible() {
+    if (window.innerWidth <= 1024) {
+      return Boolean(dom.sidebar && dom.sidebar.classList.contains('mobile-open'));
+    }
+    return Boolean(dom.appLayout && !dom.appLayout.classList.contains('sidebar-collapsed'));
+  }
+
+  function syncMenuButtonHighlights() {
+    const sbOpen = isSidebarVisible();
+    if (dom.sbBtn) {
+      dom.sbBtn.classList.toggle('active', sbOpen);
+      dom.sbBtn.setAttribute('aria-expanded', String(sbOpen));
+    }
+    if (dom.goalToggleBtn) {
+      const gOpen = Boolean(state.goalOpen);
+      dom.goalToggleBtn.classList.toggle('active', gOpen);
+      dom.goalToggleBtn.setAttribute('aria-expanded', String(gOpen));
+    }
+  }
+
+  window.addEventListener('resize', syncMenuButtonHighlights, { passive: true });
 
   function normalizeLatexForSearch(latex) {
     if (!latex) return '';
@@ -2953,6 +3106,7 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
   }
 
   let wasSearching = false;
+  let isProgrammaticToggle = false;
 
   // Memoized DOM cache for zero-lag search and filtering
   const memoCache = {
@@ -3025,7 +3179,9 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
               fmnEl: fmnEl,
               starBtn: starBtn,
               ckInput: ckInput,
-              searchHay: searchHay
+              searchHay: searchHay,
+              isHidden: false,
+              isHighlighted: false
             };
             cardItems.push(itemRecord);
             memoCache.allCards.push(itemRecord);
@@ -3038,7 +3194,8 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
             sec: sec,
             course: secCourse,
             cntEl: cntEl,
-            cards: cardItems
+            cards: cardItems,
+            isHidden: false
           });
         }
         memoCache.topicsByTab[tabKey] = topicList;
@@ -3089,15 +3246,34 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
     return String(n).padStart(2, '0');
   }
 
+  // Optimization D: Isolated Doomsday clock updater that mutates only textContent of cached nodes
+  let cdtNodes = null;
+  let goalBadgeNode = null;
+
+  function ensureCountdownDom() {
+    if (dom.goalToggleBtn && !goalBadgeNode) {
+      goalBadgeNode = dom.goalToggleBtn.querySelector('.ntype-badge');
+      if (!goalBadgeNode) {
+        goalBadgeNode = document.createElement('span');
+        goalBadgeNode.className = 'ntype-badge';
+        dom.goalToggleBtn.innerHTML = '';
+        dom.goalToggleBtn.appendChild(goalBadgeNode);
+      }
+      goalBadgeNode.removeAttribute('style');
+    }
+  }
+
   function updateCountdown() {
     if (!dom.cdt) return;
+    ensureCountdownDom();
     if (dom.examDateInput && dom.examDateInput.value !== state.examDate) {
       dom.examDateInput.value = state.examDate || '';
     }
     if (!state.examDate) {
+      cdtNodes = null;
       dom.cdt.innerHTML = '<span class="doomsday-tag">STANDBY</span><span>SET EXAM DATE TO ARM DOOMSDAY CLOCK</span>';
-      if (dom.goalToggleBtn) {
-        dom.goalToggleBtn.innerHTML = '<span class="ntype-badge">GOAL // TIMER</span>';
+      if (goalBadgeNode && goalBadgeNode.textContent !== 'GOAL // TIMER') {
+        goalBadgeNode.textContent = 'GOAL // TIMER';
       }
       return;
     }
@@ -3105,6 +3281,7 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
     const now = new Date();
     const diff = target.getTime() - now.getTime();
     if (isNaN(diff)) {
+      cdtNodes = null;
       dom.cdt.innerHTML = '<span class="doomsday-tag">STANDBY</span><span>SET EXAM DATE TO ARM DOOMSDAY CLOCK</span>';
       return;
     }
@@ -3116,23 +3293,42 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
     const secs = totalSec % 60;
     const prefix = diff >= 0 ? 'DOOMSDAY // T-MINUS' : 'DOOMSDAY // T-PLUS';
     const dayStr = String(days).padStart(2, '0');
+    const hrStr = pad2(hrs);
+    const minStr = pad2(mins);
+    const secStr = pad2(secs);
 
-    dom.cdt.innerHTML =
-      '<span class="doomsday-tag">' + prefix + '</span>' +
-      '<span class="doomsday-segments">' +
-        '<span class="dd-seg"><span class="dd-val">' + dayStr + '</span><span class="dd-unit">D</span></span>' +
-        '<span class="dd-sep">:</span>' +
-        '<span class="dd-seg"><span class="dd-val">' + pad2(hrs) + '</span><span class="dd-unit">H</span></span>' +
-        '<span class="dd-sep">:</span>' +
-        '<span class="dd-seg"><span class="dd-val">' + pad2(mins) + '</span><span class="dd-unit">M</span></span>' +
-        '<span class="dd-sep">:</span>' +
-        '<span class="dd-seg"><span class="dd-val">' + pad2(secs) + '</span><span class="dd-unit">S</span></span>' +
-      '</span>';
+    if (!cdtNodes || !dom.cdt.contains(cdtNodes.sec)) {
+      dom.cdt.innerHTML =
+        '<span class="doomsday-tag">' + prefix + '</span>' +
+        '<span class="doomsday-segments">' +
+          '<span class="dd-seg"><span class="dd-val" data-dd="d">' + dayStr + '</span><span class="dd-unit">D</span></span>' +
+          '<span class="dd-sep">:</span>' +
+          '<span class="dd-seg"><span class="dd-val" data-dd="h">' + hrStr + '</span><span class="dd-unit">H</span></span>' +
+          '<span class="dd-sep">:</span>' +
+          '<span class="dd-seg"><span class="dd-val" data-dd="m">' + minStr + '</span><span class="dd-unit">M</span></span>' +
+          '<span class="dd-sep">:</span>' +
+          '<span class="dd-seg"><span class="dd-val" data-dd="s">' + secStr + '</span><span class="dd-unit">S</span></span>' +
+        '</span>';
+      cdtNodes = {
+        tag: dom.cdt.querySelector('.doomsday-tag'),
+        day: dom.cdt.querySelector('[data-dd="d"]'),
+        hr: dom.cdt.querySelector('[data-dd="h"]'),
+        min: dom.cdt.querySelector('[data-dd="m"]'),
+        sec: dom.cdt.querySelector('[data-dd="s"]')
+      };
+    } else {
+      if (cdtNodes.tag.textContent !== prefix) cdtNodes.tag.textContent = prefix;
+      if (cdtNodes.day.textContent !== dayStr) cdtNodes.day.textContent = dayStr;
+      if (cdtNodes.hr.textContent !== hrStr) cdtNodes.hr.textContent = hrStr;
+      if (cdtNodes.min.textContent !== minStr) cdtNodes.min.textContent = minStr;
+      if (cdtNodes.sec.textContent !== secStr) cdtNodes.sec.textContent = secStr;
+    }
 
-    if (dom.goalToggleBtn) {
-      dom.goalToggleBtn.innerHTML =
-        '<span class="ntype-badge" style="color:#ff453a;">DOOMSDAY // ' +
-        dayStr + 'D : ' + pad2(hrs) + 'H : ' + pad2(mins) + 'M : ' + pad2(secs) + 'S</span>';
+    if (goalBadgeNode) {
+      const btnText = 'DOOMSDAY // ' + dayStr + 'D : ' + hrStr + 'H : ' + minStr + 'M : ' + secStr + 'S';
+      if (goalBadgeNode.textContent !== btnText) {
+        goalBadgeNode.textContent = btnText;
+      }
     }
   }
 
@@ -3151,11 +3347,12 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
       dom.tabThm.classList.toggle('active', !isFm);
       dom.tabThm.setAttribute('aria-selected', String(!isFm));
 
-      // 2. Body mode classes
+      // 2. Body mode classes & menu highlight states
       document.body.classList.toggle('self-test', !!state.selfTest);
       document.body.classList.toggle('hide-details', !!state.hideDetails);
       document.body.classList.toggle('single-col', !!state.singleCol);
       dom.goalDrawer.hidden = !state.goalOpen;
+      syncMenuButtonHighlights();
 
       // 3. Update Course Selector active pill
       dom.fmchips.querySelectorAll('.course-pill').forEach(function (btn) {
@@ -3182,7 +3379,7 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
         if (badge) badge.textContent = on ? 'ON' : 'OFF';
       });
 
-      // 6. Filter active root sections & cards using memoized cache
+      // 6. Filter active root sections & cards using memoized cache (Optimization A: toggle .hidden CSS class)
       const activeKey = isFm ? 'fm' : 'thm';
       const activeTopics = memoCache.topicsByTab[activeKey];
       const activeNavRows = memoCache.navRowsByTab[activeKey];
@@ -3205,6 +3402,8 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
       let totalCardsInActiveRoot = 0;
       let totalCardsInScope = 0;
       let visibleTopics = 0;
+
+      isProgrammaticToggle = true;
 
       for (let si = 0; si < activeTopics.length; si++) {
         const topic = activeTopics[si];
@@ -3241,13 +3440,24 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
           }
 
           const showCard = courseMatch && statusMatch && queryMatch;
-          if (card.hidden !== !showCard) card.hidden = !showCard;
-          card.classList.toggle('search-match', showCard && isSearchingNow);
-          if (showCard && isSearchingNow) {
-            highlightTitleTokens(rec.fmnEl, qTokens);
-          } else if (rec.fmnEl && rec.fmnEl.hasAttribute('data-orig-title')) {
-            highlightTitleTokens(rec.fmnEl, null);
+          const hideCard = !showCard;
+          if (rec.isHidden !== hideCard) {
+            rec.isHidden = hideCard;
+            card.classList.toggle('hidden', hideCard);
+            card.hidden = hideCard;
           }
+
+          const isMatch = showCard && isSearchingNow;
+          if (isMatch) {
+            card.classList.add('search-match');
+            highlightTitleTokens(rec.fmnEl, qTokens);
+            rec.isHighlighted = true;
+          } else if (rec.isHighlighted) {
+            card.classList.remove('search-match');
+            highlightTitleTokens(rec.fmnEl, null);
+            rec.isHighlighted = false;
+          }
+
           if (showCard) {
             secVisible++;
             visibleCards++;
@@ -3255,22 +3465,32 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
         }
 
         if (topic.cntEl) {
-          topic.cntEl.textContent = isSearchingNow
+          const nextCnt = isSearchingNow
             ? (secVisible + '/' + cards.length + ' MATCH')
             : (secLearned + '/' + cards.length);
+          if (topic.cntEl.textContent !== nextCnt) {
+            topic.cntEl.textContent = nextCnt;
+          }
         }
 
-        sec.hidden = !courseMatch || secVisible === 0;
-        if (!sec.hidden) {
+        const secHidden = !courseMatch || secVisible === 0;
+        if (topic.isHidden !== secHidden) {
+          topic.isHidden = secHidden;
+          sec.classList.toggle('hidden', secHidden);
+          sec.hidden = secHidden;
+        }
+        if (!secHidden) {
           visibleTopics++;
           if (isSearchingNow || state.status !== 'all') {
-            sec.open = true;
+            if (!sec.open) sec.open = true;
           } else if (!isSearchingNow && wasSearching && sec.hasAttribute('data-presearch-open')) {
-            sec.open = sec.getAttribute('data-presearch-open') === '1';
+            const targetOpen = sec.getAttribute('data-presearch-open') === '1';
+            if (sec.open !== targetOpen) sec.open = targetOpen;
           }
         }
       }
 
+      isProgrammaticToggle = false;
       wasSearching = isSearchingNow;
       if (dom.searchWrap) {
         dom.searchWrap.classList.toggle('zero-match', isSearchingNow && visibleCards === 0);
@@ -3309,7 +3529,6 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
       const pct = Math.round((globalLearned / totalAll) * 100);
       if (dom.pf) dom.pf.style.width = pct + '%';
       if (dom.pb) dom.pb.setAttribute('aria-valuenow', String(pct));
-      if (dom.goalToggleBtn) dom.goalToggleBtn.setAttribute('aria-expanded', String(!!state.goalOpen));
       if (dom.ptxt) dom.ptxt.textContent = globalLearned + ' / ' + memoCache.allCards.length + ' LEARNED [' + pct + '%]';
 
       // Tab counters
@@ -3351,10 +3570,22 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
         }
       }
       if (typeof syncPagerToggleBtn === 'function') syncPagerToggleBtn();
-      syncStickyHeights();
     } catch (err) {
+      isProgrammaticToggle = false;
       /* Workspace ErrorBoundary safeguard */
     }
+  }
+
+  // Optimization C: Non-blocking search scheduling so backspacing in #fmq stays at 60fps
+  let searchRafId = null;
+  function scheduleSearchFilter() {
+    if (searchRafId !== null) {
+      cancelAnimationFrame(searchRafId);
+    }
+    searchRafId = requestAnimationFrame(function () {
+      searchRafId = null;
+      applyFiltersAndCounts();
+    });
   }
 
   function closeToolsDropdown() {
@@ -3382,6 +3613,7 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
       (!dom.sbBtn || !dom.sbBtn.contains(target))
     ) {
       dom.sidebar.classList.remove('mobile-open');
+      syncMenuButtonHighlights();
     }
 
     // Copy LaTeX / Code button (.fmcp)
@@ -3477,8 +3709,12 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
     applyFiltersAndCounts();
   });
 
-  // Real-time search input & clear handlers
+  // Real-time search input & clear handlers (Optimization C: non-blocking input + instant clear)
   function clearSearchQuery() {
+    if (searchRafId !== null) {
+      cancelAnimationFrame(searchRafId);
+      searchRafId = null;
+    }
     state.query = '';
     if (dom.fmq) dom.fmq.value = '';
     applyFiltersAndCounts();
@@ -3486,11 +3722,14 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
 
   dom.fmq.addEventListener('input', function () {
     state.query = dom.fmq.value;
-    applyFiltersAndCounts();
+    const hasText = Boolean(state.query.trim());
+    if (dom.fmqClear) dom.fmqClear.hidden = !hasText;
+    if (dom.searchWrap) dom.searchWrap.classList.toggle('has-query', hasText);
+    scheduleSearchFilter();
   });
   dom.fmq.addEventListener('search', function () {
     state.query = dom.fmq.value;
-    applyFiltersAndCounts();
+    scheduleSearchFilter();
   });
   if (dom.fmqClear) {
     dom.fmqClear.addEventListener('click', function () {
@@ -3532,10 +3771,16 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
 
     const activeRoot = state.tab === 'fm' ? dom.fmroot : dom.thmroot;
     if (action === 'expand-all') {
+      isProgrammaticToggle = true;
       activeRoot.querySelectorAll('details.fmt:not([hidden])').forEach(function (d) { d.open = true; });
+      isProgrammaticToggle = false;
+      syncPagerToggleBtn();
       showToast('EXPANDED ALL TOPICS');
     } else if (action === 'collapse-all') {
+      isProgrammaticToggle = true;
       activeRoot.querySelectorAll('details.fmt').forEach(function (d) { d.open = false; });
+      isProgrammaticToggle = false;
+      syncPagerToggleBtn();
       showToast('COLLAPSED ALL TOPICS');
     } else if (action === 'flashcards') {
       openFlashcardsModal();
@@ -3570,6 +3815,7 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
 
     if (window.innerWidth <= 1024) {
       dom.sidebar.classList.remove('mobile-open');
+      syncMenuButtonHighlights();
     }
     syncStickyHeights();
     targetSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -3585,6 +3831,7 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
     } else {
       dom.appLayout.classList.toggle('sidebar-collapsed');
     }
+    syncMenuButtonHighlights();
   });
 
   // Goal drawer toggle & exam date
@@ -3620,14 +3867,25 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
   }
   function syncPagerToggleBtn() {
     if (!dom.nextTopicBtn) return;
-    const activeRoot = state.tab === 'fm' ? dom.fmroot : dom.thmroot;
-    const visibleDetails = Array.from(activeRoot.querySelectorAll('details.fmt:not([hidden])'));
-    const allOpen = visibleDetails.length > 0 && visibleDetails.every(function (d) { return d.open; });
-    dom.nextTopicBtn.textContent = allOpen ? '[ - RETRACT ALL ]' : '[ + EXPAND ALL ]';
-    dom.nextTopicBtn.setAttribute('data-all-open', String(allOpen));
+    const activeKey = state.tab === 'fm' ? 'fm' : 'thm';
+    const topics = memoCache.topicsByTab[activeKey] || [];
+    let visibleCount = 0;
+    let allOpen = true;
+    for (let i = 0; i < topics.length; i++) {
+      if (!topics[i].sec.hidden) {
+        visibleCount++;
+        if (!topics[i].sec.open) {
+          allOpen = false;
+        }
+      }
+    }
+    const isAllOpen = visibleCount > 0 && allOpen;
+    dom.nextTopicBtn.textContent = isAllOpen ? '[ - RETRACT ALL ]' : '[ + EXPAND ALL ]';
+    dom.nextTopicBtn.setAttribute('data-all-open', String(isAllOpen));
   }
 
   document.addEventListener('toggle', function (e) {
+    if (isProgrammaticToggle) return;
     if (e.target && e.target.matches && e.target.matches('details.fmt')) {
       syncPagerToggleBtn();
     }
@@ -3638,7 +3896,9 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
       const activeRoot = state.tab === 'fm' ? dom.fmroot : dom.thmroot;
       const visibleDetails = Array.from(activeRoot.querySelectorAll('details.fmt:not([hidden])'));
       const allOpen = visibleDetails.length > 0 && visibleDetails.every(function (d) { return d.open; });
+      isProgrammaticToggle = true;
       visibleDetails.forEach(function (d) { d.open = !allOpen; });
+      isProgrammaticToggle = false;
       syncPagerToggleBtn();
       showToast(allOpen ? 'RETRACTED ALL TOPICS' : 'EXPANDED ALL TOPICS');
     });
@@ -3690,10 +3950,10 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
           '<span class="ntype-badge">CARD ' + (idx + 1) + ' / ' + pool.length + '</span>' +
           '<span class="ntype-badge">' + (isStar ? 'STARRED' : 'STANDARD') + '</span>' +
         '</div>' +
-        '<div style="padding:18px;border-radius:14px;background:rgba(0,0,0,0.42);border:1px solid rgba(255,255,255,0.12);min-height:160px;">' +
+        '<div class="fcbody" style="padding:18px;border-radius:14px;background:rgba(0,0,0,0.42);border:1px solid rgba(255,255,255,0.12);min-height:160px;">' +
           '<div style="font-size:15px;font-weight:600;margin-bottom:12px;color:#f5f5f7;">' + title + '</div>' +
           (flipped
-            ? '<div>' + bodyClone + '</div>'
+            ? '<div>' + renderTextWithMath(bodyClone) + '</div>'
             : '<div style="padding:24px 0;text-align:center;color:#98989d;font-family:var(--font-dot);">[ PRESS REVEAL ANSWER TO VIEW FORMULA ]</div>') +
         '</div>' +
         '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:16px;flex-wrap:wrap;">' +
@@ -3837,6 +4097,7 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
       }
       if (dom.sidebar && dom.sidebar.classList.contains('mobile-open')) {
         dom.sidebar.classList.remove('mobile-open');
+        syncMenuButtonHighlights();
         return;
       }
       if (activeEl === dom.fmq) {
@@ -3854,12 +4115,13 @@ sort(v.begin(), v.end(), [](int a, int b) { return a &gt; b; }); // descending</
   });
 
   // Initialisation
+  renderMathInContainer(dom.fmroot);
+  renderMathInContainer(dom.thmroot);
   hydrateCards();
   updateCountdown();
   applyFiltersAndCounts();
   syncStickyHeights();
-  renderMathInContainer(dom.fmroot);
-  renderMathInContainer(dom.thmroot);
+  syncMenuButtonHighlights();
 })();
 </script>
 </body>

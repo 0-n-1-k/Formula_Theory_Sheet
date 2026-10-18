@@ -7,6 +7,10 @@ export interface FormulaCardRecord {
   keywords: string;
   rawLatex: string;
   bodyText: string;
+  useText?: string;
+  steps?: string[];
+  note?: string;
+  seeAlso?: string;
   isLearned?: boolean;
   isStarred?: boolean;
 }
