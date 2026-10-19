@@ -18,6 +18,7 @@
   --text-secondary: #98989d;
   --text-muted: #6e6e73;
   --accent: #2997ff;
+  --accent-hover: #5ac8fa;
   --accent-glow: rgba(41, 151, 255, 0.24);
   --accent-soft: rgba(41, 151, 255, 0.14);
   --indigo: #5856d6;
@@ -1607,6 +1608,15 @@ body.hide-details .fmdet {
   padding-left: 20px;
 }
 
+.fmhtml ul {
+  list-style-type: disc;
+}
+
+.fmhtml ol,
+.fmsteps {
+  list-style-type: decimal;
+}
+
 /* Mini Tables (.mini) */
 table.mini {
   display: block;
@@ -1829,7 +1839,9 @@ details.fmd[open] > summary::after {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .sidebar {
+  .sidebar,
+  .app-layout.sidebar-collapsed .sidebar {
+    display: block !important;
     position: fixed;
     top: 0;
     left: 0;
@@ -1842,7 +1854,8 @@ details.fmd[open] > summary::after {
     transition: transform var(--dur-med) var(--ease-out);
   }
 
-  .sidebar.mobile-open {
+  .sidebar.mobile-open,
+  .app-layout.sidebar-collapsed .sidebar.mobile-open {
     transform: translateX(0);
   }
 }

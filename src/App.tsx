@@ -15,10 +15,19 @@ import React, {
   type ErrorInfo,
   type ReactNode,
 } from 'react';
+import fmrootRawHtml from './content-fmroot.html?raw';
+import thmrootRawHtml from './content-thmroot.html?raw';
+import navRawHtml from './content-nav.html?raw';
+import {
+  parseNavContent,
+  parseTopicSections,
+  type TopicSectionRecord,
+} from './utils/contentParser';
 import {
   buildFormulaSearchIndex,
   filterFormulaCards,
   matchesSearchTokens,
+  matchesTheoremCategoryFilter,
   tokenizeSearchQuery,
   type FormulaCardRecord,
   type TheoremCategoryFilter,
@@ -166,7 +175,7 @@ export const SecondaryMathText = memo(function SecondaryMathText({
   const parsedHtml = useMemo(() => renderTextWithMath(content), [content]);
   return (
     <Tag
-      className={className}
+      className={className || undefined}
       dangerouslySetInnerHTML={{ __html: parsedHtml }}
     />
   );
@@ -299,7 +308,7 @@ export interface FormulaCardViewProps {
 
 /**
  * Optimization A & B: Kept mounted in DOM and toggles `.hidden` class instead of unmounting/remounting.
- * Applies `renderTextWithMath` across `.fmw`, `.fmu`, `.fmsteps li`, `.fmnote`, and `.thsee`.
+ * Applies `renderTextWithMath` across `.fmhtml`, `.fmw`, `.fmu`, `.fmsteps li`, `.fmnote`, and `.thsee`.
  */
 export const FormulaCardView = memo(function FormulaCardView({
   card,
@@ -310,21 +319,39 @@ export const FormulaCardView = memo(function FormulaCardView({
   onToggleLearned,
   onCopyLatex,
 }: FormulaCardViewProps) {
+  const [isRevealed, setIsRevealed] = useState<boolean>(false);
+  const copyPayload = card.copyText ?? (card.rawLatex || card.codeContent || card.title);
+  const typeCls = card.cardTypeClass || 'tex';
+
+  const handleCardClick = useCallback(() => {
+    if (typeof document !== 'undefined' && document.body.classList.contains('self-test')) {
+      setIsRevealed((prev) => !prev);
+    }
+  }, []);
+
   return (
     <div
-      className={`fmi tex${isStarred ? ' starred' : ''}${isLearned ? ' learned' : ''}${isHidden ? ' hidden' : ''}`}
+      className={`fmi ${typeCls}${isStarred ? ' starred' : ''}${isLearned ? ' learned' : ''}${isRevealed ? ' revealed' : ''}${isHidden ? ' hidden' : ''}`}
       data-k={card.id}
+      data-s={card.keywords}
       hidden={isHidden}
+      onClick={handleCardClick}
     >
       <div className="fmh">
-        <span className="fmn">{card.title}</span>
+        <span className="fmn">
+          {card.title}
+          {card.badge ? <span className="thty">{card.badge}</span> : null}
+        </span>
         <span className="fmb">
           <button
             type="button"
             className={`fmst${isStarred ? ' on' : ''}`}
             aria-label={isStarred ? `Remove star from ${card.title}` : `Star ${card.title}`}
             aria-pressed={isStarred}
-            onClick={() => onToggleStar(card.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleStar(card.id);
+            }}
           >
             {isStarred ? 'STARRED' : 'Star'}
           </button>
@@ -332,12 +359,19 @@ export const FormulaCardView = memo(function FormulaCardView({
             type="button"
             className="fmcp"
             aria-label={`Copy LaTeX for ${card.title}`}
-            data-t={card.rawLatex}
-            onClick={() => onCopyLatex(card.rawLatex)}
+            data-t={copyPayload}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCopyLatex(copyPayload);
+            }}
           >
             Copy
           </button>
-          <label className="fml" aria-label={`Mark ${card.title} as learned`}>
+          <label
+            className="fml"
+            aria-label={`Mark ${card.title} as learned`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <input
               type="checkbox"
               className="fmck"
@@ -350,13 +384,30 @@ export const FormulaCardView = memo(function FormulaCardView({
         </span>
       </div>
       <div className="fmbody">
-        <KatexMathBlock latex={card.rawLatex} displayMode />
-        <div className="fmdet">
-          <SecondaryMathText className="fmw" content={card.bodyText} />
-          {card.useText ? (
-            <SecondaryMathText className="fmu" content={card.useText} />
-          ) : null}
-        </div>
+        {card.htmlContent ? (
+          <SecondaryMathText className="fmhtml" content={card.htmlContent} />
+        ) : null}
+        {card.rawLatex ? (
+          <KatexMathBlock
+            latex={card.rawLatex}
+            displayMode={card.fmmDisplayMode ?? true}
+          />
+        ) : null}
+        {card.codeContent ? (
+          <pre className="fmcode">
+            <code>{card.codeContent}</code>
+          </pre>
+        ) : null}
+        {card.bodyText || card.useText ? (
+          <div className="fmdet">
+            {card.bodyText ? (
+              <SecondaryMathText className="fmw" content={card.bodyText} />
+            ) : null}
+            {card.useText ? (
+              <SecondaryMathText className="fmu" content={card.useText} />
+            ) : null}
+          </div>
+        ) : null}
         {card.note ? (
           <SecondaryMathText className="fmnote" content={card.note} />
         ) : null}
@@ -365,7 +416,7 @@ export const FormulaCardView = memo(function FormulaCardView({
         ) : null}
         {card.steps && card.steps.length > 0 ? (
           <details className="fmd">
-            <summary>Proof &amp; derivation steps</summary>
+            <summary>{card.stepsSummary || 'Proof & derivation steps'}</summary>
             <ol className="fmsteps">
               {card.steps.map((step, idx) => (
                 <SecondaryMathText
@@ -405,9 +456,35 @@ export default function App() {
   const [thmFilter, setThmFilter] = useState<TheoremCategoryFilter>('all');
   const [toolsOpen, setToolsOpen] = useState<boolean>(false);
   const [modalOpen, setModalOpen] = useState<boolean>(false);
-  const [flashcardHtml, setFlashcardHtml] = useState<string>('');
+  const [modalMode, setModalMode] = useState<'flashcard' | 'io'>('io');
+  const [activeFlashcard, setActiveFlashcard] = useState<FormulaCardRecord | null>(null);
   const [importJsonText, setImportJsonText] = useState<string>('');
   const [toastMsg, setToastMsg] = useState<string>('');
+  const [showTopBtn, setShowTopBtn] = useState<boolean>(false);
+  const [selectedTopicId, setSelectedTopicId] = useState<string>('');
+  const [hideDetails, setHideDetails] = useState<boolean>(false);
+
+  // Parse content-fmroot.html, content-thmroot.html, and content-nav.html once per session
+  const fmSections = useMemo<TopicSectionRecord[]>(
+    () => parseTopicSections(fmrootRawHtml),
+    []
+  );
+  const thmSections = useMemo<TopicSectionRecord[]>(
+    () => parseTopicSections(thmrootRawHtml),
+    []
+  );
+  const navContent = useMemo(
+    () => parseNavContent(navRawHtml),
+    []
+  );
+
+  const [openTopics, setOpenTopics] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    for (const sec of [...parseTopicSections(fmrootRawHtml), ...parseTopicSections(thmrootRawHtml)]) {
+      initial[sec.id] = sec.isOpenByDefault;
+    }
+    return initial;
+  });
 
   const topChromeRef = useRef<HTMLElement | null>(null);
   const fmbarRef = useRef<HTMLElement | null>(null);
@@ -428,6 +505,25 @@ export default function App() {
   useEffect(() => {
     safeWriteStorage(STORAGE_KEY, persisted);
   }, [persisted]);
+
+  // Sync body classes for Self-Test, Hide Details, and Single-Column Layout
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.body.classList.toggle('self-test', Boolean(persisted.selfTest));
+    if (!persisted.selfTest) {
+      document.querySelectorAll('.fmi.revealed').forEach((el) => el.classList.remove('revealed'));
+    }
+  }, [persisted.selfTest]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.body.classList.toggle('single-col', Boolean(persisted.singleCol));
+  }, [persisted.singleCol]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.body.classList.toggle('hide-details', hideDetails);
+  }, [hideDetails]);
 
   const updateChromeHeight = useCallback(() => {
     try {
@@ -454,7 +550,16 @@ export default function App() {
     updateChromeHeight();
     window.addEventListener('resize', updateChromeHeight, { passive: true });
     return () => window.removeEventListener('resize', updateChromeHeight);
-  }, [updateChromeHeight, persisted.goalOpen]);
+  }, [updateChromeHeight, persisted.goalOpen, persisted.tab]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowTopBtn(window.scrollY > 400);
+    };
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -498,16 +603,54 @@ export default function App() {
     };
   }, [searchInput]);
 
-  const sampleCards = useMemo<FormulaCardRecord[]>(() => [], []);
-
-  const preindexedCards = useMemo(
+  // Pre-index all formula and theorem cards once per session
+  const fmCardsWithIndex = useMemo(
     () =>
-      sampleCards.map((c) => ({
-        card: c,
-        searchIndex: buildFormulaSearchIndex(c),
-      })),
-    [sampleCards]
+      fmSections.flatMap((s) =>
+        s.cards.map((card) => ({
+          card,
+          searchIndex: buildFormulaSearchIndex(card),
+        }))
+      ),
+    [fmSections]
   );
+
+  const thmCardsWithIndex = useMemo(
+    () =>
+      thmSections.flatMap((s) =>
+        s.cards.map((card) => ({
+          card,
+          searchIndex: buildFormulaSearchIndex(card),
+        }))
+      ),
+    [thmSections]
+  );
+
+  const searchIndexById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of fmCardsWithIndex) {
+      map.set(item.card.id, item.searchIndex);
+    }
+    for (const item of thmCardsWithIndex) {
+      map.set(item.card.id, item.searchIndex);
+    }
+    return map;
+  }, [fmCardsWithIndex, thmCardsWithIndex]);
+
+  const activeTabCards = useMemo<FormulaCardRecord[]>(() => {
+    const base = persisted.tab === 'fm' ? fmCardsWithIndex : thmCardsWithIndex;
+    return base.map(({ card }) => ({
+      ...card,
+      isLearned: Boolean(persisted.learned[card.id]),
+      isStarred: Boolean(persisted.starred[card.id]),
+    }));
+  }, [
+    persisted.tab,
+    fmCardsWithIndex,
+    thmCardsWithIndex,
+    persisted.learned,
+    persisted.starred,
+  ]);
 
   const deferredTokens = useMemo(
     () => tokenizeSearchQuery(deferredQuery),
@@ -516,17 +659,41 @@ export default function App() {
 
   const filterSummary = useMemo(
     () =>
-      filterFormulaCards(sampleCards, {
+      filterFormulaCards(activeTabCards, {
         course: persisted.course,
         status: persisted.status,
         query: deferredQuery,
         thmFilter: persisted.tab === 'thm' ? thmFilter : 'all',
       }),
-    [sampleCards, persisted.course, persisted.status, deferredQuery, persisted.tab, thmFilter]
+    [
+      activeTabCards,
+      persisted.course,
+      persisted.status,
+      deferredQuery,
+      persisted.tab,
+      thmFilter,
+    ]
   );
+
+  // Mastery progress calculation across active course scope
+  const masteryStats = useMemo(() => {
+    const allCards = [...fmCardsWithIndex, ...thmCardsWithIndex].map((x) => x.card);
+    const inScope =
+      persisted.course === 'ALL'
+        ? allCards
+        : allCards.filter((c) => c.course === persisted.course);
+    const totalCount = inScope.length;
+    let learnedCount = 0;
+    for (const c of inScope) {
+      if (persisted.learned[c.id]) learnedCount++;
+    }
+    const pct = totalCount > 0 ? Math.round((learnedCount / totalCount) * 100) : 0;
+    return { learnedCount, totalCount, pct };
+  }, [fmCardsWithIndex, thmCardsWithIndex, persisted.course, persisted.learned]);
 
   const handleTabChange = useCallback((tab: TabMode) => {
     setPersisted((prev) => ({ ...prev, tab }));
+    setSelectedTopicId('');
   }, []);
 
   const handleCourseChange = useCallback((course: CourseCode) => {
@@ -541,12 +708,47 @@ export default function App() {
     setPersisted((prev) => ({ ...prev, goalOpen: !prev.goalOpen }));
   }, []);
 
+  const handleToggleTopic = useCallback((topicId: string) => {
+    setOpenTopics((prev) => ({
+      ...prev,
+      [topicId]: !prev[topicId],
+    }));
+  }, []);
+
+  const handleSelectTopicFromNav = useCallback((targetId: string, href: string) => {
+    setSelectedTopicId(targetId);
+    setOpenTopics((prev) => ({ ...prev, [targetId]: true }));
+    if (typeof window !== 'undefined' && window.innerWidth <= 1024) {
+      setSidebarOpen(false);
+    }
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        const el = document.getElementById(targetId);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+      if (window.history?.replaceState) {
+        window.history.replaceState(null, '', href);
+      }
+    }
+  }, []);
+
   const handleBrandReset = useCallback(() => {
     setPersisted((prev) => resetToHomeFormulasState(prev));
     setThmFilter('all');
     setSearchInput('');
+    setSelectedTopicId('');
     setToolsOpen(false);
     setModalOpen(false);
+    setHideDetails(false);
+    setOpenTopics(() => {
+      const collapsed: Record<string, boolean> = {};
+      for (const sec of [...fmSections, ...thmSections]) {
+        collapsed[sec.id] = false;
+      }
+      return collapsed;
+    });
     if (typeof document !== 'undefined') {
       document.querySelectorAll<HTMLDetailsElement>('details.fmt, details.fmd').forEach((d) => {
         d.open = false;
@@ -556,7 +758,7 @@ export default function App() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
     showToast('RESET TO FORMULAS // ALL RETRACTED');
-  }, [showToast]);
+  }, [fmSections, thmSections, showToast]);
 
   const handleToggleStar = useCallback((id: string) => {
     setPersisted((prev) => {
@@ -586,6 +788,82 @@ export default function App() {
     [showToast]
   );
 
+  // Study Tools Handlers
+  const handleToggleSelfTest = useCallback(() => {
+    setPersisted((prev) => {
+      const next = !prev.selfTest;
+      if (typeof document !== 'undefined') {
+        document.body.classList.toggle('self-test', next);
+      }
+      showToast(next ? 'SELF-TEST BLUR ENABLED' : 'SELF-TEST BLUR DISABLED');
+      return { ...prev, selfTest: next };
+    });
+  }, [showToast]);
+
+  const handleToggleHideDetails = useCallback(() => {
+    setHideDetails((prev) => {
+      const next = !prev;
+      if (typeof document !== 'undefined') {
+        document.body.classList.toggle('hide-details', next);
+      }
+      showToast(next ? 'DETAILS HIDDEN' : 'DETAILS VISIBLE');
+      return next;
+    });
+  }, [showToast]);
+
+  const handleToggleSingleCol = useCallback(() => {
+    setPersisted((prev) => {
+      const next = !prev.singleCol;
+      if (typeof document !== 'undefined') {
+        document.body.classList.toggle('single-col', next);
+      }
+      showToast(next ? 'SINGLE-COLUMN VIEW' : 'MULTI-COLUMN GRID VIEW');
+      return { ...prev, singleCol: next };
+    });
+  }, [showToast]);
+
+  const pickRandomFlashcard = useCallback(() => {
+    const visibleIds = new Set(
+      filterSummary.topics.flatMap((t) => t.visibleCardIds)
+    );
+    const pool = activeTabCards.filter((c) => visibleIds.has(c.id));
+    if (pool.length === 0) {
+      showToast('NO VISIBLE CARDS IN CURRENT FILTER');
+      return;
+    }
+    const chosen = pool[Math.floor(Math.random() * pool.length)];
+    setActiveFlashcard(chosen);
+    setModalMode('flashcard');
+    setToolsOpen(false);
+    setModalOpen(true);
+  }, [filterSummary.topics, activeTabCards, showToast]);
+
+  const handleExpandCollapseAll = useCallback(
+    (expand: boolean) => {
+      const targetSections = persisted.tab === 'fm' ? fmSections : thmSections;
+      setOpenTopics((prev) => {
+        const next = { ...prev };
+        for (const sec of targetSections) {
+          next[sec.id] = expand;
+        }
+        return next;
+      });
+      setToolsOpen(false);
+      showToast(expand ? 'ALL TOPICS EXPANDED' : 'ALL TOPICS COLLAPSED');
+    },
+    [persisted.tab, fmSections, thmSections, showToast]
+  );
+
+  const handleResetProgress = useCallback(() => {
+    setPersisted((prev) => ({
+      ...prev,
+      learned: {},
+      starred: {},
+    }));
+    setToolsOpen(false);
+    showToast('PROGRESS RESET COMPLETE');
+  }, [showToast]);
+
   const handleImportSubmit = useCallback(() => {
     const validation = validateJsonImportPayload(importJsonText);
     if (!validation.ok || !validation.data) {
@@ -602,10 +880,93 @@ export default function App() {
     showToast('PROGRESS RESTORED');
   }, [importJsonText, showToast]);
 
-  const parsedFlashcardHtml = useMemo(
-    () => renderTextWithMath(flashcardHtml),
-    [flashcardHtml]
-  );
+  const hasQuery = searchInput.trim().length > 0;
+  const isZeroMatch = filterSummary.visibleCards === 0;
+  const hasActiveSearch = deferredTokens.length > 0;
+
+  const renderSectionAccordion = (
+    section: TopicSectionRecord,
+    isThmTab: boolean
+  ) => {
+    const courseMatch =
+      persisted.course === 'ALL' || section.course === persisted.course;
+    let learnedInTopic = 0;
+    let visibleInTopic = 0;
+
+    const cardVisibility = section.cards.map((card) => {
+      const isLearned = Boolean(persisted.learned[card.id]);
+      const isStarred = Boolean(persisted.starred[card.id]);
+      if (isLearned) learnedInTopic++;
+
+      const statusMatch =
+        persisted.status === 'all'
+          ? true
+          : persisted.status === 'starred'
+          ? isStarred
+          : !isLearned;
+      const thmMatch = isThmTab
+        ? matchesTheoremCategoryFilter(card.badge, thmFilter)
+        : true;
+      const sIdx = searchIndexById.get(card.id) || '';
+      const queryMatch = matchesSearchTokens(sIdx, deferredTokens);
+      const isVisible = courseMatch && statusMatch && thmMatch && queryMatch;
+      if (isVisible) visibleInTopic++;
+      return { card, isLearned, isStarred, isVisible };
+    });
+
+    const sectionHidden = visibleInTopic === 0;
+    const isOpen = hasActiveSearch
+      ? visibleInTopic > 0
+      : Boolean(openTopics[section.id]);
+    const isIndexSelected = selectedTopicId === section.id;
+
+    return (
+      <details
+        key={section.id}
+        id={section.id}
+        data-c={section.course}
+        className={`fmt${isIndexSelected ? ' index-selected' : ''}${sectionHidden ? ' hidden' : ''}`}
+        open={isOpen}
+        hidden={sectionHidden}
+      >
+        <summary
+          onClick={(e) => {
+            e.preventDefault();
+            handleToggleTopic(section.id);
+          }}
+        >
+          <span className="fmtt">{section.title}</span>
+          <span className="fmmeta">
+            {section.freqBadge ? (
+              <span
+                className="fmfreq"
+                title="How often this topic appeared in the 2010–2025 papers"
+              >
+                {section.freqBadge}
+              </span>
+            ) : null}
+            <span className="fmcnt">
+              {learnedInTopic}/{section.cards.length} learned
+            </span>
+          </span>
+        </summary>
+        <div className="fmgrid">
+          {cardVisibility.map(({ card, isLearned, isStarred, isVisible }) => (
+            <FormulaCardView
+              key={card.id}
+              card={card}
+              isLearned={isLearned}
+              isStarred={isStarred}
+              isHidden={!isVisible}
+              onToggleStar={handleToggleStar}
+              onToggleLearned={handleToggleLearned}
+              onCopyLatex={handleCopyLatex}
+            />
+          ))}
+        </div>
+      </details>
+    );
+  };
 
   return (
     <WorkspaceErrorBoundary fallbackLabel="BUET L-1/T-1 EEE Sheet">
@@ -659,22 +1020,30 @@ export default function App() {
               <button
                 type="button"
                 className={`tab${persisted.tab === 'fm' ? ' active' : ''}`}
+                id="tabFm"
                 role="tab"
                 aria-selected={persisted.tab === 'fm'}
                 aria-label="View Formulas Sheet"
                 onClick={() => handleTabChange('fm')}
               >
                 <span>Formulas</span>
+                <span className="tn" id="cntFm">
+                  {fmCardsWithIndex.length}
+                </span>
               </button>
               <button
                 type="button"
                 className={`tab${persisted.tab === 'thm' ? ' active' : ''}`}
+                id="tabThm"
                 role="tab"
                 aria-selected={persisted.tab === 'thm'}
                 aria-label="View Theorems and Definitions Sheet"
                 onClick={() => handleTabChange('thm')}
               >
                 <span>Theorems &amp; Definitions</span>
+                <span className="tn" id="cntThm">
+                  {thmCardsWithIndex.length}
+                </span>
               </button>
             </div>
             <DoomsdayToggleButton
@@ -687,11 +1056,31 @@ export default function App() {
         <div className="goal" hidden={!persisted.goalOpen}>
           <div className="goal-progress-wrap">
             <span className="ntype-badge">MASTERY</span>
-            <div id="pb" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={0}>
-              <div id="pf" />
+            <div
+              id="pb"
+              role="progressbar"
+              aria-label="Overall Mastery Progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={masteryStats.pct}
+            >
+              <div id="pf" style={{ width: `${masteryStats.pct}%` }} />
             </div>
+            <span id="ptxt">
+              {masteryStats.learnedCount} / {masteryStats.totalCount} ({masteryStats.pct}%)
+            </span>
           </div>
           <div className="cdrow">
+            <label htmlFor="examDateInput">EXAM DATE</label>
+            <input
+              id="examDateInput"
+              type="date"
+              value={persisted.examDate || ''}
+              aria-label="Term final exam date"
+              onChange={(e) =>
+                setPersisted((prev) => ({ ...prev, examDate: e.target.value }))
+              }
+            />
             <DoomsdayDrawerClock examDate={persisted.examDate} />
           </div>
         </div>
@@ -721,7 +1110,10 @@ export default function App() {
           </div>
 
           <div className="controls-utility-row">
-            <div className="search-wrap" role="search">
+            <div
+              className={`search-wrap${hasQuery ? ' has-query' : ''}${isZeroMatch ? ' zero-match' : ''}`}
+              role="search"
+            >
               <label htmlFor="fmq" className="search-prefix">
                 [/]
               </label>
@@ -736,6 +1128,15 @@ export default function App() {
                 autoComplete="off"
                 spellCheck={false}
               />
+              <button
+                type="button"
+                className="search-clear-btn"
+                aria-label="Clear search query"
+                hidden={!searchInput}
+                onClick={() => setSearchInput('')}
+              >
+                [CLR]
+              </button>
               <span className="fmstat" role="status" aria-live="polite">
                 {filterSummary.visibleCards} / {filterSummary.totalCardsInScope}
               </span>
@@ -808,13 +1209,73 @@ export default function App() {
                   <span className="tools-trigger-ind">[+]</span>
                 </button>
                 <div className={`tools-dropdown${toolsOpen ? ' open' : ''}`} role="menu">
+                  <div className="dropdown-sec-label">VIEW &amp; STUDY MODES</div>
+                  <button
+                    type="button"
+                    className={`dropdown-item${persisted.selfTest ? ' active' : ''}`}
+                    role="menuitem"
+                    onClick={handleToggleSelfTest}
+                  >
+                    <span>Self-Test Blur Mode</span>
+                    <span className="ntype-badge">{persisted.selfTest ? 'ON' : 'OFF'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`dropdown-item${hideDetails ? ' active' : ''}`}
+                    role="menuitem"
+                    onClick={handleToggleHideDetails}
+                  >
+                    <span>Hide Where/Use Details</span>
+                    <span className="ntype-badge">{hideDetails ? 'ON' : 'OFF'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`dropdown-item${persisted.singleCol ? ' active' : ''}`}
+                    role="menuitem"
+                    onClick={handleToggleSingleCol}
+                  >
+                    <span>Single-Column Layout</span>
+                    <span className="ntype-badge">{persisted.singleCol ? '1-COL' : 'GRID'}</span>
+                  </button>
+                  <div className="dropdown-divider" />
+                  <div className="dropdown-sec-label">ACTIVE RECALL &amp; ACCORDIONS</div>
+                  <button
+                    type="button"
+                    className="dropdown-item"
+                    role="menuitem"
+                    onClick={pickRandomFlashcard}
+                  >
+                    <span>Random Flashcard</span>
+                    <span className="ntype-badge">DECK</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="dropdown-item"
+                    role="menuitem"
+                    onClick={() => handleExpandCollapseAll(true)}
+                  >
+                    <span>Expand All Topics</span>
+                    <span className="ntype-badge">[+]</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="dropdown-item"
+                    role="menuitem"
+                    onClick={() => handleExpandCollapseAll(false)}
+                  >
+                    <span>Collapse All Topics</span>
+                    <span className="ntype-badge">[-]</span>
+                  </button>
+                  <div className="dropdown-divider" />
+                  <div className="dropdown-sec-label">DATA &amp; PROGRESS</div>
                   <button
                     type="button"
                     className="dropdown-item"
                     role="menuitem"
                     aria-label="Export or Import Progress JSON"
                     onClick={() => {
-                      setFlashcardHtml('');
+                      setActiveFlashcard(null);
+                      setModalMode('io');
                       setImportJsonText(
                         JSON.stringify(
                           {
@@ -833,6 +1294,15 @@ export default function App() {
                     <span>Export / Import JSON</span>
                     <span className="ntype-badge">IO</span>
                   </button>
+                  <button
+                    type="button"
+                    className="dropdown-item danger"
+                    role="menuitem"
+                    onClick={handleResetProgress}
+                  >
+                    <span>Reset Progress</span>
+                    <span className="ntype-badge">CLR</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -849,43 +1319,101 @@ export default function App() {
           id="sidebar"
           aria-label="Topic Navigation"
           hidden={!sidebarOpen}
-        />
+        >
+          <div className="focus-pill">
+            <span className="focus-pill-tag">TOPIC INDEX</span>
+            <span>{persisted.course === 'ALL' ? 'ALL COURSES' : persisted.course}</span>
+          </div>
+          <nav className="fmnav" id="navF" hidden={persisted.tab !== 'fm'}>
+            {navContent.navF.map((group) => {
+              const rowHidden =
+                persisted.course !== 'ALL' && group.course !== persisted.course;
+              return (
+                <div
+                  key={group.course}
+                  className={`fmnavrow${rowHidden ? ' hidden' : ''}`}
+                  data-c={group.course}
+                  hidden={rowHidden}
+                >
+                  <b>{group.badgeText}</b>
+                  {group.links.map((link) => (
+                    <a
+                      key={link.href}
+                      href={link.href}
+                      className={`fmlink${selectedTopicId === link.targetId ? ' active' : ''}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleSelectTopicFromNav(link.targetId, link.href);
+                      }}
+                    >
+                      {link.label}
+                    </a>
+                  ))}
+                </div>
+              );
+            })}
+          </nav>
+          <nav className="fmnav" id="navT" hidden={persisted.tab !== 'thm'}>
+            {navContent.navT.map((group) => {
+              const rowHidden =
+                persisted.course !== 'ALL' && group.course !== persisted.course;
+              return (
+                <div
+                  key={group.course}
+                  className={`fmnavrow${rowHidden ? ' hidden' : ''}`}
+                  data-c={group.course}
+                  hidden={rowHidden}
+                >
+                  <b>{group.badgeText}</b>
+                  {group.links.map((link) => (
+                    <a
+                      key={link.href}
+                      href={link.href}
+                      className={`fmlink${selectedTopicId === link.targetId ? ' active' : ''}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleSelectTopicFromNav(link.targetId, link.href);
+                      }}
+                    >
+                      {link.label}
+                    </a>
+                  ))}
+                </div>
+              );
+            })}
+          </nav>
+        </aside>
+
         <div className="content-col">
+          {isZeroMatch ? (
+            <div className="search-empty-state" role="status">
+              <div className="ntype-badge">[:: 0 CARDS MATCH CURRENT FILTER ::]</div>
+              <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '13.5px' }}>
+                No formulas or theorems matched your active search query or filter criteria.
+              </p>
+              <button
+                type="button"
+                className="sb-btn"
+                onClick={() => {
+                  setSearchInput('');
+                  setPersisted((prev) => ({ ...prev, course: 'ALL', status: 'all' }));
+                  setThmFilter('all');
+                }}
+              >
+                [RESET FILTERS]
+              </button>
+            </div>
+          ) : null}
+
           <WorkspaceErrorBoundary fallbackLabel="Formula Workspace (#fmroot)">
             <main id="fmroot" hidden={persisted.tab !== 'fm'}>
-              {preindexedCards.map(({ card, searchIndex }) => {
-                const isLearned = Boolean(persisted.learned[card.id]);
-                const isStarred = Boolean(persisted.starred[card.id]);
-                const courseMatch =
-                  persisted.course === 'ALL' || card.course === persisted.course;
-                const statusMatch =
-                  persisted.status === 'all'
-                    ? true
-                    : persisted.status === 'starred'
-                    ? isStarred
-                    : !isLearned;
-                const queryMatch = matchesSearchTokens(
-                  searchIndex,
-                  deferredTokens
-                );
-                const isHidden = !(courseMatch && statusMatch && queryMatch);
-                return (
-                  <FormulaCardView
-                    key={card.id}
-                    card={card}
-                    isLearned={isLearned}
-                    isStarred={isStarred}
-                    isHidden={isHidden}
-                    onToggleStar={handleToggleStar}
-                    onToggleLearned={handleToggleLearned}
-                    onCopyLatex={handleCopyLatex}
-                  />
-                );
-              })}
+              {fmSections.map((section) => renderSectionAccordion(section, false))}
             </main>
           </WorkspaceErrorBoundary>
           <WorkspaceErrorBoundary fallbackLabel="Theorem Workspace (#thmroot)">
-            <main id="thmroot" hidden={persisted.tab !== 'thm'} />
+            <main id="thmroot" hidden={persisted.tab !== 'thm'}>
+              {thmSections.map((section) => renderSectionAccordion(section, true))}
+            </main>
           </WorkspaceErrorBoundary>
         </div>
       </div>
@@ -897,32 +1425,169 @@ export default function App() {
         aria-modal="true"
         aria-label="Study Tool Modal"
         hidden={!modalOpen}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            setModalOpen(false);
+          }
+        }}
       >
         <div className="fcb">
-          {parsedFlashcardHtml ? (
-            <div
-              className="fcbody"
-              dangerouslySetInnerHTML={{ __html: parsedFlashcardHtml }}
-            />
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              marginBottom: '14px',
+              paddingBottom: '10px',
+              borderBottom: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            <span className="ntype-badge">
+              {modalMode === 'flashcard' && activeFlashcard
+                ? `RANDOM FLASHCARD // ${activeFlashcard.course}`
+                : 'EXPORT / IMPORT PROGRESS JSON'}
+            </span>
+            <button
+              type="button"
+              className="sb-btn"
+              aria-label="Close modal"
+              onClick={() => setModalOpen(false)}
+            >
+              [CLOSE]
+            </button>
+          </div>
+
+          {modalMode === 'flashcard' && activeFlashcard ? (
+            <div className="fcbody">
+              <div
+                style={{
+                  fontSize: '15px',
+                  fontWeight: 600,
+                  marginBottom: '10px',
+                  color: 'var(--text-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span>{activeFlashcard.title}</span>
+                {activeFlashcard.badge ? (
+                  <span className="thty">{activeFlashcard.badge}</span>
+                ) : null}
+              </div>
+              {activeFlashcard.htmlContent ? (
+                <SecondaryMathText
+                  className="fmhtml"
+                  content={activeFlashcard.htmlContent}
+                />
+              ) : null}
+              {activeFlashcard.rawLatex ? (
+                <KatexMathBlock
+                  latex={activeFlashcard.rawLatex}
+                  displayMode={activeFlashcard.fmmDisplayMode ?? true}
+                />
+              ) : null}
+              {activeFlashcard.codeContent ? (
+                <pre className="fmcode">
+                  <code>{activeFlashcard.codeContent}</code>
+                </pre>
+              ) : null}
+              {activeFlashcard.bodyText || activeFlashcard.useText ? (
+                <div className="fmdet" style={{ marginTop: '10px' }}>
+                  {activeFlashcard.bodyText ? (
+                    <SecondaryMathText
+                      className="fmw"
+                      content={activeFlashcard.bodyText}
+                    />
+                  ) : null}
+                  {activeFlashcard.useText ? (
+                    <SecondaryMathText
+                      className="fmu"
+                      content={activeFlashcard.useText}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: '10px',
+                  marginTop: '16px',
+                }}
+              >
+                <button
+                  type="button"
+                  className="sb-btn"
+                  onClick={() => setModalOpen(false)}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="course-pill active"
+                  onClick={pickRandomFlashcard}
+                >
+                  Next Random Card
+                </button>
+              </div>
+            </div>
           ) : (
-            <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <textarea
                 aria-label="Backup JSON state"
                 value={importJsonText}
                 onChange={(e) => setImportJsonText(e.target.value)}
+                style={{
+                  width: '100%',
+                  minHeight: '160px',
+                  background: 'rgba(0,0,0,0.55)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border-crisp)',
+                  borderRadius: '10px',
+                  padding: '10px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '12px',
+                }}
               />
-              <button
-                type="button"
-                className="course-pill active"
-                aria-label="Import JSON state"
-                onClick={handleImportSubmit}
-              >
-                IMPORT STATE
-              </button>
-            </>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="sb-btn"
+                  onClick={() => {
+                    if (navigator.clipboard?.writeText) {
+                      navigator.clipboard.writeText(importJsonText).catch(() => {});
+                    }
+                    showToast('BACKUP JSON COPIED');
+                  }}
+                >
+                  COPY JSON
+                </button>
+                <button
+                  type="button"
+                  className="course-pill active"
+                  aria-label="Import JSON state"
+                  onClick={handleImportSubmit}
+                >
+                  IMPORT STATE
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>
+
+      <button
+        id="totop"
+        type="button"
+        className={showTopBtn ? 'vis' : ''}
+        aria-label="Scroll back to top"
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+      >
+        [TOP]
+      </button>
 
       <div id="toast" className={toastMsg ? 'show' : ''} role="status" aria-live="polite">
         {toastMsg || 'READY'}

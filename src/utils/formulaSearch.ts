@@ -7,10 +7,16 @@ export interface FormulaCardRecord {
   topicTitle: string;
   title: string;
   badge?: string;
+  cardTypeClass?: string;
+  copyText?: string;
   keywords: string;
   rawLatex: string;
+  fmmDisplayMode?: boolean;
+  htmlContent?: string;
+  codeContent?: string;
   bodyText: string;
   useText?: string;
+  stepsSummary?: string;
   steps?: string[];
   note?: string;
   seeAlso?: string;
@@ -91,18 +97,32 @@ export function normalizeLatexForSearch(latex: string): string {
 export function buildFormulaSearchIndex(card: {
   keywords?: string;
   title?: string;
+  badge?: string;
   topicTitle?: string;
   course?: string;
   rawLatex?: string;
+  htmlContent?: string;
+  codeContent?: string;
   bodyText?: string;
+  useText?: string;
+  note?: string;
+  seeAlso?: string;
+  steps?: string[];
 }): string {
   const parts = [
     card.keywords || '',
     card.title || '',
+    card.badge || '',
     card.topicTitle || '',
     card.course || '',
     normalizeLatexForSearch(card.rawLatex || ''),
+    card.htmlContent || '',
+    card.codeContent || '',
     card.bodyText || '',
+    card.useText || '',
+    card.note || '',
+    card.seeAlso || '',
+    ...(card.steps || []),
   ];
   return parts
     .join(' ')
