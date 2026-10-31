@@ -11,11 +11,11 @@ test('index.html is synced with src/content-fmroot.html and src/content-thmroot.
   assert.ok(indexHtml.includes(thmHtml), 'index.html should contain exact #thmroot markup');
 });
 
-test('Zero data loss: all original 32 theorem data-k keys and all 391 formula cards (including 27 PHY 121 Atlas additions) are preserved', () => {
+test('Zero data loss: all original 32 theorem data-k keys and all 415 formula cards (including EEE 101, PHY 121 and MATH 159 additions) are preserved', () => {
   const fmCards = fmHtml.match(/<div class="fmi /g) || [];
   const thmCards = thmHtml.match(/<div class="fmi /g) || [];
-  assert.equal(fmCards.length, 391, 'Expected 391 formula cards in #fmroot');
-  assert.equal(thmCards.length, 110, 'Expected 110 theorem/definition cards in #thmroot');
+  assert.equal(fmCards.length, 415, 'Expected 415 formula cards in #fmroot');
+  assert.equal(thmCards.length, 143, 'Expected 143 theorem/definition cards in #thmroot');
 
   const originalThmKeys = [
     't-eee1:0', 't-eee1:1', 't-eee1:2', 't-eee1:3', 't-eee1:4',
@@ -37,20 +37,31 @@ test('Zero data loss: all original 32 theorem data-k keys and all 391 formula ca
   }
 });
 
-test('EEE-101 includes series/parallel RLC, damping formulas, and general 2nd-order circuit steps', () => {
+test('EEE-101 includes series/parallel RLC, damping formulas, general 2nd-order circuit steps, and all 2010–2025 definitions, proofs & worked problems', () => {
   const eeeFmKeys = [
-    'eee-trans:10',
-    'eee-trans:11',
-    'eee-trans:12',
-    'eee-trans:13',
-    'eee-trans:14',
-    'eee-trans:15',
+    'eee-basic:11', 'eee-basic:12', 'eee-basic:13', 'eee-basic:14',
+    'eee-delta:6', 'eee-delta:7',
+    'eee-nodal:7',
+    'eee-thev:6',
+    'eee-maxp:6', 'eee-maxp:7',
+    'eee-lc:11', 'eee-lc:12',
+    'eee-trans:10', 'eee-trans:11', 'eee-trans:12', 'eee-trans:13', 'eee-trans:14', 'eee-trans:15', 'eee-trans:16', 'eee-trans:17',
+    'eee-ac:17',
+    'eee-mag:10',
   ];
   for (const k of eeeFmKeys) {
-    assert.ok(fmHtml.includes(`data-k="${k}"`), `Missing EEE-101 RLC card ${k} in #fmroot`);
+    assert.ok(fmHtml.includes(`data-k="${k}"`), `Missing EEE-101 formula card ${k} in #fmroot`);
   }
-  assert.ok(thmHtml.includes('data-k="t-eee2:3"'), 'Missing Series vs Parallel RLC & Damping Regimes theorem card t-eee2:3');
-  assert.ok(thmHtml.includes('data-k="t-eee2:4"'), 'Missing General 2nd-Order Dynamic Circuits card t-eee2:4');
+
+  const eeeThmKeys = [
+    't-eee1:0', 't-eee1:1', 't-eee1:2', 't-eee1:3', 't-eee1:4', 't-eee1:5', 't-eee1:6',
+    't-eee1:7', 't-eee1:8', 't-eee1:9', 't-eee1:10', 't-eee1:11', 't-eee1:12', 't-eee1:13',
+    't-eee2:0', 't-eee2:1', 't-eee2:2', 't-eee2:3', 't-eee2:4',
+    't-eee2:5', 't-eee2:6', 't-eee2:7', 't-eee2:8', 't-eee2:9', 't-eee2:10', 't-eee2:11',
+  ];
+  for (const k of eeeThmKeys) {
+    assert.ok(thmHtml.includes(`data-k="${k}"`), `Missing EEE-101 theorem/definition card ${k} in #thmroot`);
+  }
   assert.ok(thmHtml.includes('Step 1 ($t = 0^-$ steady state):'), 'Missing step-by-step 2nd-order solution algorithm');
 });
 
@@ -76,6 +87,30 @@ test('Math 157 and Math 159 cards in #fmroot and #thmroot elaborate all concepts
   assert.ok(thmHtml.includes('Green\'s Theorem in the Plane:'), 't-m1593:1 should state Green\'s Theorem');
   assert.ok(thmHtml.includes('Stokes\' Curl Theorem:'), 't-m1593:1 should state Stokes\' Theorem');
   assert.ok(thmHtml.includes('Gauss\' Divergence Theorem:'), 't-m1593:1 should state Gauss\' Divergence Theorem');
+});
+
+test('MATH 159 theorems, laws, definitions, short proofs, and formulas are comprehensively expanded across all sections', () => {
+  const m159FmKeys = [
+    'm159-complexnum:15', 'm159-complexnum:16',
+    'm159-analytic:11',
+    'm159-cint:10',
+    'm159-series:12',
+    'm159-vec:7',
+    'm159-ops:6',
+    'm159-thm:4',
+  ];
+  for (const k of m159FmKeys) {
+    assert.ok(fmHtml.includes(`data-k="${k}"`), `Missing MATH 159 formula card ${k} in #fmroot`);
+  }
+
+  const m159ThmKeys = [
+    't-m1591:5', 't-m1591:6', 't-m1591:7', 't-m1591:8', 't-m1591:9', 't-m1591:10',
+    't-m1592:5', 't-m1592:6', 't-m1592:7', 't-m1592:8', 't-m1592:9',
+    't-m1593:5', 't-m1593:6', 't-m1593:7', 't-m1593:8', 't-m1593:9', 't-m1593:10', 't-m1593:11', 't-m1593:12',
+  ];
+  for (const k of m159ThmKeys) {
+    assert.ok(thmHtml.includes(`data-k="${k}"`), `Missing MATH 159 theorem/definition card ${k} in #thmroot`);
+  }
 });
 
 test('PHY 121 theorems and definitions are comprehensively expanded across all three syllabus sections', () => {

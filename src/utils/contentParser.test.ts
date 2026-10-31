@@ -7,17 +7,17 @@ const fmHtml = fs.readFileSync('src/content-fmroot.html', 'utf8');
 const thmHtml = fs.readFileSync('src/content-thmroot.html', 'utf8');
 const navHtml = fs.readFileSync('src/content-nav.html', 'utf8');
 
-test('parseTopicSections extracts all 61 formula sections (391 cards) and 13 theorem sections (110 cards)', () => {
+test('parseTopicSections extracts all 61 formula sections (415 cards) and 13 theorem sections (143 cards)', () => {
   const fmSections = parseTopicSections(fmHtml);
   const thmSections = parseTopicSections(thmHtml);
 
   assert.equal(fmSections.length, 61, 'Expected 61 formula topic sections');
   const totalFmCards = fmSections.reduce((acc, s) => acc + s.cards.length, 0);
-  assert.equal(totalFmCards, 391, 'Expected 391 formula cards');
+  assert.equal(totalFmCards, 415, 'Expected 415 formula cards');
 
   assert.equal(thmSections.length, 13, 'Expected 13 theorem topic sections');
   const totalThmCards = thmSections.reduce((acc, s) => acc + s.cards.length, 0);
-  assert.equal(totalThmCards, 110, 'Expected 110 theorem/definition cards');
+  assert.equal(totalThmCards, 143, 'Expected 143 theorem/definition cards');
 
   // Check badges on thmroot cards
   for (const sec of thmSections) {
