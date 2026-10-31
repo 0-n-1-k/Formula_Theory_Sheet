@@ -91,8 +91,11 @@ export function normalizeLatexForSearch(latex: string): string {
   return (lower + ' ' + strippedBraces + ' ' + compactSubscripts).replace(/\s+/g, ' ').trim();
 }
 
+const cardSearchIndexWeakCache = new WeakMap<object, string>();
+
 /**
  * Builds a normalized, lowercased search index string for a single formula card.
+ * Memoized via WeakMap for object references so repeated filter passes are O(1).
  */
 export function buildFormulaSearchIndex(card: {
   keywords?: string;
@@ -109,6 +112,12 @@ export function buildFormulaSearchIndex(card: {
   seeAlso?: string;
   steps?: string[];
 }): string {
+  if (card && typeof card === 'object') {
+    const cached = cardSearchIndexWeakCache.get(card);
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
   const parts = [
     card.keywords || '',
     card.title || '',
@@ -124,11 +133,15 @@ export function buildFormulaSearchIndex(card: {
     card.seeAlso || '',
     ...(card.steps || []),
   ];
-  return parts
+  const built = parts
     .join(' ')
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
+  if (card && typeof card === 'object') {
+    cardSearchIndexWeakCache.set(card, built);
+  }
+  return built;
 }
 
 /**

@@ -301,6 +301,7 @@ export interface FormulaCardViewProps {
   isLearned: boolean;
   isStarred: boolean;
   isHidden?: boolean;
+  selfTest?: boolean;
   onToggleStar: (id: string) => void;
   onToggleLearned: (id: string, checked: boolean) => void;
   onCopyLatex: (latex: string) => void;
@@ -315,6 +316,7 @@ export const FormulaCardView = memo(function FormulaCardView({
   isLearned,
   isStarred,
   isHidden = false,
+  selfTest = false,
   onToggleStar,
   onToggleLearned,
   onCopyLatex,
@@ -323,11 +325,17 @@ export const FormulaCardView = memo(function FormulaCardView({
   const copyPayload = card.copyText ?? (card.rawLatex || card.codeContent || card.title);
   const typeCls = card.cardTypeClass || 'tex';
 
+  useEffect(() => {
+    if (!selfTest) {
+      setIsRevealed(false);
+    }
+  }, [selfTest]);
+
   const handleCardClick = useCallback(() => {
-    if (typeof document !== 'undefined' && document.body.classList.contains('self-test')) {
+    if (selfTest || (typeof document !== 'undefined' && document.body.classList.contains('self-test'))) {
       setIsRevealed((prev) => !prev);
     }
-  }, []);
+  }, [selfTest]);
 
   return (
     <div
@@ -452,7 +460,9 @@ export default function App() {
   const [searchInput, setSearchInput] = useState<string>('');
   const deferredQuery = useDeferredValue(searchInput);
 
-  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth > 1024 : true
+  );
   const [thmFilter, setThmFilter] = useState<TheoremCategoryFilter>('all');
   const [toolsOpen, setToolsOpen] = useState<boolean>(false);
   const [modalOpen, setModalOpen] = useState<boolean>(false);
@@ -464,23 +474,13 @@ export default function App() {
   const [selectedTopicId, setSelectedTopicId] = useState<string>('');
   const [hideDetails, setHideDetails] = useState<boolean>(false);
 
-  // Parse content-fmroot.html, content-thmroot.html, and content-nav.html once per session
-  const fmSections = useMemo<TopicSectionRecord[]>(
-    () => parseTopicSections(fmrootRawHtml),
-    []
-  );
-  const thmSections = useMemo<TopicSectionRecord[]>(
-    () => parseTopicSections(thmrootRawHtml),
-    []
-  );
-  const navContent = useMemo(
-    () => parseNavContent(navRawHtml),
-    []
-  );
+  const fmSections = useMemo(() => parseTopicSections(fmrootRawHtml), []);
+  const thmSections = useMemo(() => parseTopicSections(thmrootRawHtml), []);
+  const navContent = useMemo(() => parseNavContent(navRawHtml), []);
 
   const [openTopics, setOpenTopics] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
-    for (const sec of [...parseTopicSections(fmrootRawHtml), ...parseTopicSections(thmrootRawHtml)]) {
+    for (const sec of [...fmSections, ...thmSections]) {
       initial[sec.id] = sec.isOpenByDefault;
     }
     return initial;
@@ -510,9 +510,6 @@ export default function App() {
   useEffect(() => {
     if (typeof document === 'undefined') return;
     document.body.classList.toggle('self-test', Boolean(persisted.selfTest));
-    if (!persisted.selfTest) {
-      document.querySelectorAll('.fmi.revealed').forEach((el) => el.classList.remove('revealed'));
-    }
   }, [persisted.selfTest]);
 
   useEffect(() => {
@@ -855,6 +852,7 @@ export default function App() {
   );
 
   const handleResetProgress = useCallback(() => {
+    if (!window.confirm('Reset all learned and starred progress? This cannot be undone.')) return;
     setPersisted((prev) => ({
       ...prev,
       learned: {},
@@ -882,91 +880,178 @@ export default function App() {
 
   const hasQuery = searchInput.trim().length > 0;
   const isZeroMatch = filterSummary.visibleCards === 0;
-  const hasActiveSearch = deferredTokens.length > 0;
 
-  const renderSectionAccordion = (
-    section: TopicSectionRecord,
-    isThmTab: boolean
-  ) => {
-    const courseMatch =
-      persisted.course === 'ALL' || section.course === persisted.course;
-    let learnedInTopic = 0;
-    let visibleInTopic = 0;
-
-    const cardVisibility = section.cards.map((card) => {
-      const isLearned = Boolean(persisted.learned[card.id]);
-      const isStarred = Boolean(persisted.starred[card.id]);
-      if (isLearned) learnedInTopic++;
-
-      const statusMatch =
-        persisted.status === 'all'
-          ? true
-          : persisted.status === 'starred'
-          ? isStarred
-          : !isLearned;
-      const thmMatch = isThmTab
-        ? matchesTheoremCategoryFilter(card.badge, thmFilter)
-        : true;
-      const sIdx = searchIndexById.get(card.id) || '';
-      const queryMatch = matchesSearchTokens(sIdx, deferredTokens);
-      const isVisible = courseMatch && statusMatch && thmMatch && queryMatch;
-      if (isVisible) visibleInTopic++;
-      return { card, isLearned, isStarred, isVisible };
+  // Automatically mark matching sections open in openTopics when deferred search query is active
+  useEffect(() => {
+    if (deferredTokens.length === 0) return;
+    const activeSections = persisted.tab === 'fm' ? fmSections : thmSections;
+    const isThmTab = persisted.tab === 'thm';
+    setOpenTopics((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const section of activeSections) {
+        const courseMatch =
+          persisted.course === 'ALL' || section.course === persisted.course;
+        if (!courseMatch) continue;
+        const hasMatch = section.cards.some((card) => {
+          const isLearned = Boolean(persisted.learned[card.id]);
+          const isStarred = Boolean(persisted.starred[card.id]);
+          const statusMatch =
+            persisted.status === 'all'
+              ? true
+              : persisted.status === 'starred'
+              ? isStarred
+              : !isLearned;
+          const thmMatch = isThmTab
+            ? matchesTheoremCategoryFilter(card.badge, thmFilter)
+            : true;
+          const sIdx = searchIndexById.get(card.id) || '';
+          return statusMatch && thmMatch && matchesSearchTokens(sIdx, deferredTokens);
+        });
+        if (hasMatch && !next[section.id]) {
+          next[section.id] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
     });
+  }, [
+    deferredTokens,
+    persisted.tab,
+    persisted.course,
+    persisted.status,
+    persisted.learned,
+    persisted.starred,
+    thmFilter,
+    fmSections,
+    thmSections,
+    searchIndexById,
+  ]);
 
-    const sectionHidden = visibleInTopic === 0;
-    const isOpen = hasActiveSearch
-      ? visibleInTopic > 0
-      : Boolean(openTopics[section.id]);
-    const isIndexSelected = selectedTopicId === section.id;
+  const renderSectionAccordion = useCallback(
+    (section: TopicSectionRecord, isThmTab: boolean, isTabActive: boolean) => {
+      const courseMatch =
+        persisted.course === 'ALL' || section.course === persisted.course;
+      let learnedInTopic = 0;
+      let visibleInTopic = 0;
 
-    return (
-      <details
-        key={section.id}
-        id={section.id}
-        data-c={section.course}
-        className={`fmt${isIndexSelected ? ' index-selected' : ''}${sectionHidden ? ' hidden' : ''}`}
-        open={isOpen}
-        hidden={sectionHidden}
-      >
-        <summary
-          onClick={(e) => {
-            e.preventDefault();
-            handleToggleTopic(section.id);
-          }}
+      const cardVisibility = isTabActive
+        ? section.cards.map((card) => {
+            const isLearned = Boolean(persisted.learned[card.id]);
+            const isStarred = Boolean(persisted.starred[card.id]);
+            if (isLearned) learnedInTopic++;
+
+            const statusMatch =
+              persisted.status === 'all'
+                ? true
+                : persisted.status === 'starred'
+                ? isStarred
+                : !isLearned;
+            const thmMatch = isThmTab
+              ? matchesTheoremCategoryFilter(card.badge, thmFilter)
+              : true;
+            const sIdx = searchIndexById.get(card.id) || '';
+            const queryMatch = matchesSearchTokens(sIdx, deferredTokens);
+            const isVisible = courseMatch && statusMatch && thmMatch && queryMatch;
+            if (isVisible) visibleInTopic++;
+            return { card, isLearned, isStarred, isVisible };
+          })
+        : section.cards.map((card) => {
+            const isLearned = Boolean(persisted.learned[card.id]);
+            const isStarred = Boolean(persisted.starred[card.id]);
+            if (isLearned) learnedInTopic++;
+            return { card, isLearned, isStarred, isVisible: true };
+          });
+
+      if (!isTabActive) {
+        visibleInTopic = section.cards.length;
+      }
+
+      const sectionHidden = visibleInTopic === 0;
+      const isOpen = Boolean(openTopics[section.id]);
+      const isIndexSelected = selectedTopicId === section.id;
+
+      return (
+        <details
+          key={section.id}
+          id={section.id}
+          data-c={section.course}
+          className={`fmt${isIndexSelected ? ' index-selected' : ''}${sectionHidden ? ' hidden' : ''}`}
+          open={isOpen}
+          hidden={sectionHidden}
         >
-          <span className="fmtt">{section.title}</span>
-          <span className="fmmeta">
-            {section.freqBadge ? (
-              <span
-                className="fmfreq"
-                title="How often this topic appeared in the 2010–2025 papers"
-              >
-                {section.freqBadge}
+          <summary
+            onClick={(e) => {
+              e.preventDefault();
+              handleToggleTopic(section.id);
+            }}
+          >
+            <span className="fmtt">{section.title}</span>
+            <span className="fmmeta">
+              {section.freqBadge ? (
+                <span
+                  className="fmfreq"
+                  title="How often this topic appeared in the 2010–2025 papers"
+                >
+                  {section.freqBadge}
+                </span>
+              ) : null}
+              <span className="fmcnt">
+                {learnedInTopic}/{section.cards.length} learned
               </span>
-            ) : null}
-            <span className="fmcnt">
-              {learnedInTopic}/{section.cards.length} learned
             </span>
-          </span>
-        </summary>
-        <div className="fmgrid">
-          {cardVisibility.map(({ card, isLearned, isStarred, isVisible }) => (
-            <FormulaCardView
-              key={card.id}
-              card={card}
-              isLearned={isLearned}
-              isStarred={isStarred}
-              isHidden={!isVisible}
-              onToggleStar={handleToggleStar}
-              onToggleLearned={handleToggleLearned}
-              onCopyLatex={handleCopyLatex}
-            />
-          ))}
-        </div>
-      </details>
-    );
-  };
+          </summary>
+          <div className="fmgrid">
+            {cardVisibility.map(({ card, isLearned, isStarred, isVisible }) => (
+              <FormulaCardView
+                key={card.id}
+                card={card}
+                isLearned={isLearned}
+                isStarred={isStarred}
+                isHidden={!isVisible}
+                selfTest={Boolean(persisted.selfTest)}
+                onToggleStar={handleToggleStar}
+                onToggleLearned={handleToggleLearned}
+                onCopyLatex={handleCopyLatex}
+              />
+            ))}
+          </div>
+        </details>
+      );
+    },
+    [
+      persisted.course,
+      persisted.status,
+      persisted.learned,
+      persisted.starred,
+      persisted.selfTest,
+      thmFilter,
+      searchIndexById,
+      deferredTokens,
+      openTopics,
+      selectedTopicId,
+      handleToggleTopic,
+      handleToggleStar,
+      handleToggleLearned,
+      handleCopyLatex,
+    ]
+  );
+
+  const renderedFmSections = useMemo(
+    () =>
+      fmSections.map((section) =>
+        renderSectionAccordion(section, false, persisted.tab === 'fm')
+      ),
+    [fmSections, renderSectionAccordion, persisted.tab]
+  );
+
+  const renderedThmSections = useMemo(
+    () =>
+      thmSections.map((section) =>
+        renderSectionAccordion(section, true, persisted.tab === 'thm')
+      ),
+    [thmSections, renderSectionAccordion, persisted.tab]
+  );
 
   return (
     <WorkspaceErrorBoundary fallbackLabel="BUET L-1/T-1 EEE Sheet">
@@ -1311,6 +1396,13 @@ export default function App() {
       </section>
 
       <div
+        className={`sidebar-backdrop${sidebarOpen ? ' open' : ''}`}
+        id="sidebarBackdrop"
+        aria-hidden="true"
+        onClick={() => setSidebarOpen(false)}
+      />
+
+      <div
         className={`app-layout${sidebarOpen ? '' : ' sidebar-collapsed'}`}
         id="appLayout"
       >
@@ -1320,9 +1412,20 @@ export default function App() {
           aria-label="Topic Navigation"
           hidden={!sidebarOpen}
         >
-          <div className="focus-pill">
-            <span className="focus-pill-tag">TOPIC INDEX</span>
-            <span>{persisted.course === 'ALL' ? 'ALL COURSES' : persisted.course}</span>
+          <div className="sidebar-mobile-hd">
+            <div className="focus-pill">
+              <span className="focus-pill-tag">TOPIC INDEX</span>
+              <span>{persisted.course === 'ALL' ? 'ALL COURSES' : persisted.course}</span>
+            </div>
+            <button
+              type="button"
+              className="sidebar-close-btn"
+              id="sidebarCloseBtn"
+              aria-label="Close Topic Index"
+              onClick={() => setSidebarOpen(false)}
+            >
+              [X]
+            </button>
           </div>
           <nav className="fmnav" id="navF" hidden={persisted.tab !== 'fm'}>
             {navContent.navF.map((group) => {
@@ -1407,12 +1510,12 @@ export default function App() {
 
           <WorkspaceErrorBoundary fallbackLabel="Formula Workspace (#fmroot)">
             <main id="fmroot" hidden={persisted.tab !== 'fm'}>
-              {fmSections.map((section) => renderSectionAccordion(section, false))}
+              {renderedFmSections}
             </main>
           </WorkspaceErrorBoundary>
           <WorkspaceErrorBoundary fallbackLabel="Theorem Workspace (#thmroot)">
             <main id="thmroot" hidden={persisted.tab !== 'thm'}>
-              {thmSections.map((section) => renderSectionAccordion(section, true))}
+              {renderedThmSections}
             </main>
           </WorkspaceErrorBoundary>
         </div>

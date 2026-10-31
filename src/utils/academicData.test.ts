@@ -11,11 +11,11 @@ test('index.html is synced with src/content-fmroot.html and src/content-thmroot.
   assert.ok(indexHtml.includes(thmHtml), 'index.html should contain exact #thmroot markup');
 });
 
-test('Zero data loss: all original 32 theorem data-k keys and 364 formula cards are preserved', () => {
+test('Zero data loss: all original 32 theorem data-k keys and all 391 formula cards (including 27 PHY 121 Atlas additions) are preserved', () => {
   const fmCards = fmHtml.match(/<div class="fmi /g) || [];
   const thmCards = thmHtml.match(/<div class="fmi /g) || [];
-  assert.equal(fmCards.length, 364, 'Expected 364 formula cards in #fmroot');
-  assert.equal(thmCards.length, 84, 'Expected 84 theorem/definition cards in #thmroot');
+  assert.equal(fmCards.length, 391, 'Expected 391 formula cards in #fmroot');
+  assert.equal(thmCards.length, 110, 'Expected 110 theorem/definition cards in #thmroot');
 
   const originalThmKeys = [
     't-eee1:0', 't-eee1:1', 't-eee1:2', 't-eee1:3', 't-eee1:4',
@@ -84,9 +84,37 @@ test('PHY 121 theorems and definitions are comprehensively expanded across all t
   for (const secId of phySections) {
     const matches = thmHtml.match(new RegExp(`data-k="${secId}:\\d+"`, 'g')) || [];
     totalPhyThmCards += matches.length;
-    assert.ok(matches.length >= 12, `PHY 121 section ${secId} should have at least 12 theorem/definition cards (found ${matches.length})`);
+    assert.ok(matches.length >= 20, `PHY 121 section ${secId} should have at least 20 theorem/definition cards (found ${matches.length})`);
   }
-  assert.equal(totalPhyThmCards, 37, 'Expected 37 total PHY 121 theorem & definition cards in #thmroot');
+  assert.equal(totalPhyThmCards, 63, 'Expected 63 total PHY 121 theorem & definition cards in #thmroot');
+
+  const phyAtlasFmKeys = [
+    'phy-shm:6', 'phy-shm:7', 'phy-shm:8', 'phy-shm:9',
+    'phy-damp:3',
+    'phy-forced:3', 'phy-forced:4',
+    'phy-wave:5', 'phy-wave:6', 'phy-wave:7',
+    'phy-interf:5', 'phy-interf:6',
+    'phy-diff:4', 'phy-diff:5',
+    'phy-polar:3',
+    'phy-aber:2', 'phy-aber:3',
+    'phy-thermo:3', 'phy-thermo:4',
+    'phy-entropy:3',
+    'phy-maxwell:4', 'phy-maxwell:5', 'phy-maxwell:6',
+    'phy-kinetic:3', 'phy-kinetic:4', 'phy-kinetic:5',
+    'gen-const:1',
+  ];
+  for (const k of phyAtlasFmKeys) {
+    assert.ok(fmHtml.includes(`data-k="${k}"`), `Missing PHY 121 Formula Atlas card ${k} in #fmroot`);
+  }
+
+  const phyAtlasThmKeys = [
+    't-phy1:13', 't-phy1:14', 't-phy1:15', 't-phy1:16', 't-phy1:17', 't-phy1:18', 't-phy1:19', 't-phy1:20', 't-phy1:21',
+    't-phy2:12', 't-phy2:13', 't-phy2:14', 't-phy2:15', 't-phy2:16', 't-phy2:17', 't-phy2:18', 't-phy2:19', 't-phy2:20',
+    't-phy3:12', 't-phy3:13', 't-phy3:14', 't-phy3:15', 't-phy3:16', 't-phy3:17', 't-phy3:18', 't-phy3:19',
+  ];
+  for (const k of phyAtlasThmKeys) {
+    assert.ok(thmHtml.includes(`data-k="${k}"`), `Missing PHY 121 theorem/definition card ${k} in #thmroot`);
+  }
 });
 
 test('Zero emojis exist anywhere in index.html', () => {
