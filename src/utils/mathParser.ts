@@ -50,7 +50,8 @@ export function renderTextWithMath(input: string): string {
     !input ||
     (input.indexOf('$') === -1 &&
       input.indexOf('\\(') === -1 &&
-      input.indexOf('\\[') === -1)
+      input.indexOf('\\[') === -1 &&
+      input.indexOf('**') === -1)
   ) {
     return input || '';
   }
@@ -90,7 +91,8 @@ export function renderTextWithMath(input: string): string {
     )
     .replace(/\$([^$\n\u0000]+?)\$/g, (_, math: string) =>
       renderLatexCached(math, false)
-    );
+    )
+    .replace(/\*\*([^*\n\u0000]+?)\*\*/g, '<b>$1</b>');
 
   // 4. Restore protected HTML tags and code blocks
   return processed.replace(/\u0000PROT_(\d+)\u0000/g, (_, idxStr: string) => {

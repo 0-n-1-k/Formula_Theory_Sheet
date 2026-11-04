@@ -29,6 +29,38 @@ export interface ParsedNavContent {
 }
 
 /**
+ * Extracts the inner HTML of `<div class="${className}">...</div>` while properly
+ * balancing any nested `<div...>` / `</div>` pairs inside it.
+ */
+function extractBalancedDivContent(html: string, className: string): string | undefined {
+  const startToken = `<div class="${className}">`;
+  const startIdx = html.indexOf(startToken);
+  if (startIdx === -1) return undefined;
+  const contentStart = startIdx + startToken.length;
+  let depth = 1;
+  let i = contentStart;
+  while (i < html.length && depth > 0) {
+    const nextOpen = html.indexOf('<div', i);
+    const nextClose = html.indexOf('</div>', i);
+    if (nextClose === -1) break;
+    if (nextOpen !== -1 && nextOpen < nextClose) {
+      const charAfter = html[nextOpen + 4];
+      if (charAfter === ' ' || charAfter === '>' || charAfter === '\t' || charAfter === '\n') {
+        depth++;
+      }
+      i = nextOpen + 4;
+    } else {
+      depth--;
+      if (depth === 0) {
+        return html.slice(contentStart, nextClose).trim();
+      }
+      i = nextClose + 6;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Parses `<details class="fmt" ...>` topic accordions and `.fmi` cards from
  * `content-fmroot.html` or `content-thmroot.html` without losing any academic content.
  */
@@ -73,45 +105,38 @@ export function parseTopicSections(html: string): TopicSectionRecord[] {
       ).trim();
 
       const copyAttrMatch = rawCard.match(/data-t="([^"]*)"/);
-      const copyText = copyAttrMatch ? decodeHtmlEntities(copyAttrMatch[1]) : undefined;
+      const copyText = copyAttrMatch
+        ? decodeHtmlEntities(decodeHtmlEntities(copyAttrMatch[1]))
+        : undefined;
 
       const bodyStartIdx = rawCard.indexOf('<div class="fmbody">');
       const bodyHtml = bodyStartIdx !== -1 ? rawCard.slice(bodyStartIdx) : '';
 
-      const fmmMatch = bodyHtml.match(/<div class="fmm">([\s\S]*?)<\/div>/);
+      const fmmInner = extractBalancedDivContent(bodyHtml, 'fmm');
       let rawLatex = '';
       let fmmDisplayMode = true;
-      if (fmmMatch) {
-        const fmmInner = fmmMatch[1].trim();
+      if (fmmInner !== undefined) {
         if (fmmInner.startsWith('$$') && fmmInner.endsWith('$$')) {
-          rawLatex = decodeHtmlEntities(fmmInner.slice(2, -2).trim());
+          rawLatex = decodeHtmlEntities(decodeHtmlEntities(fmmInner.slice(2, -2).trim()));
           fmmDisplayMode = true;
         } else if (fmmInner.startsWith('$') && fmmInner.endsWith('$')) {
-          rawLatex = decodeHtmlEntities(fmmInner.slice(1, -1).trim());
+          rawLatex = decodeHtmlEntities(decodeHtmlEntities(fmmInner.slice(1, -1).trim()));
           fmmDisplayMode = false;
         } else {
-          rawLatex = decodeHtmlEntities(fmmInner);
+          rawLatex = decodeHtmlEntities(decodeHtmlEntities(fmmInner));
           fmmDisplayMode = true;
         }
       }
 
-      const htmlMatch = bodyHtml.match(/<div class="fmhtml">([\s\S]*?)<\/div>/);
-      const htmlContent = htmlMatch ? htmlMatch[1].trim() : undefined;
+      const htmlContent = extractBalancedDivContent(bodyHtml, 'fmhtml');
 
       const codeMatch = bodyHtml.match(/<pre class="fmcode"><code>([\s\S]*?)<\/code><\/pre>/);
       const codeContent = codeMatch ? decodeHtmlEntities(codeMatch[1]) : undefined;
 
-      const fmwMatch = bodyHtml.match(/<div class="fmw">([\s\S]*?)<\/div>/);
-      const bodyText = fmwMatch ? fmwMatch[1].trim() : '';
-
-      const fmuMatch = bodyHtml.match(/<div class="fmu">([\s\S]*?)<\/div>/);
-      const useText = fmuMatch ? fmuMatch[1].trim() : undefined;
-
-      const fmnoteMatch = bodyHtml.match(/<div class="fmnote">([\s\S]*?)<\/div>/);
-      const note = fmnoteMatch ? fmnoteMatch[1].trim() : undefined;
-
-      const thseeMatch = bodyHtml.match(/<div class="thsee">([\s\S]*?)<\/div>/);
-      const seeAlso = thseeMatch ? thseeMatch[1].trim() : undefined;
+      const bodyText = extractBalancedDivContent(bodyHtml, 'fmw') ?? '';
+      const useText = extractBalancedDivContent(bodyHtml, 'fmu');
+      const note = extractBalancedDivContent(bodyHtml, 'fmnote');
+      const seeAlso = extractBalancedDivContent(bodyHtml, 'thsee');
 
       const fmdMatch = bodyHtml.match(
         /<details class="fmd">\s*<summary>([\s\S]*?)<\/summary>\s*<ol class="fmsteps">([\s\S]*?)<\/ol>\s*<\/details>/

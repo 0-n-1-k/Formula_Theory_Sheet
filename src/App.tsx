@@ -17,17 +17,22 @@ import React, {
 } from 'react';
 import fmrootRawHtml from './content-fmroot.html?raw';
 import thmrootRawHtml from './content-thmroot.html?raw';
-import navRawHtml from './content-nav.html?raw';
+import genRawHtml from './content-gen.html?raw';
 import {
-  parseNavContent,
   parseTopicSections,
   type TopicSectionRecord,
 } from './utils/contentParser';
+import {
+  CURRENT_TERM_CONFIG,
+  TERM_REGISTRY,
+  buildEffectiveCoursePills,
+} from './termConfig';
 import {
   buildFormulaSearchIndex,
   filterFormulaCards,
   matchesSearchTokens,
   matchesTheoremCategoryFilter,
+  scoreFormulaCardSearch,
   tokenizeSearchQuery,
   type FormulaCardRecord,
   type TheoremCategoryFilter,
@@ -42,14 +47,33 @@ import {
   resetToHomeFormulasState,
   safeReadStorage,
   safeWriteStorage,
+  updateSearchHistoryList,
   validateJsonImportPayload,
+  clampHudHeightPx,
+  clampPinnedCardPosition,
+  computeCornerResizedLayout,
+  createInitialPinnedLayout,
+  getPinnedCardSizeMode,
+  PINNED_DEFAULT_HEIGHT,
+  PINNED_DEFAULT_WIDTH,
+  PINNED_MIN_HEIGHT,
+  PINNED_MIN_WIDTH,
   type CourseCode,
   type PersistedAppState,
+  type PinnedCardLayout,
+  type ResizeCorner,
   type StatusFilter,
   type TabMode,
 } from './utils/storageSafety';
+import {
+  PRACTICE_CATALOG,
+  getPracticeModulesForCourse,
+} from './utils/practiceCatalog';
+import { PdfCanvasReader } from './components/PdfCanvasReader';
 
-const STORAGE_KEY = 'buet_eee_l1t1_v2_state';
+const STORAGE_KEY = 'buet_eee_' + CURRENT_TERM_CONFIG.termId + '_v2_state';
+const QUICK_SHORTCUTS = ['cif', 'divergence theorem', 'thevenin', 'mvt', 'shm', 'leibnitz'] as const;
+const TOTAL_PRACTICE_MODULES = PRACTICE_CATALOG.reduce((acc, g) => acc + g.modules.length, 0);
 
 interface ErrorBoundaryProps {
   fallbackLabel?: string;
@@ -305,6 +329,10 @@ export interface FormulaCardViewProps {
   onToggleStar: (id: string) => void;
   onToggleLearned: (id: string, checked: boolean) => void;
   onCopyLatex: (latex: string) => void;
+  onPeekTopic?: (topicId: string) => void;
+  onPinCard?: (card: FormulaCardRecord) => void;
+  isPinned?: boolean;
+  topicTitle?: string;
 }
 
 /**
@@ -320,6 +348,10 @@ export const FormulaCardView = memo(function FormulaCardView({
   onToggleStar,
   onToggleLearned,
   onCopyLatex,
+  onPeekTopic,
+  onPinCard,
+  isPinned = false,
+  topicTitle,
 }: FormulaCardViewProps) {
   const [isRevealed, setIsRevealed] = useState<boolean>(false);
   const copyPayload = card.copyText ?? (card.rawLatex || card.codeContent || card.title);
@@ -347,10 +379,41 @@ export const FormulaCardView = memo(function FormulaCardView({
     >
       <div className="fmh">
         <span className="fmn">
-          {card.title}
+          <SecondaryMathText className="" as="span" content={card.title} />
           {card.badge ? <span className="thty">{card.badge}</span> : null}
+          {topicTitle ? (
+            <span className="fm-card-topic-tag" title={`Topic: ${topicTitle}`}>
+              {topicTitle}
+            </span>
+          ) : null}
         </span>
         <span className="fmb">
+          {onPeekTopic ? (
+            <button
+              type="button"
+              className="fm-hud-btn fm-peek-btn"
+              aria-label={`Peek full topic for ${card.title}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onPeekTopic(card.topicId);
+              }}
+            >
+              [PEEK TOPIC]
+            </button>
+          ) : null}
+          {onPinCard ? (
+            <button
+              type="button"
+              className={`fm-hud-btn fm-pin-btn${isPinned ? ' on' : ''}`}
+              aria-label={`Pin ${card.title} to fullscreen corner dock`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onPinCard(card);
+              }}
+            >
+              {isPinned ? '[PINNED]' : '[PIN]'}
+            </button>
+          ) : null}
           <button
             type="button"
             className={`fmst${isStarred ? ' on' : ''}`}
@@ -375,20 +438,22 @@ export const FormulaCardView = memo(function FormulaCardView({
           >
             Copy
           </button>
-          <label
-            className="fml"
-            aria-label={`Mark ${card.title} as learned`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <input
-              type="checkbox"
-              className="fmck"
-              checked={isLearned}
-              aria-label={`Learned status for ${card.title}`}
-              onChange={(e) => onToggleLearned(card.id, e.target.checked)}
-            />{' '}
-            learned
-          </label>
+          {card.course !== 'GEN' ? (
+            <label
+              className="fml"
+              aria-label={`Mark ${card.title} as learned`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                className="fmck"
+                checked={isLearned}
+                aria-label={`Learned status for ${card.title}`}
+                onChange={(e) => onToggleLearned(card.id, e.target.checked)}
+              />{' '}
+              learned
+            </label>
+          ) : null}
         </span>
       </div>
       <div className="fmbody">
@@ -424,7 +489,13 @@ export const FormulaCardView = memo(function FormulaCardView({
         ) : null}
         {card.steps && card.steps.length > 0 ? (
           <details className="fmd">
-            <summary>{card.stepsSummary || 'Proof & derivation steps'}</summary>
+            <summary>
+              <SecondaryMathText
+                as="span"
+                className=""
+                content={card.stepsSummary || 'Proof & derivation steps'}
+              />
+            </summary>
             <ol className="fmsteps">
               {card.steps.map((step, idx) => (
                 <SecondaryMathText
@@ -442,29 +513,65 @@ export const FormulaCardView = memo(function FormulaCardView({
   );
 });
 
-const COURSE_OPTIONS: ReadonlyArray<{ code: CourseCode; badge: string; label: string }> = [
-  { code: 'ALL', badge: 'ALL', label: 'All Courses' },
-  { code: 'EEE', badge: 'EEE 101', label: 'Circuits I' },
-  { code: 'M157', badge: 'MATH 157', label: 'Calculus I & II' },
-  { code: 'M159', badge: 'MATH 159', label: 'Complex & Vectors' },
-  { code: 'PHY', badge: 'PHY 121', label: 'Waves, Optics & Thermo' },
-  { code: 'CSE', badge: 'CSE 109', label: 'C / C++ Prog.' },
-  { code: 'GEN', badge: 'GEN', label: 'Math & Constants' },
-];
-
 export default function App() {
+  const fmSections = useMemo(() => parseTopicSections(fmrootRawHtml), []);
+  const thmSections = useMemo(() => parseTopicSections(thmrootRawHtml), []);
+  const genSections = useMemo(() => parseTopicSections(genRawHtml), []);
+  const allSections = useMemo(
+    () => [...fmSections, ...thmSections, ...genSections],
+    [fmSections, thmSections, genSections]
+  );
+
+  // Auto-detect course pills: combine CURRENT_TERM_CONFIG.courses with any data-c codes found in fmSections/thmSections
+  const courseOptions = useMemo(() => {
+    const discovered = new Set<string>();
+    for (const sec of [...fmSections, ...thmSections]) {
+      if (sec.course) discovered.add(sec.course);
+    }
+    return buildEffectiveCoursePills(CURRENT_TERM_CONFIG, discovered);
+  }, [fmSections, thmSections]);
+
+  // Auto-generate sidebar navigation groups (navF and navT) directly from parsed sections
+  const navContent = useMemo(() => {
+    const orderedCourses = courseOptions.filter((c) => c.code !== 'ALL');
+    const buildGroups = (sections: ReadonlyArray<TopicSectionRecord>) =>
+      orderedCourses
+        .map((courseCfg) => {
+          const matching = sections.filter((sec) => sec.course === courseCfg.code);
+          return {
+            course: courseCfg.code,
+            badgeText: courseCfg.badge,
+            links: matching.map((sec) => ({
+              href: `#${sec.id}`,
+              targetId: sec.id,
+              label: sec.title,
+            })),
+          };
+        })
+        .filter((g) => g.links.length > 0);
+
+    return {
+      navF: buildGroups([...fmSections, ...genSections]),
+      navT: buildGroups([...thmSections, ...genSections]),
+    };
+  }, [courseOptions, fmSections, thmSections, genSections]);
+
   const [persisted, setPersisted] = useState<PersistedAppState>(() =>
-    safeReadStorage(STORAGE_KEY, DEFAULT_APP_STATE)
+    safeReadStorage(
+      STORAGE_KEY,
+      DEFAULT_APP_STATE,
+      undefined,
+      courseOptions.map((c) => c.code)
+    )
   );
   // Optimization C: Immediate local state for 60fps search input + useDeferredValue for non-blocking filter calculation
   const [searchInput, setSearchInput] = useState<string>('');
   const deferredQuery = useDeferredValue(searchInput);
 
-  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() =>
-    typeof window !== 'undefined' ? window.innerWidth > 1024 : true
-  );
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
   const [thmFilter, setThmFilter] = useState<TheoremCategoryFilter>('all');
   const [toolsOpen, setToolsOpen] = useState<boolean>(false);
+  const [termMenuOpen, setTermMenuOpen] = useState<boolean>(false);
   const [modalOpen, setModalOpen] = useState<boolean>(false);
   const [modalMode, setModalMode] = useState<'flashcard' | 'io'>('io');
   const [activeFlashcard, setActiveFlashcard] = useState<FormulaCardRecord | null>(null);
@@ -474,13 +581,37 @@ export default function App() {
   const [selectedTopicId, setSelectedTopicId] = useState<string>('');
   const [hideDetails, setHideDetails] = useState<boolean>(false);
 
-  const fmSections = useMemo(() => parseTopicSections(fmrootRawHtml), []);
-  const thmSections = useMemo(() => parseTopicSections(thmrootRawHtml), []);
-  const navContent = useMemo(() => parseNavContent(navRawHtml), []);
+  const [searchFocused, setSearchFocused] = useState<boolean>(false);
+  const [selectedPracticeModuleId, setSelectedPracticeModuleId] = useState<string>('m159-complex');
+  const [isPdfFullscreen, setIsPdfFullscreen] = useState<boolean>(false);
+  const [fsHudPointerTop, setFsHudPointerTop] = useState<boolean>(false);
+  const [fsHudHovered, setFsHudHovered] = useState<boolean>(false);
+  const [fsSearchFocused, setFsSearchFocused] = useState<boolean>(false);
+
+  // Decoupled Fullscreen HUD state (never exits fullscreen or changes persisted.tab)
+  const [hudQuery, setHudQuery] = useState<string>('');
+  const [hudScope, setHudScope] = useState<'ALL' | 'FM' | 'THM'>('ALL');
+  const [hudCourseScope, setHudCourseScope] = useState<'COURSE' | 'ALL'>('COURSE');
+  const [hudRenderLimit, setHudRenderLimit] = useState<number>(12);
+  const [hudHeightPx, setHudHeightPx] = useState<number | null>(null);
+  const [isResizingHud, setIsResizingHud] = useState<boolean>(false);
+  const [peekTopicId, setPeekTopicId] = useState<string | null>(null);
+  const [pinnedCards, setPinnedCards] = useState<FormulaCardRecord[]>([]);
+  const [minimizedPinnedIds, setMinimizedPinnedIds] = useState<Record<string, boolean>>({});
+  const [pinnedLayouts, setPinnedLayouts] = useState<Record<string, PinnedCardLayout>>({});
+  const [pinInteraction, setPinInteraction] = useState<{
+    type: 'drag' | 'resize';
+    cardId: string;
+    corner?: ResizeCorner;
+    startX: number;
+    startY: number;
+    startLayout: PinnedCardLayout;
+  } | null>(null);
+  const topPinZIndexRef = useRef<number>(10010);
 
   const [openTopics, setOpenTopics] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
-    for (const sec of [...fmSections, ...thmSections]) {
+    for (const sec of [...fmSections, ...thmSections, ...genSections]) {
       initial[sec.id] = sec.isOpenByDefault;
     }
     return initial;
@@ -489,8 +620,41 @@ export default function App() {
   const topChromeRef = useRef<HTMLElement | null>(null);
   const fmbarRef = useRef<HTMLElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const fsSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const fsTopicStripRef = useRef<HTMLDivElement | null>(null);
+  const fsHudResultsRef = useRef<HTMLDivElement | null>(null);
+  const fullscreenWrapperRef = useRef<HTMLDivElement | null>(null);
   const toolsWrapRef = useRef<HTMLDivElement | null>(null);
+  const termSwitcherWrapRef = useRef<HTMLDivElement | null>(null);
   const toastTimerRef = useRef<number | null>(null);
+
+  const isGenSelected = persisted.course === 'GEN';
+  const activeCourseBadge = useMemo(
+    () =>
+      courseOptions.find((c) => c.code === persisted.course)?.badge || persisted.course,
+    [courseOptions, persisted.course]
+  );
+
+  const practiceModules = useMemo(
+    () => getPracticeModulesForCourse(persisted.course),
+    [persisted.course]
+  );
+
+  const activePracticeModule = useMemo(
+    () =>
+      practiceModules.find((m) => m.id === selectedPracticeModuleId) ||
+      practiceModules[0],
+    [practiceModules, selectedPracticeModuleId]
+  );
+
+  useEffect(() => {
+    if (
+      practiceModules.length > 0 &&
+      !practiceModules.some((m) => m.id === selectedPracticeModuleId)
+    ) {
+      setSelectedPracticeModuleId(practiceModules[0].id);
+    }
+  }, [practiceModules, selectedPracticeModuleId]);
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -502,9 +666,36 @@ export default function App() {
     }, 2200);
   }, []);
 
+  const recordSearchHistory = useCallback((rawQuery: string) => {
+    const trimmed = (rawQuery || '').trim();
+    if (trimmed.length < 2) return;
+    setPersisted((prev) => {
+      const nextHistory = updateSearchHistoryList(prev.searchHistory, trimmed);
+      return { ...prev, searchHistory: nextHistory };
+    });
+  }, []);
+
+  const handleClearAllHistory = useCallback(() => {
+    setPersisted((prev) => ({ ...prev, searchHistory: [] }));
+  }, []);
+
+  const handleDeleteHistoryItem = useCallback((itemToRemove: string) => {
+    setPersisted((prev) => ({
+      ...prev,
+      searchHistory: (prev.searchHistory || []).filter(
+        (item) => item.toLowerCase() !== itemToRemove.toLowerCase()
+      ),
+    }));
+  }, []);
+
   useEffect(() => {
-    safeWriteStorage(STORAGE_KEY, persisted);
-  }, [persisted]);
+    safeWriteStorage(
+      STORAGE_KEY,
+      persisted,
+      undefined,
+      courseOptions.map((c) => c.code)
+    );
+  }, [persisted, courseOptions]);
 
   // Sync body classes for Self-Test, Hide Details, and Single-Column Layout
   useEffect(() => {
@@ -521,6 +712,12 @@ export default function App() {
     if (typeof document === 'undefined') return;
     document.body.classList.toggle('hide-details', hideDetails);
   }, [hideDetails]);
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.title = CURRENT_TERM_CONFIG.brandTitle;
+    }
+  }, []);
 
   const updateChromeHeight = useCallback(() => {
     try {
@@ -543,11 +740,23 @@ export default function App() {
     }
   }, []);
 
+  const prevIsMobileTabletRef = useRef<boolean>(
+    typeof window !== 'undefined' ? window.innerWidth <= 1024 : false
+  );
+
   useEffect(() => {
     updateChromeHeight();
-    window.addEventListener('resize', updateChromeHeight, { passive: true });
-    return () => window.removeEventListener('resize', updateChromeHeight);
-  }, [updateChromeHeight, persisted.goalOpen, persisted.tab]);
+    const handleResize = () => {
+      updateChromeHeight();
+      const isNowMobileTablet = window.innerWidth <= 1024;
+      if (isNowMobileTablet !== prevIsMobileTabletRef.current) {
+        prevIsMobileTabletRef.current = isNowMobileTablet;
+        setSidebarOpen(!isNowMobileTablet);
+      }
+    };
+    window.addEventListener('resize', handleResize, { passive: true });
+    return () => window.removeEventListener('resize', handleResize);
+  }, [updateChromeHeight, persisted.goalOpen, persisted.tab, persisted.courseBarCollapsed]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -558,8 +767,109 @@ export default function App() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const retractHud = useCallback(() => {
+    setIsResizingHud(false);
+    setFsHudPointerTop(false);
+    setFsHudHovered(false);
+    setFsSearchFocused(false);
+    fsSearchInputRef.current?.blur();
+  }, []);
+
+  const enterPdfFullscreen = useCallback(() => {
+    setIsPdfFullscreen(true);
+    try {
+      fullscreenWrapperRef.current?.requestFullscreen?.().catch(() => {});
+    } catch {
+      // Ignore if native fullscreen is blocked by iframe policy
+    }
+  }, []);
+
+  const exitPdfFullscreen = useCallback(() => {
+    setIsPdfFullscreen(false);
+    setIsResizingHud(false);
+    setFsHudPointerTop(false);
+    setFsHudHovered(false);
+    setFsSearchFocused(false);
+    try {
+      if (typeof document !== 'undefined' && document.fullscreenElement) {
+        document.exitFullscreen?.().catch(() => {});
+      }
+    } catch {
+      // Ignore
+    }
+  }, []);
+
+  // Handle dragging the bottom vertical edge of the Fullscreen HUD to increase or decrease HUD height
+  useEffect(() => {
+    if (!isResizingHud || typeof window === 'undefined') return;
+    const prevCursor = document.body.style.cursor;
+    const prevUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const nextHeight = clampHudHeightPx(e.clientY, window.innerHeight);
+      setHudHeightPx(nextHeight);
+      const neededCards = Math.max(12, Math.ceil(nextHeight / 95) * 3);
+      setHudRenderLimit((prev) => (prev < neededCards ? neededCards : prev));
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      setIsResizingHud(false);
+      const currentLimit = hudHeightPx ?? Math.round(window.innerHeight * 0.5);
+      const withinHud = e.clientY <= currentLimit + 16;
+      setFsHudHovered(withinHud);
+      setFsHudPointerTop(withinHud);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevUserSelect;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingHud, hudHeightPx]);
+
+  // Sync native OS fullscreen exit (Escape key in native fullscreen) with isPdfFullscreen
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setIsPdfFullscreen(false);
+        setFsHudPointerTop(false);
+        setFsHudHovered(false);
+        setFsSearchFocused(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  // Lock document.body overflow while in PDF fullscreen so only the single PDF scrollbar exists
+  useEffect(() => {
+    if (typeof document === 'undefined' || !isPdfFullscreen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isPdfFullscreen]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F5' && (isPdfFullscreen || persisted.tab === 'prac')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isPdfFullscreen) {
+          exitPdfFullscreen();
+        } else {
+          enterPdfFullscreen();
+        }
+        return;
+      }
+
       const activeTag = document.activeElement?.tagName || '';
       const isInputFocused =
         activeTag === 'INPUT' ||
@@ -571,14 +881,36 @@ export default function App() {
         ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')
       ) {
         e.preventDefault();
-        searchInputRef.current?.focus();
-        searchInputRef.current?.select();
+        if (isPdfFullscreen) {
+          setFsHudPointerTop(true);
+          window.requestAnimationFrame(() => {
+            fsSearchInputRef.current?.focus();
+            fsSearchInputRef.current?.select();
+          });
+        } else {
+          searchInputRef.current?.focus();
+          searchInputRef.current?.select();
+        }
       } else if (e.key === 'Escape') {
+        if (isPdfFullscreen) {
+          const hudCurrentlyOpen = fsHudPointerTop || fsHudHovered || fsSearchFocused;
+          if (hudCurrentlyOpen) {
+            retractHud();
+          } else {
+            exitPdfFullscreen();
+          }
+          return;
+        }
         if (document.activeElement === searchInputRef.current && searchInput) {
           setSearchInput('');
         }
+        setSearchFocused(false);
         setToolsOpen(false);
+        setTermMenuOpen(false);
         setModalOpen(false);
+        if (typeof window !== 'undefined' && window.innerWidth <= 1024) {
+          setSidebarOpen(false);
+        }
       }
     };
 
@@ -590,17 +922,34 @@ export default function App() {
       ) {
         setToolsOpen(false);
       }
+      if (
+        termSwitcherWrapRef.current &&
+        e.target instanceof Node &&
+        !termSwitcherWrapRef.current.contains(e.target)
+      ) {
+        setTermMenuOpen(false);
+      }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
     document.addEventListener('click', handleDocumentClick);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
       document.removeEventListener('click', handleDocumentClick);
     };
-  }, [searchInput]);
+  }, [
+    searchInput,
+    isPdfFullscreen,
+    persisted.tab,
+    fsHudPointerTop,
+    fsHudHovered,
+    fsSearchFocused,
+    retractHud,
+    enterPdfFullscreen,
+    exitPdfFullscreen,
+  ]);
 
-  // Pre-index all formula and theorem cards once per session
+  // Pre-index all formula, theorem, and GEN cards once per session
   const fmCardsWithIndex = useMemo(
     () =>
       fmSections.flatMap((s) =>
@@ -623,6 +972,17 @@ export default function App() {
     [thmSections]
   );
 
+  const genCardsWithIndex = useMemo(
+    () =>
+      genSections.flatMap((s) =>
+        s.cards.map((card) => ({
+          card,
+          searchIndex: buildFormulaSearchIndex(card),
+        }))
+      ),
+    [genSections]
+  );
+
   const searchIndexById = useMemo(() => {
     const map = new Map<string, string>();
     for (const item of fmCardsWithIndex) {
@@ -631,20 +991,32 @@ export default function App() {
     for (const item of thmCardsWithIndex) {
       map.set(item.card.id, item.searchIndex);
     }
+    for (const item of genCardsWithIndex) {
+      map.set(item.card.id, item.searchIndex);
+    }
     return map;
-  }, [fmCardsWithIndex, thmCardsWithIndex]);
+  }, [fmCardsWithIndex, thmCardsWithIndex, genCardsWithIndex]);
 
   const activeTabCards = useMemo<FormulaCardRecord[]>(() => {
-    const base = persisted.tab === 'fm' ? fmCardsWithIndex : thmCardsWithIndex;
+    // GEN is excluded from overall formula/theorem counts unless GEN is explicitly selected
+    const base = isGenSelected
+      ? genCardsWithIndex
+      : persisted.tab === 'fm'
+      ? fmCardsWithIndex
+      : persisted.tab === 'thm'
+      ? thmCardsWithIndex
+      : [...fmCardsWithIndex, ...thmCardsWithIndex];
     return base.map(({ card }) => ({
       ...card,
       isLearned: Boolean(persisted.learned[card.id]),
       isStarred: Boolean(persisted.starred[card.id]),
     }));
   }, [
+    isGenSelected,
     persisted.tab,
     fmCardsWithIndex,
     thmCardsWithIndex,
+    genCardsWithIndex,
     persisted.learned,
     persisted.starred,
   ]);
@@ -660,7 +1032,7 @@ export default function App() {
         course: persisted.course,
         status: persisted.status,
         query: deferredQuery,
-        thmFilter: persisted.tab === 'thm' ? thmFilter : 'all',
+        thmFilter: persisted.tab === 'thm' && !isGenSelected ? thmFilter : 'all',
       }),
     [
       activeTabCards,
@@ -668,17 +1040,65 @@ export default function App() {
       persisted.status,
       deferredQuery,
       persisted.tab,
+      isGenSelected,
       thmFilter,
     ]
   );
 
-  // Mastery progress calculation across active course scope
+  const genMatchedCardsCount = useMemo(() => {
+    if (
+      isGenSelected ||
+      persisted.course !== 'ALL' ||
+      (deferredTokens.length === 0 && persisted.status !== 'starred')
+    ) {
+      return 0;
+    }
+    let count = 0;
+    for (const { card, searchIndex } of genCardsWithIndex) {
+      const isStarred = Boolean(persisted.starred[card.id]);
+      const statusMatch =
+        persisted.status === 'all'
+          ? true
+          : persisted.status === 'starred'
+          ? isStarred
+          : false;
+      if (
+        statusMatch &&
+        (deferredTokens.length === 0 ||
+          matchesSearchTokens(searchIndex, deferredTokens, card.title))
+      ) {
+        count++;
+      }
+    }
+    return count;
+  }, [
+    isGenSelected,
+    persisted.course,
+    persisted.status,
+    persisted.starred,
+    deferredTokens,
+    genCardsWithIndex,
+  ]);
+
+  // Debounced search history recording (1200ms) when query >= 2 chars and matches > 0 cards
+  useEffect(() => {
+    const trimmed = searchInput.trim();
+    if (trimmed.length < 2 || (filterSummary.visibleCards === 0 && genMatchedCardsCount === 0)) return;
+    const timer = window.setTimeout(() => {
+      recordSearchHistory(trimmed);
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [searchInput, filterSummary.visibleCards, genMatchedCardsCount, recordSearchHistory]);
+
+  // Mastery progress calculation across active course scope (GEN excluded from total mastery)
   const masteryStats = useMemo(() => {
-    const allCards = [...fmCardsWithIndex, ...thmCardsWithIndex].map((x) => x.card);
+    const allCourseCards = [...fmCardsWithIndex, ...thmCardsWithIndex].map(
+      (x) => x.card
+    );
     const inScope =
-      persisted.course === 'ALL'
-        ? allCards
-        : allCards.filter((c) => c.course === persisted.course);
+      persisted.course === 'ALL' || persisted.course === 'GEN'
+        ? allCourseCards
+        : allCourseCards.filter((c) => c.course === persisted.course);
     const totalCount = inScope.length;
     let learnedCount = 0;
     for (const c of inScope) {
@@ -686,15 +1106,31 @@ export default function App() {
     }
     const pct = totalCount > 0 ? Math.round((learnedCount / totalCount) * 100) : 0;
     return { learnedCount, totalCount, pct };
-  }, [fmCardsWithIndex, thmCardsWithIndex, persisted.course, persisted.learned]);
+  }, [
+    fmCardsWithIndex,
+    thmCardsWithIndex,
+    persisted.course,
+    persisted.learned,
+  ]);
 
   const handleTabChange = useCallback((tab: TabMode) => {
-    setPersisted((prev) => ({ ...prev, tab }));
+    setPersisted((prev) => ({
+      ...prev,
+      tab,
+      course: prev.course === 'GEN' && tab !== 'fm' ? 'ALL' : prev.course,
+    }));
     setSelectedTopicId('');
   }, []);
 
   const handleCourseChange = useCallback((course: CourseCode) => {
     setPersisted((prev) => ({ ...prev, course }));
+  }, []);
+
+  const handleToggleCourseBar = useCallback(() => {
+    setPersisted((prev) => ({
+      ...prev,
+      courseBarCollapsed: !prev.courseBarCollapsed,
+    }));
   }, []);
 
   const handleStatusChange = useCallback((status: StatusFilter) => {
@@ -737,11 +1173,13 @@ export default function App() {
     setSearchInput('');
     setSelectedTopicId('');
     setToolsOpen(false);
+    setTermMenuOpen(false);
     setModalOpen(false);
+    exitPdfFullscreen();
     setHideDetails(false);
     setOpenTopics(() => {
       const collapsed: Record<string, boolean> = {};
-      for (const sec of [...fmSections, ...thmSections]) {
+      for (const sec of [...fmSections, ...thmSections, ...genSections]) {
         collapsed[sec.id] = false;
       }
       return collapsed;
@@ -755,7 +1193,7 @@ export default function App() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
     showToast('RESET TO FORMULAS // ALL RETRACTED');
-  }, [fmSections, thmSections, showToast]);
+  }, [fmSections, thmSections, genSections, exitPdfFullscreen, showToast]);
 
   const handleToggleStar = useCallback((id: string) => {
     setPersisted((prev) => {
@@ -828,16 +1266,24 @@ export default function App() {
       showToast('NO VISIBLE CARDS IN CURRENT FILTER');
       return;
     }
-    const chosen = pool[Math.floor(Math.random() * pool.length)];
+    const candidates =
+      pool.length > 1 && activeFlashcard
+        ? pool.filter((c) => c.id !== activeFlashcard.id)
+        : pool;
+    const chosen = candidates[Math.floor(Math.random() * candidates.length)];
     setActiveFlashcard(chosen);
     setModalMode('flashcard');
     setToolsOpen(false);
     setModalOpen(true);
-  }, [filterSummary.topics, activeTabCards, showToast]);
+  }, [filterSummary.topics, activeTabCards, activeFlashcard, showToast]);
 
   const handleExpandCollapseAll = useCallback(
     (expand: boolean) => {
-      const targetSections = persisted.tab === 'fm' ? fmSections : thmSections;
+      const targetSections = isGenSelected
+        ? genSections
+        : persisted.tab === 'fm'
+        ? [...fmSections, ...genSections]
+        : [...thmSections, ...genSections];
       setOpenTopics((prev) => {
         const next = { ...prev };
         for (const sec of targetSections) {
@@ -848,7 +1294,7 @@ export default function App() {
       setToolsOpen(false);
       showToast(expand ? 'ALL TOPICS EXPANDED' : 'ALL TOPICS COLLAPSED');
     },
-    [persisted.tab, fmSections, thmSections, showToast]
+    [isGenSelected, persisted.tab, fmSections, thmSections, genSections, showToast]
   );
 
   const handleResetProgress = useCallback(() => {
@@ -879,13 +1325,20 @@ export default function App() {
   }, [importJsonText, showToast]);
 
   const hasQuery = searchInput.trim().length > 0;
-  const isZeroMatch = filterSummary.visibleCards === 0;
+  const isZeroMatch =
+    (persisted.tab !== 'prac' || isGenSelected) &&
+    filterSummary.visibleCards === 0 &&
+    genMatchedCardsCount === 0;
 
   // Automatically mark matching sections open in openTopics when deferred search query is active
   useEffect(() => {
     if (deferredTokens.length === 0) return;
-    const activeSections = persisted.tab === 'fm' ? fmSections : thmSections;
-    const isThmTab = persisted.tab === 'thm';
+    const activeSections = isGenSelected
+      ? genSections
+      : persisted.tab === 'fm'
+      ? [...fmSections, ...genSections]
+      : [...thmSections, ...genSections];
+    const isThmTab = persisted.tab === 'thm' && !isGenSelected;
     setOpenTopics((prev) => {
       let changed = false;
       const next = { ...prev };
@@ -902,11 +1355,18 @@ export default function App() {
               : persisted.status === 'starred'
               ? isStarred
               : !isLearned;
-          const thmMatch = isThmTab
-            ? matchesTheoremCategoryFilter(card.badge, thmFilter)
-            : true;
+          const thmMatch =
+            isThmTab && section.course !== 'GEN'
+              ? matchesTheoremCategoryFilter(card.badge, thmFilter)
+              : isThmTab && thmFilter !== 'all'
+              ? matchesTheoremCategoryFilter(card.badge, thmFilter)
+              : true;
           const sIdx = searchIndexById.get(card.id) || '';
-          return statusMatch && thmMatch && matchesSearchTokens(sIdx, deferredTokens);
+          return (
+            statusMatch &&
+            thmMatch &&
+            matchesSearchTokens(sIdx, deferredTokens, card.title)
+          );
         });
         if (hasMatch && !next[section.id]) {
           next[section.id] = true;
@@ -917,6 +1377,7 @@ export default function App() {
     });
   }, [
     deferredTokens,
+    isGenSelected,
     persisted.tab,
     persisted.course,
     persisted.status,
@@ -925,18 +1386,27 @@ export default function App() {
     thmFilter,
     fmSections,
     thmSections,
+    genSections,
     searchIndexById,
   ]);
 
   const renderSectionAccordion = useCallback(
-    (section: TopicSectionRecord, isThmTab: boolean, isTabActive: boolean) => {
+    (
+      section: TopicSectionRecord,
+      sectionOrder: number,
+      isThmTab: boolean,
+      isTabActive: boolean,
+      keyPrefix = ''
+    ) => {
       const courseMatch =
         persisted.course === 'ALL' || section.course === persisted.course;
+      const hasActiveSearch = deferredTokens.length > 0;
       let learnedInTopic = 0;
       let visibleInTopic = 0;
+      let maxSectionScore = 0;
 
       const cardVisibility = isTabActive
-        ? section.cards.map((card) => {
+        ? section.cards.map((card, cardOrder) => {
             const isLearned = Boolean(persisted.learned[card.id]);
             const isStarred = Boolean(persisted.starred[card.id]);
             if (isLearned) learnedInTopic++;
@@ -946,22 +1416,40 @@ export default function App() {
                 ? true
                 : persisted.status === 'starred'
                 ? isStarred
-                : !isLearned;
-            const thmMatch = isThmTab
-              ? matchesTheoremCategoryFilter(card.badge, thmFilter)
-              : true;
+                : section.course !== 'GEN' && !isLearned;
+            const thmMatch =
+              isThmTab && (section.course !== 'GEN' || thmFilter !== 'all')
+                ? matchesTheoremCategoryFilter(card.badge, thmFilter)
+                : true;
             const sIdx = searchIndexById.get(card.id) || '';
-            const queryMatch = matchesSearchTokens(sIdx, deferredTokens);
+            const score = hasActiveSearch
+              ? scoreFormulaCardSearch(card, deferredTokens, deferredQuery, sIdx)
+              : matchesSearchTokens(sIdx, deferredTokens, card.title)
+              ? 1
+              : 0;
+            const queryMatch = score > 0;
             const isVisible = courseMatch && statusMatch && thmMatch && queryMatch;
-            if (isVisible) visibleInTopic++;
-            return { card, isLearned, isStarred, isVisible };
+            if (isVisible) {
+              visibleInTopic++;
+              if (score > maxSectionScore) {
+                maxSectionScore = score;
+              }
+            }
+            return { card, isLearned, isStarred, isVisible, score, cardOrder };
           })
-        : section.cards.map((card) => {
+        : section.cards.map((card, cardOrder) => {
             const isLearned = Boolean(persisted.learned[card.id]);
             const isStarred = Boolean(persisted.starred[card.id]);
             if (isLearned) learnedInTopic++;
-            return { card, isLearned, isStarred, isVisible: true };
+            return { card, isLearned, isStarred, isVisible: true, score: 1, cardOrder };
           });
+
+      if (isTabActive && hasActiveSearch && visibleInTopic > 1) {
+        cardVisibility.sort((a, b) => {
+          if (a.isVisible !== b.isVisible) return a.isVisible ? -1 : 1;
+          return b.score - a.score || a.cardOrder - b.cardOrder;
+        });
+      }
 
       if (!isTabActive) {
         visibleInTopic = section.cards.length;
@@ -970,11 +1458,12 @@ export default function App() {
       const sectionHidden = visibleInTopic === 0;
       const isOpen = Boolean(openTopics[section.id]);
       const isIndexSelected = selectedTopicId === section.id;
+      const domId = isTabActive ? section.id : `${keyPrefix}inactive-${section.id}`;
 
-      return (
+      const element = (
         <details
-          key={section.id}
-          id={section.id}
+          key={`${keyPrefix}${section.id}`}
+          id={domId}
           data-c={section.course}
           className={`fmt${isIndexSelected ? ' index-selected' : ''}${sectionHidden ? ' hidden' : ''}`}
           open={isOpen}
@@ -996,15 +1485,17 @@ export default function App() {
                   {section.freqBadge}
                 </span>
               ) : null}
-              <span className="fmcnt">
-                {learnedInTopic}/{section.cards.length} learned
-              </span>
+              {section.course !== 'GEN' ? (
+                <span className="fmcnt">
+                  {learnedInTopic}/{section.cards.length} learned
+                </span>
+              ) : null}
             </span>
           </summary>
           <div className="fmgrid">
             {cardVisibility.map(({ card, isLearned, isStarred, isVisible }) => (
               <FormulaCardView
-                key={card.id}
+                key={`${keyPrefix}${card.id}`}
                 card={card}
                 isLearned={isLearned}
                 isStarred={isStarred}
@@ -1018,6 +1509,13 @@ export default function App() {
           </div>
         </details>
       );
+
+      return {
+        element,
+        sectionHidden,
+        maxSectionScore,
+        sectionOrder,
+      };
     },
     [
       persisted.course,
@@ -1028,6 +1526,7 @@ export default function App() {
       thmFilter,
       searchIndexById,
       deferredTokens,
+      deferredQuery,
       openTopics,
       selectedTopicId,
       handleToggleTopic,
@@ -1037,24 +1536,394 @@ export default function App() {
     ]
   );
 
-  const renderedFmSections = useMemo(
-    () =>
-      fmSections.map((section) =>
-        renderSectionAccordion(section, false, persisted.tab === 'fm')
-      ),
-    [fmSections, renderSectionAccordion, persisted.tab]
+  // Task 1.3: Append genSections to the bottom of both Formulas view (#fmroot) and Theorems view (#thmroot)
+  // when persisted.course === 'ALL', and show genSections when isGenSelected is true regardless of active tab.
+  const renderedFmSections = useMemo(() => {
+    const isTabActive = persisted.tab === 'fm' || isGenSelected;
+    const combinedSections = [...fmSections, ...genSections];
+    const items = combinedSections.map((section, idx) =>
+      renderSectionAccordion(section, idx, false, isTabActive, 'fm-')
+    );
+    if (isTabActive && deferredTokens.length > 0) {
+      items.sort((a, b) => {
+        if (a.sectionHidden !== b.sectionHidden) return a.sectionHidden ? 1 : -1;
+        return b.maxSectionScore - a.maxSectionScore || a.sectionOrder - b.sectionOrder;
+      });
+    }
+    return items.map((item) => item.element);
+  }, [
+    fmSections,
+    genSections,
+    renderSectionAccordion,
+    persisted.tab,
+    isGenSelected,
+    deferredTokens,
+  ]);
+
+  const renderedThmSections = useMemo(() => {
+    const isTabActive = persisted.tab === 'thm' && !isGenSelected;
+    const combinedSections =
+      persisted.course === 'ALL' ? [...thmSections, ...genSections] : thmSections;
+    const items = combinedSections.map((section, idx) =>
+      renderSectionAccordion(section, idx, true, isTabActive, 'thm-')
+    );
+    if (isTabActive && deferredTokens.length > 0) {
+      items.sort((a, b) => {
+        if (a.sectionHidden !== b.sectionHidden) return a.sectionHidden ? 1 : -1;
+        return b.maxSectionScore - a.maxSectionScore || a.sectionOrder - b.sectionOrder;
+      });
+    }
+    return items.map((item) => item.element);
+  }, [
+    thmSections,
+    genSections,
+    renderSectionAccordion,
+    persisted.tab,
+    persisted.course,
+    isGenSelected,
+    deferredTokens,
+  ]);
+
+  const hudTokens = useMemo(
+    () => tokenizeSearchQuery(hudQuery),
+    [hudQuery]
   );
 
-  const renderedThmSections = useMemo(
-    () =>
-      thmSections.map((section) =>
-        renderSectionAccordion(section, true, persisted.tab === 'thm')
-      ),
-    [thmSections, renderSectionAccordion, persisted.tab]
+  const topicTitleById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const sec of allSections) {
+      map.set(sec.id, sec.title);
+    }
+    return map;
+  }, [allSections]);
+
+  const hudCourseSections = useMemo(() => {
+    const targetCourse = activePracticeModule?.course || 'M159';
+    const base =
+      hudScope === 'FM'
+        ? [...fmSections, ...genSections]
+        : hudScope === 'THM'
+        ? thmSections
+        : allSections;
+    if (hudCourseScope === 'ALL') {
+      return base;
+    }
+    const courseFiltered = base.filter((sec) => sec.course === targetCourse);
+    // If the active practice module is Vector Calculus (m159-vector), order Vector Calculus topics first while keeping all M159 topics present
+    if (activePracticeModule?.id === 'm159-vector') {
+      const vecIds = new Set([
+        'fm-m159-vec',
+        'fm-m159-curves',
+        'fm-m159-ops',
+        'fm-m159-int',
+        'fm-m159-thm',
+        't-m1593',
+      ]);
+      const vecSecs = courseFiltered.filter((s) => vecIds.has(s.id));
+      const otherSecs = courseFiltered.filter((s) => !vecIds.has(s.id));
+      return [...vecSecs, ...otherSecs];
+    }
+    return courseFiltered;
+  }, [activePracticeModule, hudScope, hudCourseScope, fmSections, thmSections, genSections, allSections]);
+
+  const hudTotalCourseCardsCount = useMemo(
+    () => hudCourseSections.reduce((acc, sec) => acc + sec.cards.length, 0),
+    [hudCourseSections]
   );
+
+  const peekedSection = useMemo(
+    () => (peekTopicId ? allSections.find((sec) => sec.id === peekTopicId) || null : null),
+    [peekTopicId, allSections]
+  );
+
+  // Fullscreen Practice HUD in-place search & topic peek across ALL Formulas, Theorems, and GEN (no artificial slice truncation)
+  const hudDisplayedCards = useMemo(() => {
+    const pool =
+      hudScope === 'FM'
+        ? [...fmCardsWithIndex, ...genCardsWithIndex]
+        : hudScope === 'THM'
+        ? thmCardsWithIndex
+        : [...fmCardsWithIndex, ...thmCardsWithIndex, ...genCardsWithIndex];
+
+    // When a search query is entered, always search across all cards in the pool
+    if (hudTokens.length > 0) {
+      const targetCourse = activePracticeModule?.course || 'M159';
+      const scoredMatches: Array<{
+        card: FormulaCardRecord;
+        score: number;
+        inTargetCourse: number;
+        order: number;
+      }> = [];
+      for (let i = 0; i < pool.length; i++) {
+        const { card, searchIndex } = pool[i];
+        const score = scoreFormulaCardSearch(card, hudTokens, hudQuery, searchIndex);
+        if (score > 0) {
+          scoredMatches.push({
+            card,
+            score,
+            inTargetCourse: card.course === targetCourse ? 1 : 0,
+            order: i,
+          });
+        }
+      }
+      scoredMatches.sort(
+        (a, b) =>
+          b.score - a.score ||
+          b.inTargetCourse - a.inTargetCourse ||
+          a.order - b.order
+      );
+      return scoredMatches.map((item) => item.card);
+    }
+
+    if (peekedSection) {
+      return peekedSection.cards;
+    }
+
+    return hudCourseSections.flatMap((sec) => sec.cards);
+  }, [
+    peekedSection,
+    hudScope,
+    hudCourseSections,
+    fmCardsWithIndex,
+    thmCardsWithIndex,
+    genCardsWithIndex,
+    hudTokens,
+    hudQuery,
+    activePracticeModule,
+  ]);
+
+  // Reset windowed HUD render batch and scroll position when scope, topic, or search query changes
+  useEffect(() => {
+    setHudRenderLimit(12);
+    if (fsHudResultsRef.current) {
+      fsHudResultsRef.current.scrollTop = 0;
+    }
+  }, [hudQuery, hudScope, hudCourseScope, peekTopicId, activePracticeModule]);
+
+  const hudVisibleCards = useMemo(
+    () => hudDisplayedCards.slice(0, hudRenderLimit),
+    [hudDisplayedCards, hudRenderLimit]
+  );
+
+  const bringPinnedCardToFront = useCallback((cardId: string) => {
+    topPinZIndexRef.current += 1;
+    const nextZ = topPinZIndexRef.current;
+    setPinnedLayouts((prev) => {
+      const existing = prev[cardId];
+      if (!existing) return prev;
+      return {
+        ...prev,
+        [cardId]: {
+          ...existing,
+          zIndex: nextZ,
+        },
+      };
+    });
+  }, []);
+
+  const handlePinCard = useCallback(
+    (card: FormulaCardRecord) => {
+      setPinnedCards((prev) => {
+        const without = prev.filter((c) => c.id !== card.id);
+        const nextList = [card, ...without].slice(0, 4);
+        setPinnedLayouts((prevLayouts) => {
+          if (prevLayouts[card.id]) {
+            topPinZIndexRef.current += 1;
+            return {
+              ...prevLayouts,
+              [card.id]: {
+                ...prevLayouts[card.id],
+                zIndex: topPinZIndexRef.current,
+              },
+            };
+          }
+          const idx = Object.keys(prevLayouts).length;
+          topPinZIndexRef.current += 1;
+          const initial = createInitialPinnedLayout(
+            idx,
+            window.innerWidth,
+            window.innerHeight
+          );
+          return {
+            ...prevLayouts,
+            [card.id]: {
+              ...initial,
+              zIndex: topPinZIndexRef.current,
+            },
+          };
+        });
+        return nextList;
+      });
+      setMinimizedPinnedIds((prev) => {
+        const next = { ...prev };
+        delete next[card.id];
+        return next;
+      });
+      retractHud();
+    },
+    [retractHud]
+  );
+
+  const handleUnpinCard = useCallback((cardId: string) => {
+    setPinnedCards((prev) => prev.filter((c) => c.id !== cardId));
+    setMinimizedPinnedIds((prev) => {
+      const next = { ...prev };
+      delete next[cardId];
+      return next;
+    });
+    setPinnedLayouts((prev) => {
+      const next = { ...prev };
+      delete next[cardId];
+      return next;
+    });
+  }, []);
+
+  const handleToggleMinimizePin = useCallback((cardId: string) => {
+    setPinnedLayouts((prev) => {
+      const cur =
+        prev[cardId] ??
+        createInitialPinnedLayout(0, window.innerWidth, window.innerHeight);
+      const currentMode = getPinnedCardSizeMode(
+        cur.width,
+        cur.height,
+        Boolean(minimizedPinnedIds[cardId])
+      );
+      const nextIsFormulaOnly = currentMode !== 'formula-only';
+      const targetW = nextIsFormulaOnly ? PINNED_MIN_WIDTH : PINNED_DEFAULT_WIDTH;
+      const targetH = nextIsFormulaOnly ? PINNED_MIN_HEIGHT : PINNED_DEFAULT_HEIGHT;
+      const clampedPos = clampPinnedCardPosition(
+        cur.x,
+        cur.y,
+        targetW,
+        targetH,
+        window.innerWidth,
+        window.innerHeight
+      );
+      topPinZIndexRef.current += 1;
+      setMinimizedPinnedIds((prevMin) => ({
+        ...prevMin,
+        [cardId]: nextIsFormulaOnly,
+      }));
+      return {
+        ...prev,
+        [cardId]: {
+          x: clampedPos.x,
+          y: clampedPos.y,
+          width: targetW,
+          height: targetH,
+          zIndex: topPinZIndexRef.current,
+        },
+      };
+    });
+  }, [minimizedPinnedIds]);
+
+  const startDragPin = useCallback(
+    (e: React.MouseEvent, cardId: string, layout: PinnedCardLayout) => {
+      if ((e.target as HTMLElement).closest('button')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      topPinZIndexRef.current += 1;
+      const nextLayout = { ...layout, zIndex: topPinZIndexRef.current };
+      setPinnedLayouts((prev) => ({ ...prev, [cardId]: nextLayout }));
+      setPinInteraction({
+        type: 'drag',
+        cardId,
+        startX: e.clientX,
+        startY: e.clientY,
+        startLayout: nextLayout,
+      });
+    },
+    []
+  );
+
+  const startResizePin = useCallback(
+    (
+      e: React.MouseEvent,
+      cardId: string,
+      corner: ResizeCorner,
+      layout: PinnedCardLayout
+    ) => {
+      e.preventDefault();
+      e.stopPropagation();
+      topPinZIndexRef.current += 1;
+      const nextLayout = { ...layout, zIndex: topPinZIndexRef.current };
+      setPinnedLayouts((prev) => ({ ...prev, [cardId]: nextLayout }));
+      setMinimizedPinnedIds((prev) => {
+        if (!prev[cardId]) return prev;
+        const next = { ...prev };
+        delete next[cardId];
+        return next;
+      });
+      setPinInteraction({
+        type: 'resize',
+        cardId,
+        corner,
+        startX: e.clientX,
+        startY: e.clientY,
+        startLayout: nextLayout,
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!pinInteraction) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      const dx = e.clientX - pinInteraction.startX;
+      const dy = e.clientY - pinInteraction.startY;
+      setPinnedLayouts((prev) => {
+        const cur = prev[pinInteraction.cardId] ?? pinInteraction.startLayout;
+        if (pinInteraction.type === 'drag') {
+          const clamped = clampPinnedCardPosition(
+            pinInteraction.startLayout.x + dx,
+            pinInteraction.startLayout.y + dy,
+            cur.width,
+            cur.height,
+            window.innerWidth,
+            window.innerHeight
+          );
+          return {
+            ...prev,
+            [pinInteraction.cardId]: {
+              ...cur,
+              x: clamped.x,
+              y: clamped.y,
+            },
+          };
+        }
+        const resized = computeCornerResizedLayout(
+          pinInteraction.startLayout,
+          pinInteraction.corner ?? 'se',
+          dx,
+          dy,
+          window.innerWidth,
+          window.innerHeight
+        );
+        return {
+          ...prev,
+          [pinInteraction.cardId]: resized,
+        };
+      });
+    };
+    const handleMouseUp = () => {
+      setPinInteraction(null);
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [pinInteraction]);
+
+  const showSearchDropdown = searchFocused && searchInput.trim() === '';
+
+  const fsHudOpen =
+    isPdfFullscreen &&
+    (fsHudPointerTop || fsHudHovered || fsSearchFocused || isResizingHud);
 
   return (
-    <WorkspaceErrorBoundary fallbackLabel="BUET L-1/T-1 EEE Sheet">
+    <WorkspaceErrorBoundary fallbackLabel={CURRENT_TERM_CONFIG.brandTitle}>
       <header className="top-chrome" ref={topChromeRef}>
         <div className="hd">
           <div className="hd-left">
@@ -1069,24 +1938,103 @@ export default function App() {
               [INDEX]
             </button>
             <div className="brand-wrap">
-              <div className="ntype-emblem" aria-hidden="true">
-                {':: BUET.EEE ::\nL-1 // T-1 SYS'}
+              <div className="term-switcher-wrap" ref={termSwitcherWrapRef}>
+                <button
+                  type="button"
+                  id="termSwitcherBtn"
+                  className={`ntype-emblem${termMenuOpen ? ' active' : ''}`}
+                  aria-label="Open BUET EEE Term Archive Switcher"
+                  aria-expanded={termMenuOpen}
+                  aria-haspopup="menu"
+                  title="Switch BUET EEE Term Archive"
+                  onClick={() => setTermMenuOpen((open) => !open)}
+                >
+                  {CURRENT_TERM_CONFIG.emblemText}
+                </button>
+                {termMenuOpen ? (
+                  <div
+                    className="term-archive-dropdown"
+                    id="termArchiveDropdown"
+                    role="menu"
+                    aria-label="BUET EEE Term Archive"
+                  >
+                    <div className="term-archive-header">
+                      <span className="sh-label">BUET EEE TERM ARCHIVE</span>
+                      <span className="ntype-badge" style={{ color: 'var(--accent)', fontSize: '10px' }}>
+                        {CURRENT_TERM_CONFIG.shortCode}
+                      </span>
+                    </div>
+                    {Object.values(TERM_REGISTRY).map((termItem) => {
+                      const isCurrentTerm = termItem.termId === CURRENT_TERM_CONFIG.termId;
+                      const hasDeployedUrl = Boolean(termItem.deployedUrl);
+                      const statusLabel = isCurrentTerm
+                        ? '[ACTIVE]'
+                        : hasDeployedUrl
+                        ? '[OPEN ->]'
+                        : '[SOON]';
+                      const statusCls = isCurrentTerm
+                        ? 'active'
+                        : hasDeployedUrl
+                        ? 'open'
+                        : 'soon';
+
+                      return (
+                        <button
+                          key={termItem.termId}
+                          type="button"
+                          role="menuitem"
+                          data-term-id={termItem.termId}
+                          className={`term-archive-item${isCurrentTerm ? ' active' : ''}`}
+                          onClick={() => {
+                            setTermMenuOpen(false);
+                            if (isCurrentTerm) {
+                              showToast(`${termItem.shortCode} // ACTIVE WORKSPACE`);
+                            } else if (termItem.deployedUrl) {
+                              window.location.href = termItem.deployedUrl;
+                            } else {
+                              showToast(
+                                `${termItem.shortCode} CONFIG PRE-LOADED IN termConfig.ts`
+                              );
+                            }
+                          }}
+                        >
+                          <div className="term-archive-meta">
+                            <span className="term-archive-code">{termItem.shortCode}</span>
+                            <span className="term-archive-desc">{termItem.archiveLabel}</span>
+                          </div>
+                          <span className={`term-status-badge ${statusCls}`}>
+                            {statusLabel}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </div>
-              <pre
-                className="buet-ascii-art"
-                id="buetAsciiArt"
-                aria-hidden="true"
-                title="BUET Seal ASCII Art"
+              <a
+                href="https://www.buet.ac.bd/web/#/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="buet-ascii-link"
+                id="buetAsciiLink"
+                aria-label="Official BUET Website (buet.ac.bd)"
+                title="Official BUET Website — https://www.buet.ac.bd/web/#/"
               >
-                {BUET_LOGO_ASCII_ART}
-              </pre>
+                <pre
+                  className="buet-ascii-art"
+                  id="buetAsciiArt"
+                  aria-hidden="true"
+                >
+                  {BUET_LOGO_ASCII_ART}
+                </pre>
+              </a>
               <div
                 className="brand-titles"
                 id="brandResetBtn"
                 role="button"
                 tabIndex={0}
                 title="Return to Formulas (All Courses) and retract all sections"
-                aria-label="BUET L-1/T-1 EEE — Formula & Theorem Sheet: Return to Formulas for all courses and retract all sections"
+                aria-label={`${CURRENT_TERM_CONFIG.brandTitle}: Return to Formulas for all courses and retract all sections`}
                 onClick={handleBrandReset}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -1095,8 +2043,8 @@ export default function App() {
                   }
                 }}
               >
-                <h1 className="brand-title">BUET L-1/T-1 EEE — Formula &amp; Theorem Sheet</h1>
-                <p className="brand-sub">EEE 101 · MATH 157 · MATH 159 · PHY 121/165 · CSE 109</p>
+                <h1 className="brand-title">{CURRENT_TERM_CONFIG.brandTitle}</h1>
+                <p className="brand-sub">{CURRENT_TERM_CONFIG.brandSubtitle}</p>
               </div>
             </div>
           </div>
@@ -1128,6 +2076,20 @@ export default function App() {
                 <span>Theorems &amp; Definitions</span>
                 <span className="tn" id="cntThm">
                   {thmCardsWithIndex.length}
+                </span>
+              </button>
+              <button
+                type="button"
+                className={`tab${persisted.tab === 'prac' ? ' active' : ''}`}
+                id="tabPrac"
+                role="tab"
+                aria-selected={persisted.tab === 'prac'}
+                aria-label="View Course Practice Modules and Fullscreen PDF Reader"
+                onClick={() => handleTabChange('prac')}
+              >
+                <span>Practice</span>
+                <span className="tn" id="cntPrac">
+                  {TOTAL_PRACTICE_MODULES}
                 </span>
               </button>
             </div>
@@ -1172,11 +2134,33 @@ export default function App() {
       </header>
 
       <section id="fmbar" ref={fmbarRef} aria-label="Course Selector and Study Controls">
-        <div className="fmbar-inner">
+        <div className={`fmbar-inner${persisted.courseBarCollapsed ? ' merged-single-row' : ''}`}>
           <div className="course-selector-row course-bar">
-            <span className="course-selector-label">COURSE SELECT</span>
-            <div id="fmchips" className="chip-group" role="toolbar" aria-label="Filter by Course">
-              {COURSE_OPTIONS.map((c) => (
+            <button
+              type="button"
+              id="courseBarToggleBtn"
+              className={`course-selector-toggle${persisted.courseBarCollapsed ? ' collapsed' : ''}`}
+              aria-expanded={!persisted.courseBarCollapsed}
+              aria-controls="fmchips"
+              title={
+                persisted.courseBarCollapsed
+                  ? 'Expand Course Selector Bar'
+                  : 'Collapse Course Selector into Single Bar'
+              }
+              onClick={handleToggleCourseBar}
+            >
+              {persisted.courseBarCollapsed
+                ? `COURSE // ${activeCourseBadge} [+]`
+                : 'COURSE SELECT [-]'}
+            </button>
+            <div
+              id="fmchips"
+              className="chip-group"
+              role="toolbar"
+              aria-label="Filter by Course"
+              hidden={Boolean(persisted.courseBarCollapsed)}
+            >
+              {courseOptions.map((c) => (
                 <button
                   key={c.code}
                   type="button"
@@ -1207,9 +2191,17 @@ export default function App() {
                 type="search"
                 id="fmq"
                 value={searchInput}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search formulas, theorems, symbols, C/C++ syntax, or exam use..."
-                aria-label="Search formulas and theorems (Press / or Ctrl+K to focus)"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && searchInput.trim().length >= 2) {
+                    recordSearchHistory(searchInput);
+                    setSearchFocused(false);
+                  }
+                }}
+                placeholder="Search formulas, theories or definitions"
+                aria-label="Search formulas, theories or definitions (Press / or Ctrl+K to focus)"
                 autoComplete="off"
                 spellCheck={false}
               />
@@ -1223,8 +2215,85 @@ export default function App() {
                 [CLR]
               </button>
               <span className="fmstat" role="status" aria-live="polite">
-                {filterSummary.visibleCards} / {filterSummary.totalCardsInScope}
+                {(deferredTokens.length > 0 || persisted.status === 'starred') &&
+                persisted.course === 'ALL'
+                  ? `${filterSummary.visibleCards + genMatchedCardsCount} / ${
+                      filterSummary.totalCardsInScope +
+                      (genMatchedCardsCount > 0 ? genCardsWithIndex.length : 0)
+                    }`
+                  : `${filterSummary.visibleCards} / ${filterSummary.totalCardsInScope}`}
               </span>
+
+              {showSearchDropdown ? (
+                <div
+                  className="search-history-dropdown"
+                  role="listbox"
+                  aria-label="Recent searches and quick shortcuts"
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  {(persisted.searchHistory?.length ?? 0) > 0 ? (
+                    <>
+                      <div className="sh-header">
+                        <span className="sh-label">RECENT SEARCHES</span>
+                        <button
+                          type="button"
+                          className="sh-clear-all"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={handleClearAllHistory}
+                        >
+                          [CLEAR ALL]
+                        </button>
+                      </div>
+                      <div className="sh-list">
+                        {(persisted.searchHistory || []).map((histItem) => (
+                          <div key={histItem} className="sh-item">
+                            <button
+                              type="button"
+                              className="sh-item-query"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => {
+                                setSearchInput(histItem);
+                                recordSearchHistory(histItem);
+                                setSearchFocused(false);
+                              }}
+                            >
+                              {histItem}
+                            </button>
+                            <button
+                              type="button"
+                              className="sh-item-del"
+                              aria-label={`Remove ${histItem} from search history`}
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => handleDeleteHistoryItem(histItem)}
+                            >
+                              [×]
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : null}
+
+                  <div className="sh-shortcuts">
+                    <span className="sh-label">QUICK SHORTCUTS:</span>
+                    {QUICK_SHORTCUTS.map((sc) => (
+                      <button
+                        key={sc}
+                        type="button"
+                        className="sh-shortcut-pill"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setSearchInput(sc);
+                          recordSearchHistory(sc);
+                          setSearchFocused(false);
+                        }}
+                      >
+                        {sc}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="utility-pods">
@@ -1249,7 +2318,7 @@ export default function App() {
                 id="thmTypeGroup"
                 role="group"
                 aria-label="Filter Theorems and Definitions by category"
-                hidden={persisted.tab !== 'thm'}
+                hidden={persisted.tab !== 'thm' || isGenSelected}
               >
                 <button
                   type="button"
@@ -1410,24 +2479,27 @@ export default function App() {
           className={`sidebar${sidebarOpen ? ' mobile-open' : ''}`}
           id="sidebar"
           aria-label="Topic Navigation"
-          hidden={!sidebarOpen}
         >
-          <div className="sidebar-mobile-hd">
-            <div className="focus-pill">
-              <span className="focus-pill-tag">TOPIC INDEX</span>
-              <span>{persisted.course === 'ALL' ? 'ALL COURSES' : persisted.course}</span>
-            </div>
+          <div className="focus-pill">
+            <span className="focus-pill-tag">ACTIVE SCOPE</span>
+            <strong id="focusPillText">
+              {persisted.course === 'ALL' ? 'ALL COURSES' : activeCourseBadge}
+            </strong>
             <button
               type="button"
-              className="sidebar-close-btn"
+              className="sb-close-btn sidebar-close-btn"
               id="sidebarCloseBtn"
-              aria-label="Close Topic Index"
+              aria-label="Close Topic Index Sidebar"
               onClick={() => setSidebarOpen(false)}
             >
-              [X]
+              [CLOSE]
             </button>
           </div>
-          <nav className="fmnav" id="navF" hidden={persisted.tab !== 'fm'}>
+          <nav
+            className="fmnav"
+            id="navF"
+            hidden={persisted.tab !== 'fm' && !isGenSelected}
+          >
             {navContent.navF.map((group) => {
               const rowHidden =
                 persisted.course !== 'ALL' && group.course !== persisted.course;
@@ -1456,7 +2528,11 @@ export default function App() {
               );
             })}
           </nav>
-          <nav className="fmnav" id="navT" hidden={persisted.tab !== 'thm'}>
+          <nav
+            className="fmnav"
+            id="navT"
+            hidden={persisted.tab !== 'thm' || isGenSelected}
+          >
             {navContent.navT.map((group) => {
               const rowHidden =
                 persisted.course !== 'ALL' && group.course !== persisted.course;
@@ -1479,6 +2555,56 @@ export default function App() {
                       }}
                     >
                       {link.label}
+                    </a>
+                  ))}
+                </div>
+              );
+            })}
+          </nav>
+          <nav
+            className="fmnav"
+            id="navP"
+            aria-label="Practice Modules Index"
+            hidden={persisted.tab !== 'prac' || isGenSelected}
+          >
+            {PRACTICE_CATALOG.map((group) => {
+              const rowHidden =
+                persisted.course !== 'ALL' && group.course !== persisted.course;
+              return (
+                <div
+                  key={group.course}
+                  className={`fmnavrow${rowHidden ? ' hidden' : ''}`}
+                  data-c={group.course}
+                  hidden={rowHidden}
+                >
+                  <b>{group.badge}</b>
+                  {group.modules.map((mod) => (
+                    <a
+                      key={mod.id}
+                      href={`#prac-${mod.id}`}
+                      data-mod-id={mod.id}
+                      className={`fmlink${activePracticeModule?.id === mod.id ? ' active' : ''}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setSelectedPracticeModuleId(mod.id);
+                        if (typeof window !== 'undefined' && window.innerWidth <= 1024) {
+                          setSidebarOpen(false);
+                        }
+                      }}
+                    >
+                      <span>{mod.title}</span>
+                      {mod.pdfUrl ? (
+                        <span
+                          className="ntype-badge"
+                          style={{
+                            marginLeft: '6px',
+                            fontSize: '9.5px',
+                            color: 'var(--success)',
+                          }}
+                        >
+                          [PDF]
+                        </span>
+                      ) : null}
                     </a>
                   ))}
                 </div>
@@ -1509,13 +2635,656 @@ export default function App() {
           ) : null}
 
           <WorkspaceErrorBoundary fallbackLabel="Formula Workspace (#fmroot)">
-            <main id="fmroot" hidden={persisted.tab !== 'fm'}>
+            <main id="fmroot" hidden={persisted.tab !== 'fm' && !isGenSelected}>
               {renderedFmSections}
             </main>
           </WorkspaceErrorBoundary>
           <WorkspaceErrorBoundary fallbackLabel="Theorem Workspace (#thmroot)">
-            <main id="thmroot" hidden={persisted.tab !== 'thm'}>
+            <main id="thmroot" hidden={persisted.tab !== 'thm' || isGenSelected}>
               {renderedThmSections}
+            </main>
+          </WorkspaceErrorBoundary>
+          <WorkspaceErrorBoundary fallbackLabel="Practice Workspace (#pracroot)">
+            <main
+              id="pracroot"
+              className="practice-workspace"
+              hidden={persisted.tab !== 'prac' || isGenSelected}
+            >
+              {persisted.course !== 'ALL' && practiceModules.length > 0 ? (
+                <div
+                  className="practice-module-bar"
+                  id="practiceModuleBar"
+                  role="tablist"
+                  aria-label="Course Practice Modules"
+                >
+                  {practiceModules.map((mod) => {
+                    const isModActive = activePracticeModule?.id === mod.id;
+                    return (
+                      <button
+                        key={mod.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isModActive}
+                        data-mod-id={mod.id}
+                        className={`practice-mod-btn${isModActive ? ' active' : ''}`}
+                        onClick={() => setSelectedPracticeModuleId(mod.id)}
+                      >
+                        <span
+                          className="ntype-badge"
+                          style={{
+                            color: isModActive ? '#ffffff' : 'var(--accent)',
+                            fontSize: '10.5px',
+                          }}
+                        >
+                          {mod.courseBadge}
+                        </span>
+                        <span>{mod.title}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {activePracticeModule ? (
+                <div className="practice-slot-card" id="practiceSlotCard">
+                  <div className="practice-slot-header">
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                        <span className="ntype-badge">{activePracticeModule.courseBadge}</span>
+                        <span className="thty">MODULE: {activePracticeModule.id.toUpperCase()}</span>
+                      </div>
+                      <h2 style={{ margin: '0 0 4px', fontSize: '18px' }}>
+                        {activePracticeModule.title}
+                      </h2>
+                      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '13px' }}>
+                        {activePracticeModule.subtitle}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    ref={fullscreenWrapperRef}
+                    id="practiceViewerShell"
+                    className={`practice-viewer-shell${isPdfFullscreen ? ' is-fullscreen' : ''}`}
+                    onMouseMove={(e) => {
+                      if (isPdfFullscreen && e.clientY <= 22) {
+                        setFsHudPointerTop(true);
+                      }
+                    }}
+                  >
+                    {isPdfFullscreen ? (
+                      <div
+                        className="fs-top-hover-sensor"
+                        id="fsTopHoverSensor"
+                        aria-hidden="true"
+                        onMouseEnter={() => setFsHudPointerTop(true)}
+                      />
+                    ) : null}
+
+                    <div
+                      className={`fs-search-hud${fsHudOpen ? ' open' : ''}${isResizingHud ? ' is-resizing' : ''}`}
+                      id="fsSearchHud"
+                      role="region"
+                      aria-label="Fullscreen Quick-Glance Formula and Theorem Search HUD"
+                      style={
+                        hudHeightPx !== null
+                          ? { height: `${hudHeightPx}px`, maxHeight: `${hudHeightPx}px` }
+                          : undefined
+                      }
+                      onMouseEnter={() => setFsHudHovered(true)}
+                      onMouseMove={() => setFsHudHovered(true)}
+                      onMouseLeave={() => {
+                        if (isResizingHud) return;
+                        setFsHudHovered(false);
+                        if (!fsSearchFocused) {
+                          setFsHudPointerTop(false);
+                        }
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '10px',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span className="ntype-badge" style={{ color: 'var(--accent)' }}>
+                            [:: QUICK-GLANCE HUD ::]
+                          </span>
+                          <div className="chip-group" role="group" aria-label="HUD Search Scope">
+                            {(['ALL', 'FM', 'THM'] as const).map((scMode) => (
+                              <button
+                                key={scMode}
+                                type="button"
+                                className={`chip-btn${hudScope === scMode ? ' active' : ''}`}
+                                data-hud-scope={scMode}
+                                aria-pressed={hudScope === scMode}
+                                onClick={() => setHudScope(scMode)}
+                              >
+                                {scMode === 'ALL'
+                                  ? 'All'
+                                  : scMode === 'FM'
+                                  ? 'Formulas'
+                                  : 'Theorems'}
+                              </button>
+                            ))}
+                          </div>
+                          {peekedSection ? (
+                            <button
+                              type="button"
+                              id="btnBackToHudResults"
+                              className="sb-btn"
+                              style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+                              onClick={() => setPeekTopicId(null)}
+                            >
+                              [&lt;- BACK TO SEARCH RESULTS]
+                            </button>
+                          ) : null}
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          {QUICK_SHORTCUTS.map((sc) => (
+                            <button
+                              key={sc}
+                              type="button"
+                              className="sh-shortcut-pill"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => {
+                                setHudQuery(sc);
+                                setPeekTopicId(null);
+                                recordSearchHistory(sc);
+                              }}
+                            >
+                              {sc}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            className="sb-btn"
+                            onClick={retractHud}
+                          >
+                            [HIDE HUD]
+                          </button>
+                        </div>
+                      </div>
+
+                      <div
+                        className={`search-wrap${hudQuery.trim().length > 0 ? ' has-query' : ''}`}
+                        style={{ flex: '0 0 auto' }}
+                      >
+                        <label htmlFor="fsFmq" className="search-prefix">
+                          [/]
+                        </label>
+                        <input
+                          ref={fsSearchInputRef}
+                          type="search"
+                          id="fsFmq"
+                          value={hudQuery}
+                          onFocus={() => setFsSearchFocused(true)}
+                          onBlur={() => setFsSearchFocused(false)}
+                          onChange={(e) => {
+                            setHudQuery(e.target.value);
+                            if (peekTopicId) {
+                              setPeekTopicId(null);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && hudQuery.trim().length >= 2) {
+                              recordSearchHistory(hudQuery);
+                            }
+                          }}
+                          placeholder="Search formulas, theories or definitions in-place..."
+                          aria-label="Search formulas, theories or definitions in-place"
+                          autoComplete="off"
+                          spellCheck={false}
+                          style={{
+                            width: '100%',
+                            height: '40px',
+                            padding: '0 140px 0 46px',
+                            borderRadius: '10px',
+                            border: '1px solid var(--accent)',
+                            background: 'rgba(8, 8, 12, 0.92)',
+                            color: 'var(--text-primary)',
+                            fontSize: '13.5px',
+                            outline: 'none',
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="search-clear-btn"
+                          hidden={!hudQuery && !peekTopicId}
+                          onClick={() => {
+                            setHudQuery('');
+                            setPeekTopicId(null);
+                          }}
+                        >
+                          [CLR]
+                        </button>
+                        <span className="fmstat">
+                          {hudDisplayedCards.length} SHOWN
+                        </span>
+                      </div>
+
+                      <div className="fs-topic-toolbar">
+                        <button
+                          type="button"
+                          className={`fm-hud-btn${hudCourseScope === 'ALL' ? ' on' : ''}`}
+                          onClick={() => {
+                            setHudCourseScope((prev) => (prev === 'COURSE' ? 'ALL' : 'COURSE'));
+                            setPeekTopicId(null);
+                          }}
+                          title="Switch between current course topics and all courses"
+                        >
+                          {hudCourseScope === 'COURSE'
+                            ? `[SCOPE: ${activePracticeModule.courseBadge} (${hudCourseSections.length} TOPICS)]`
+                            : `[SCOPE: ALL COURSES (${hudCourseSections.length} TOPICS)]`}
+                        </button>
+
+                        <div className="fs-topic-scroll-btns">
+                          <button
+                            type="button"
+                            className="fm-hud-btn"
+                            aria-label="Scroll topic pills left"
+                            onClick={() => {
+                              fsTopicStripRef.current?.scrollBy({ left: -320, behavior: 'smooth' });
+                            }}
+                          >
+                            [&lt;]
+                          </button>
+                          <button
+                            type="button"
+                            className="fm-hud-btn"
+                            aria-label="Scroll topic pills right"
+                            onClick={() => {
+                              fsTopicStripRef.current?.scrollBy({ left: 320, behavior: 'smooth' });
+                            }}
+                          >
+                            [&gt;]
+                          </button>
+                        </div>
+
+                        <div
+                          ref={fsTopicStripRef}
+                          className="fs-topic-pills-strip"
+                          role="toolbar"
+                          aria-label="Course Topic Quick Peek Pills"
+                          onWheel={(e) => {
+                            if (e.deltaY !== 0) {
+                              e.currentTarget.scrollLeft += e.deltaY;
+                            }
+                          }}
+                        >
+                          <button
+                            type="button"
+                            className={`fs-topic-pill${peekTopicId === null ? ' active' : ''}`}
+                            data-peek-topic="ALL"
+                            onClick={() => setPeekTopicId(null)}
+                          >
+                            All Topics ({hudTotalCourseCardsCount})
+                          </button>
+                          {hudCourseSections.map((sec) => (
+                            <button
+                              key={sec.id}
+                              type="button"
+                              className={`fs-topic-pill${peekTopicId === sec.id ? ' active' : ''}`}
+                              data-peek-topic={sec.id}
+                              onClick={() =>
+                                setPeekTopicId((prev) => (prev === sec.id ? null : sec.id))
+                              }
+                            >
+                              {hudCourseScope === 'ALL'
+                                ? `[${sec.course}] ${sec.title} (${sec.cards.length})`
+                                : `${sec.title} (${sec.cards.length})`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div
+                        ref={fsHudResultsRef}
+                        className="fs-hud-results"
+                        onScroll={(e) => {
+                          const el = e.currentTarget;
+                          if (el.scrollTop + el.clientHeight >= el.scrollHeight - 240) {
+                            setHudRenderLimit((prev) =>
+                              prev < hudDisplayedCards.length
+                                ? Math.min(prev + 18, hudDisplayedCards.length)
+                                : prev
+                            );
+                          }
+                        }}
+                      >
+                        <div className="fmgrid">
+                          {hudVisibleCards.map((card) => (
+                            <FormulaCardView
+                              key={`hud-${card.id}`}
+                              card={card}
+                              topicTitle={topicTitleById.get(card.topicId)}
+                              isLearned={Boolean(persisted.learned[card.id])}
+                              isStarred={Boolean(persisted.starred[card.id])}
+                              isHidden={false}
+                              selfTest={Boolean(persisted.selfTest)}
+                              onToggleStar={handleToggleStar}
+                              onToggleLearned={handleToggleLearned}
+                              onCopyLatex={handleCopyLatex}
+                              onPeekTopic={(tId) => setPeekTopicId(tId)}
+                              onPinCard={handlePinCard}
+                              isPinned={pinnedCards.some((p) => p.id === card.id)}
+                            />
+                          ))}
+                        </div>
+                        {hudVisibleCards.length < hudDisplayedCards.length ? (
+                          <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
+                            <button
+                              type="button"
+                              className="fm-hud-btn"
+                              onClick={() =>
+                                setHudRenderLimit((prev) =>
+                                  Math.min(prev + 24, hudDisplayedCards.length)
+                                )
+                              }
+                            >
+                              [LOAD MORE CARDS ({hudVisibleCards.length} / {hudDisplayedCards.length})]
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div
+                        id="fsHudResizeHandle"
+                        className={`fs-hud-resize-handle${isResizingHud ? ' active' : ''}`}
+                        role="separator"
+                        aria-orientation="horizontal"
+                        aria-label="Drag bottom edge to increase or decrease HUD height (double-click to reset)"
+                        title="Drag bottom edge up/down to resize HUD · Double-click to reset height"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIsResizingHud(true);
+                        }}
+                        onDoubleClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setHudHeightPx(null);
+                        }}
+                      >
+                        <span className="fs-hud-resize-grip" aria-hidden="true" />
+                      </div>
+                    </div>
+
+                    {pinnedCards.length > 0 ? (
+                      <aside
+                        className="fs-pinned-dock"
+                        id="fsPinnedDock"
+                        aria-label="Pinned Reference Cards"
+                      >
+                        {pinnedCards.map((pCard, pIdx) => {
+                          const layout =
+                            pinnedLayouts[pCard.id] ??
+                            createInitialPinnedLayout(
+                              pIdx,
+                              typeof window !== 'undefined' ? window.innerWidth : 1440,
+                              typeof window !== 'undefined' ? window.innerHeight : 900
+                            );
+                          const isMin = Boolean(minimizedPinnedIds[pCard.id]);
+                          const sizeMode = getPinnedCardSizeMode(
+                            layout.width,
+                            layout.height,
+                            isMin
+                          );
+                          const isInteractingThis =
+                            pinInteraction?.cardId === pCard.id;
+                          return (
+                            <div
+                              key={`pin-${pCard.id}`}
+                              className={`fs-pinned-card mode-${sizeMode}${isInteractingThis ? ' is-interacting' : ''}`}
+                              data-pinned-id={pCard.id}
+                              data-size-mode={sizeMode}
+                              onMouseDown={() => bringPinnedCardToFront(pCard.id)}
+                              style={{
+                                left: `${layout.x}px`,
+                                top: `${layout.y}px`,
+                                width: `${layout.width}px`,
+                                height: `${layout.height}px`,
+                                zIndex: layout.zIndex,
+                              }}
+                            >
+                              {sizeMode !== 'formula-only' ? (
+                                <div
+                                  className="fs-pinned-header"
+                                  onMouseDown={(e) => startDragPin(e, pCard.id, layout)}
+                                  title="Drag to move pinned card"
+                                >
+                                  <div className="fs-pinned-title">
+                                    <span
+                                      className="ntype-badge"
+                                      style={{ color: 'var(--accent)' }}
+                                    >
+                                      [{pCard.course}]
+                                    </span>
+                                    <SecondaryMathText
+                                      className=""
+                                      as="span"
+                                      content={pCard.title}
+                                    />
+                                  </div>
+                                  <div className="fs-pinned-actions">
+                                    <button
+                                      type="button"
+                                      className="fm-hud-btn"
+                                      aria-label={`Formula-only mode for ${pCard.title}`}
+                                      title="Collapse to formula only"
+                                      onClick={() => handleToggleMinimizePin(pCard.id)}
+                                    >
+                                      [_]
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="fm-hud-btn fm-unpin-btn"
+                                      aria-label={`Unpin ${pCard.title}`}
+                                      onClick={() => handleUnpinCard(pCard.id)}
+                                    >
+                                      [X]
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="fs-pinned-formula-only-actions">
+                                  <button
+                                    type="button"
+                                    className="fm-hud-btn"
+                                    aria-label={`Expand pinned card ${pCard.title}`}
+                                    title="Expand to full card"
+                                    onClick={() => handleToggleMinimizePin(pCard.id)}
+                                  >
+                                    [+]
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="fm-hud-btn fm-unpin-btn"
+                                    aria-label={`Unpin ${pCard.title}`}
+                                    onClick={() => handleUnpinCard(pCard.id)}
+                                  >
+                                    [X]
+                                  </button>
+                                </div>
+                              )}
+
+                              <div
+                                className="fs-pinned-body"
+                                onMouseDown={
+                                  sizeMode === 'formula-only'
+                                    ? (e) => startDragPin(e, pCard.id, layout)
+                                    : undefined
+                                }
+                                title={
+                                  sizeMode === 'formula-only'
+                                    ? `${pCard.title} — Drag to move or drag corner to resize`
+                                    : undefined
+                                }
+                              >
+                                {pCard.htmlContent ? (
+                                  <SecondaryMathText
+                                    className="fmhtml"
+                                    content={pCard.htmlContent}
+                                  />
+                                ) : null}
+                                {pCard.rawLatex ? (
+                                  <KatexMathBlock
+                                    latex={pCard.rawLatex}
+                                    displayMode={pCard.fmmDisplayMode ?? true}
+                                  />
+                                ) : null}
+                                {pCard.codeContent ? (
+                                  <pre className="fmcode">
+                                    <code>{pCard.codeContent}</code>
+                                  </pre>
+                                ) : null}
+
+                                {sizeMode === 'full' ? (
+                                  <>
+                                    {pCard.bodyText ? (
+                                      <SecondaryMathText
+                                        className="fmw"
+                                        content={pCard.bodyText}
+                                      />
+                                    ) : null}
+                                    {pCard.useText ? (
+                                      <SecondaryMathText
+                                        className="fmu"
+                                        content={pCard.useText}
+                                      />
+                                    ) : null}
+                                    {pCard.note ? (
+                                      <SecondaryMathText
+                                        className="fmnote"
+                                        content={pCard.note}
+                                      />
+                                    ) : null}
+                                    {pCard.seeAlso ? (
+                                      <SecondaryMathText
+                                        className="thsee"
+                                        content={pCard.seeAlso}
+                                      />
+                                    ) : null}
+                                    {pCard.steps && pCard.steps.length > 0 ? (
+                                      <details className="fmd" open style={{ marginTop: '4px' }}>
+                                        <summary>
+                                          <SecondaryMathText
+                                            as="span"
+                                            className=""
+                                            content={
+                                              pCard.stepsSummary ||
+                                              'Proof & derivation steps'
+                                            }
+                                          />
+                                        </summary>
+                                        <ol className="fmsteps">
+                                          {pCard.steps.map((stepHtml, sIdx) => (
+                                            <SecondaryMathText
+                                              key={`${pCard.id}-pin-step-${sIdx}`}
+                                              as="li"
+                                              className=""
+                                              content={stepHtml}
+                                            />
+                                          ))}
+                                        </ol>
+                                      </details>
+                                    ) : null}
+                                  </>
+                                ) : null}
+                              </div>
+
+                              {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
+                                <div
+                                  key={corner}
+                                  className={`fs-pin-resize-corner corner-${corner}`}
+                                  data-corner={corner}
+                                  role="separator"
+                                  aria-label={`Resize ${pCard.title} from ${corner.toUpperCase()} corner`}
+                                  title="Drag corner to resize card (shrink to formula only or expand to full card)"
+                                  onMouseDown={(e) =>
+                                    startResizePin(e, pCard.id, corner, layout)
+                                  }
+                                />
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </aside>
+                    ) : null}
+
+                    {activePracticeModule.pdfUrl ? (
+                      <PdfCanvasReader
+                        pdfUrl={activePracticeModule.pdfUrl}
+                        title={activePracticeModule.title}
+                        isFullscreen={isPdfFullscreen}
+                        onToggleFullscreen={
+                          isPdfFullscreen ? exitPdfFullscreen : enterPdfFullscreen
+                        }
+                        onStageClick={retractHud}
+                        isHudOpen={fsHudOpen}
+                        onToggleHud={() => {
+                          if (fsHudOpen) {
+                            retractHud();
+                          } else {
+                            setFsHudPointerTop(true);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div
+                        className="pdf-canvas-reader"
+                        onClick={retractHud}
+                      >
+                        <div
+                          className="pdf-canvas-stage"
+                          style={{
+                            padding: '24px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: '14px',
+                              letterSpacing: '0.12em',
+                              textTransform: 'uppercase',
+                              color: 'var(--text-secondary)',
+                              textAlign: 'center',
+                            }}
+                          >
+                            Coming Soon
+                          </div>
+                        </div>
+
+                        <div
+                          className="pdf-floating-controls"
+                          role="toolbar"
+                          aria-label="Fullscreen Controls"
+                        >
+                          <span className="pdf-ctrl-label">[STAGE READY]</span>
+                          <span className="pdf-ctrl-divider" aria-hidden="true" />
+                          <button
+                            type="button"
+                            className="pdf-ctrl-btn pdf-fs-btn"
+                            id="pdfFloatingFsBtn"
+                            onClick={
+                              isPdfFullscreen ? exitPdfFullscreen : enterPdfFullscreen
+                            }
+                          >
+                            {isPdfFullscreen ? '[EXIT FULLSCREEN]' : '[FULLSCREEN]'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </main>
           </WorkspaceErrorBoundary>
         </div>
@@ -1554,10 +3323,11 @@ export default function App() {
             <button
               type="button"
               className="sb-btn"
+              id="modalClose"
               aria-label="Close modal"
               onClick={() => setModalOpen(false)}
             >
-              [CLOSE]
+              [X CLOSE]
             </button>
           </div>
 
@@ -1575,7 +3345,11 @@ export default function App() {
                   flexWrap: 'wrap',
                 }}
               >
-                <span>{activeFlashcard.title}</span>
+                <SecondaryMathText
+                  className=""
+                  as="span"
+                  content={activeFlashcard.title}
+                />
                 {activeFlashcard.badge ? (
                   <span className="thty">{activeFlashcard.badge}</span>
                 ) : null}
