@@ -762,12 +762,14 @@ code, pre, .fmcode, kbd {
   gap: 10px;
   overflow-x: auto;
   scrollbar-width: none;
-  padding-bottom: 2px;
+  -ms-overflow-style: none;
 }
 
 .course-selector-row::-webkit-scrollbar,
 .course-bar::-webkit-scrollbar {
   display: none;
+  width: 0;
+  height: 0;
 }
 
 .course-selector-label,
@@ -827,6 +829,14 @@ code, pre, .fmcode, kbd {
   align-items: center;
   gap: 8px;
   flex-wrap: nowrap;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+#fmchips::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 #fmchips[hidden] {
@@ -1192,6 +1202,14 @@ mark.search-hl {
   border: 1px solid var(--border-crisp);
   box-shadow: var(--inner-top);
   gap: 2px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.chip-group::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .chip-group[hidden] {
@@ -3170,6 +3188,14 @@ details.fmd[open] > summary::after {
     max-width: 100%;
     min-width: 0;
     overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
   }
 
   .tab {
@@ -3198,6 +3224,14 @@ details.fmd[open] > summary::after {
   .chip-group {
     max-width: 100%;
     overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .chip-group::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
   }
 
   .chip-btn {

@@ -568,7 +568,9 @@ export default function App() {
   const [searchInput, setSearchInput] = useState<string>('');
   const deferredQuery = useDeferredValue(searchInput);
 
-  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth > 1024 : true
+  );
   const [thmFilter, setThmFilter] = useState<TheoremCategoryFilter>('all');
   const [toolsOpen, setToolsOpen] = useState<boolean>(false);
   const [termMenuOpen, setTermMenuOpen] = useState<boolean>(false);
