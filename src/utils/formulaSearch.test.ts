@@ -15,6 +15,10 @@ import {
   filterFormulaCards,
   isDefinitionBadge,
   matchesTheoremCategoryFilter,
+  SearchBTree,
+  buildCorpusSearchBTree,
+  getCardVocabularyBTree,
+  isConversationalNoiseTerm,
   type FormulaCardRecord,
 } from './formulaSearch.ts';
 
@@ -317,3 +321,102 @@ test('matchesTheoremCategoryFilter separates Definitions from Theorems, Laws, Pr
   });
   assert.equal(thmAndLawsOnly.visibleCards, 5);
 });
+
+test('SearchBTree maintains sorted multi-way nodes, splits full nodes, and supports O(log N) exact, prefix, and range queries', () => {
+  const btree = new SearchBTree<string>(3); // max 5 keys per node to exercise splits thoroughly
+  const words = [
+    'thevenin',
+    'norton',
+    'superposition',
+    'kirchhoff',
+    'impedance',
+    'admittance',
+    'reactance',
+    'susceptance',
+    'capacitance',
+    'inductance',
+    'transient',
+    'transform',
+    'transfer',
+    'transistor',
+    'divergent',
+    'divergence',
+    'derivative',
+    'differential',
+    'determinant',
+    'eigenvalue',
+    'eigenvector',
+    'eigenspace',
+    'laplace',
+    'laurent',
+    'lagrange',
+    'lhopital',
+    'logarithm',
+    'logic',
+    'pointer',
+    'polymorphism',
+  ];
+
+  for (const w of words) {
+    btree.insert(w, `card-${w}`);
+  }
+
+  assert.equal(btree.size, words.length);
+  assert.equal(btree.root.leaf, false, 'B-Tree should have split into multiple levels');
+
+  // Exact lookups
+  for (const w of words) {
+    assert.equal(btree.hasExact(w), true, `Expected exact match for ${w}`);
+    assert.deepEqual(btree.searchExact(w), [`card-${w}`]);
+  }
+  assert.equal(btree.hasExact('nonexistent'), false);
+
+  // Prefix lookups via B-Tree range traversal
+  const transMatches = btree.searchPrefix('trans').map((e) => e.key);
+  assert.deepEqual(transMatches, ['transfer', 'transform', 'transient', 'transistor']);
+  assert.equal(btree.hasPrefix('eigen'), true);
+  assert.equal(btree.hasPrefix('zz'), false);
+
+  // Lexicographical range scan [lower, upper]
+  const dToE = btree.searchRange('derivative', 'eigenvector').map((e) => e.key);
+  assert.deepEqual(dToE, [
+    'derivative',
+    'determinant',
+    'differential',
+    'divergence',
+    'divergent',
+    'eigenspace',
+    'eigenvalue',
+    'eigenvector',
+  ]);
+});
+
+test('B-Tree search mechanism matches vague, conversational, prefix, and subsequence queries', () => {
+  const thevIndex = buildFormulaSearchIndex(SAMPLE_CARDS[0]);
+  const cardBTree = getCardVocabularyBTree(thevIndex);
+  assert.equal(cardBTree.hasPrefix('thev'), true);
+  assert.equal(cardBTree.hasPrefix('equiv'), true);
+
+  // Conversational / natural-language query with filler words
+  const vagueThev = tokenizeSearchQuery('how to find thevenin equivalent voltage');
+  assert.equal(isConversationalNoiseTerm('how'), true);
+  assert.equal(isConversationalNoiseTerm('find'), true);
+  assert.equal(matchesSearchTokens(thevIndex, vagueThev, SAMPLE_CARDS[0].title), true);
+
+  // Partial prefix query ("thev equiv volt")
+  const prefixTokens = tokenizeSearchQuery('thev equiv volt');
+  assert.equal(matchesSearchTokens(thevIndex, prefixTokens, SAMPLE_CARDS[0].title), true);
+
+  // Consonant skeleton / abbreviated subsequence query ("thvnn")
+  assert.equal(matchesSearchTokens(thevIndex, ['thvnn'], SAMPLE_CARDS[0].title), true);
+
+  // Vague multi-word query where 1 word is an extra descriptive word not on the card ("find thevenin circuit voltage")
+  const softQuorumTokens = tokenizeSearchQuery('find thevenin circuit voltage');
+  assert.equal(matchesSearchTokens(thevIndex, softQuorumTokens, SAMPLE_CARDS[0].title), true);
+
+  // Corpus B-Tree construction
+  const corpusTree = buildCorpusSearchBTree(SAMPLE_CARDS);
+  assert.equal(corpusTree.hasPrefix('lhop'), true);
+  assert.equal(corpusTree.hasPrefix('capac'), true);
+});
+

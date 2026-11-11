@@ -4,6 +4,8 @@ import {
   katexRenderCache,
   renderLatexCached,
   renderTextWithMath,
+  highlightHtmlContent,
+  highlightPlainTextToHtml,
 } from './mathParser.ts';
 
 test('renderTextWithMath parses mixed HTML tags alongside inline $...$ and display $$...$$ math', () => {
@@ -49,3 +51,53 @@ test('renderLatexCached memoizes KaTeX strings in katexRenderCache Map', () => {
   assert.equal(first, second);
   assert.equal(katexRenderCache.size, 1);
 });
+
+test('renderTextWithMath and highlightHtmlContent highlight matching keywords in prose, diacritics, KaTeX formulas, and code without corrupting HTML tags or entities', () => {
+  const note =
+    '<b>Where:</b> $V_{th}$ is the Thévenin equivalent voltage &amp; $I_{rms}$ is root-mean-square current in L’Hôpital form.';
+  const highlighted = renderTextWithMath(note, ['thevenin', 'lhopital', 'irms']);
+
+  assert.ok(
+    highlighted.includes('<mark class="fm-hl">Thévenin</mark>'),
+    'Matches diacritic Thévenin from plain query "thevenin"'
+  );
+  assert.ok(
+    highlighted.includes('<mark class="fm-hl">L’Hôpital</mark>'),
+    'Matches curly apostrophe + circumflex L’Hôpital from plain query "lhopital"'
+  );
+  assert.ok(
+    highlighted.includes('&amp;'),
+    'Does not corrupt HTML entity &amp;'
+  );
+  assert.ok(
+    highlighted.includes(
+      '<mark class="fm-hl">r</mark></span><span class="mord mathnormal mtight"><mark class="fm-hl">m</mark></span><span class="mord mathnormal mtight"><mark class="fm-hl">s</mark></span>'
+    ),
+    'Highlights consecutive KaTeX mord spans for rms subscript'
+  );
+
+  const katexFormula = renderLatexCached('P_{\\text{max}} = \\frac{V_{th}^2}{4 R_{th}}', true);
+  const highlightedFormula = highlightHtmlContent(katexFormula, ['vth', 'max']);
+  assert.ok(
+    highlightedFormula.includes('<mark class="fm-hl">max</mark>'),
+    'Highlights \\text{max} inside KaTeX formula'
+  );
+  assert.ok(
+    highlightedFormula.includes('<mark class="fm-hl">t</mark>'),
+    'Highlights th subscript inside KaTeX formula when searching vth'
+  );
+
+  const codeHighlighted = highlightPlainTextToHtml(
+    'if (a < b && strcmp(s1, s2) == 0) return 1;',
+    ['strcmp']
+  );
+  assert.ok(
+    codeHighlighted.includes('<mark class="fm-hl">strcmp</mark>'),
+    'Highlights keyword inside escaped code block'
+  );
+  assert.ok(
+    codeHighlighted.includes('&lt;') && codeHighlighted.includes('&amp;&amp;'),
+    'Preserves escaped angle brackets and ampersands in code block'
+  );
+});
+

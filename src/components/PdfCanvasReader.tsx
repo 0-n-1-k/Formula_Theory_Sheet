@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useDeferredValue, useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -35,31 +35,21 @@ const PdfPageCanvas = memo(function PdfPageCanvas({
     const el = wrapperRef.current;
     if (!el) return;
     const stageRoot = el.closest('.pdf-canvas-stage');
-    const renderObserver = new IntersectionObserver(
+    const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           setIsVisible(entry.isIntersecting);
-        }
-      },
-      { root: stageRoot, rootMargin: '1200px 0px' }
-    );
-    renderObserver.observe(el);
-
-    const activePageObserver = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
           if (entry.isIntersecting && entry.intersectionRatio >= 0.35) {
             onPageVisible?.(pageNumber);
           }
         }
       },
-      { root: stageRoot, threshold: [0.35, 0.65] }
+      { root: stageRoot, rootMargin: '600px 0px', threshold: [0, 0.35, 0.65] }
     );
-    activePageObserver.observe(el);
+    observer.observe(el);
 
     return () => {
-      renderObserver.disconnect();
-      activePageObserver.disconnect();
+      observer.disconnect();
     };
   }, [pageNumber, onPageVisible]);
 
@@ -73,18 +63,22 @@ const PdfPageCanvas = memo(function PdfPageCanvas({
         const page = await pdfDoc.getPage(pageNumber);
         if (cancelled) return;
         const baseViewport = page.getViewport({ scale: 1 });
-        setBaseDims({
-          width: baseViewport.width,
-          height: baseViewport.height,
-        });
+        setBaseDims((prev) =>
+          prev.width === baseViewport.width && prev.height === baseViewport.height
+            ? prev
+            : { width: baseViewport.width, height: baseViewport.height }
+        );
         const viewport = page.getViewport({ scale });
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const outputViewport = page.getViewport({ scale: scale * dpr });
 
-        setDimensions({
-          width: Math.round(viewport.width),
-          height: Math.round(viewport.height),
-        });
+        const nextW = Math.round(viewport.width);
+        const nextH = Math.round(viewport.height);
+        setDimensions((prev) =>
+          prev.width === nextW && prev.height === nextH
+            ? prev
+            : { width: nextW, height: nextH }
+        );
 
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -163,6 +157,7 @@ export const PdfCanvasReader = memo(function PdfCanvasReader({
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState<number>(0);
   const [scale, setScale] = useState<number>(1.35);
+  const deferredScale = useDeferredValue(scale);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [jumpPage, setJumpPage] = useState<string>('1');
@@ -331,7 +326,7 @@ export const PdfCanvasReader = memo(function PdfCanvasReader({
               key={pageNum}
               pdfDoc={pdfDoc}
               pageNumber={pageNum}
-              scale={scale}
+              scale={deferredScale}
               onPageVisible={handlePageVisible}
             />
           ))

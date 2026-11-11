@@ -87,28 +87,31 @@ test('Task 1 & 6: GEN module is cleanly extracted into src/content-gen.html and 
   );
 });
 
-test('Zero data loss: all original 32 theorem data-k keys and all 511 formula cards (467 course + 44 GEN cards) are preserved', () => {
+test('Zero data loss: all original 32 theorem data-k keys and all 526 formula cards (482 course + 44 GEN cards) and 161 theorem cards are preserved', () => {
   const fmCards = fmHtml.match(/<div class="fmi /g) || [];
   const thmCards = thmHtml.match(/<div class="fmi /g) || [];
-  assert.equal(fmCards.length, 511, 'Expected 511 formula cards across content-fmroot.html + content-gen.html');
-  assert.equal(thmCards.length, 158, 'Expected 158 theorem/definition cards in #thmroot');
+  assert.equal(fmCards.length, 526, 'Expected 526 formula cards across content-fmroot.html + content-gen.html');
+  assert.equal(thmCards.length, 161, 'Expected 161 theorem/definition cards in #thmroot');
 
   const cseCompendiumKeys = [
-    'cse-c:3', 'cse-c:4', 'cse-c:5',
-    'cse-ptr:3', 'cse-ptr:4', 'cse-ptr:5', 'cse-ptr:6',
-    'cse-str:2', 'cse-str:3', 'cse-str:4', 'cse-str:5', 'cse-str:6', 'cse-str:7',
-    'cse-file:2', 'cse-file:3', 'cse-file:4', 'cse-file:5', 'cse-file:6', 'cse-file:7',
-    'cse-bit:2', 'cse-bit:3', 'cse-bit:4',
-    'cse-algo:2', 'cse-algo:3', 'cse-algo:4', 'cse-algo:5',
-    'cse-pat:1', 'cse-pat:2', 'cse-pat:3', 'cse-pat:4',
-    'cse-cpp:3', 'cse-cpp:4', 'cse-cpp:5', 'cse-cpp:6',
+    'cse-c:3', 'cse-c:4', 'cse-c:5', 'cse-c:6', 'cse-c:7', 'cse-c:8', 'cse-c:9',
+    'cse-lib:1',
+    'cse-ptr:3', 'cse-ptr:4', 'cse-ptr:5', 'cse-ptr:6', 'cse-ptr:7',
+    'cse-str:2', 'cse-str:3', 'cse-str:4', 'cse-str:5', 'cse-str:6', 'cse-str:7', 'cse-str:8', 'cse-str:9',
+    'cse-file:2', 'cse-file:3', 'cse-file:4', 'cse-file:5', 'cse-file:6', 'cse-file:7', 'cse-file:8',
+    'cse-bit:2', 'cse-bit:3', 'cse-bit:4', 'cse-bit:5', 'cse-bit:6',
+    'cse-num:1',
+    'cse-algo:2', 'cse-algo:3', 'cse-algo:4', 'cse-algo:5', 'cse-algo:6',
+    'cse-pat:1', 'cse-pat:2', 'cse-pat:3', 'cse-pat:4', 'cse-pat:5',
+    'cse-cpp:3', 'cse-cpp:4', 'cse-cpp:5', 'cse-cpp:6', 'cse-cpp:7',
     'cse-cpp2:2',
   ];
   for (const k of cseCompendiumKeys) {
-    assert.ok(fmHtml.includes(`data-k="${k}"`), `Missing CSE 109 Master Compendium card ${k}`);
+    assert.ok(fmHtml.includes(`data-k="${k}"`), `Missing CSE 109 card ${k}`);
   }
-  assert.ok(thmHtml.includes('data-k="t-cse1:2"'), 'Missing CSE 109 theory card t-cse1:2');
-  assert.ok(thmHtml.includes('data-k="t-cse2:2"'), 'Missing CSE 109 theory card t-cse2:2');
+  for (const tk of ['t-cse1:2', 't-cse1:3', 't-cse1:4', 't-cse2:2', 't-cse2:3']) {
+    assert.ok(thmHtml.includes(`data-k="${tk}"`), `Missing CSE 109 theory card ${tk}`);
+  }
 
   const originalThmKeys = [
     't-eee1:0', 't-eee1:1', 't-eee1:2', 't-eee1:3', 't-eee1:4',

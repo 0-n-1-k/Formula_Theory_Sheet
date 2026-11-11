@@ -8,7 +8,7 @@ const genHtml = fs.readFileSync('src/content-gen.html', 'utf8');
 const thmHtml = fs.readFileSync('src/content-thmroot.html', 'utf8');
 const navHtml = fs.readFileSync('src/content-nav.html', 'utf8');
 
-test('parseTopicSections extracts all 66 formula sections (59 course + 7 GEN = 511 cards) and 13 theorem sections (158 cards)', () => {
+test('parseTopicSections extracts all 66 formula sections (59 course + 7 GEN = 526 cards) and 13 theorem sections (161 cards)', () => {
   const fmCourseSections = parseTopicSections(fmCourseHtml);
   const genSections = parseTopicSections(genHtml);
   const fmSections = [...fmCourseSections, ...genSections];
@@ -18,11 +18,11 @@ test('parseTopicSections extracts all 66 formula sections (59 course + 7 GEN = 5
   assert.equal(genSections.length, 7, 'Expected 7 GEN topic sections in content-gen.html');
   assert.equal(fmSections.length, 66, 'Expected 66 total formula topic sections');
   const totalFmCards = fmSections.reduce((acc, s) => acc + s.cards.length, 0);
-  assert.equal(totalFmCards, 511, 'Expected 511 formula cards');
+  assert.equal(totalFmCards, 526, 'Expected 526 formula cards');
 
   assert.equal(thmSections.length, 13, 'Expected 13 theorem topic sections');
   const totalThmCards = thmSections.reduce((acc, s) => acc + s.cards.length, 0);
-  assert.equal(totalThmCards, 158, 'Expected 158 theorem/definition cards');
+  assert.equal(totalThmCards, 161, 'Expected 161 theorem/definition cards');
 
   // Check badges on thmroot cards
   for (const sec of thmSections) {

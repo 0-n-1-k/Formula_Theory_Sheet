@@ -430,4 +430,78 @@ export function getPinnedCardSizeMode(
   return 'full';
 }
 
+export const CARD_COLLAPSED_MAX_HEIGHT_PX = 280;
+export const CARD_COLLAPSE_THRESHOLD_PX = 340;
+
+export interface CollapsibleCardContentInput {
+  htmlContent?: string;
+  codeContent?: string;
+  bodyText?: string;
+  useText?: string;
+  note?: string;
+  seeAlso?: string;
+  steps?: string[];
+  rawLatex?: string;
+}
+
+/**
+ * Deterministically estimates whether a card's body is tall before DOM measurement
+ * (or while inside a closed <details> topic accordion) so long cards render collapsed
+ * on initial paint without layout shift.
+ */
+export function estimateCardBodyIsTall(card: CollapsibleCardContentInput): boolean {
+  const codeLines = card.codeContent ? card.codeContent.split('\n').length : 0;
+  if (codeLines >= 9) {
+    return true;
+  }
+
+  const combinedMarkup = [
+    card.htmlContent ?? '',
+    card.bodyText ?? '',
+    card.useText ?? '',
+    card.note ?? '',
+    card.seeAlso ?? '',
+  ].join(' ');
+
+  const blockMatches = combinedMarkup.match(/<(li|tr|p|pre|table|ol|ul|br)\b/gi);
+  if (blockMatches && blockMatches.length >= 6) {
+    return true;
+  }
+
+  const plainText = combinedMarkup.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const codeChars = card.codeContent ? card.codeContent.length : 0;
+  if (plainText.length + codeChars >= 450) {
+    return true;
+  }
+
+  if (card.rawLatex) {
+    const latexLines = card.rawLatex.split(/\\\\|\\cr/).length;
+    if (latexLines >= 3 && plainText.length >= 180) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Determines whether a card body should show the collapsible "Show More / Show Less" toggle.
+ * Uses the live DOM scrollHeight when visible (> 0), falling back to content estimation
+ * when hidden or inside a collapsed topic section.
+ */
+export function shouldCardBodyBeCollapsible(
+  card: CollapsibleCardContentInput,
+  measuredScrollHeight?: number | null,
+  thresholdPx = CARD_COLLAPSE_THRESHOLD_PX
+): boolean {
+  if (typeof measuredScrollHeight === 'number' && measuredScrollHeight > thresholdPx) {
+    return true;
+  }
+  if (typeof measuredScrollHeight === 'number' && measuredScrollHeight > 0 && measuredScrollHeight <= thresholdPx) {
+    return estimateCardBodyIsTall(card);
+  }
+  return estimateCardBodyIsTall(card);
+}
+
+
 

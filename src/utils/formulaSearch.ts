@@ -83,6 +83,317 @@ export const GENERIC_QUERY_TERMS = new Set([
   'forms',
 ]);
 
+export const CONVERSATIONAL_NOISE_WORDS = new Set([
+  'how',
+  'what',
+  'when',
+  'where',
+  'why',
+  'who',
+  'which',
+  'find',
+  'finding',
+  'get',
+  'getting',
+  'calculate',
+  'calculating',
+  'compute',
+  'computing',
+  'solve',
+  'solving',
+  'check',
+  'checking',
+  'determine',
+  'show',
+  'explain',
+  'write',
+  'make',
+  'do',
+  'does',
+  'did',
+  'is',
+  'are',
+  'was',
+  'were',
+  'be',
+  'been',
+  'can',
+  'could',
+  'would',
+  'should',
+  'using',
+  'use',
+  'used',
+  'into',
+  'onto',
+  'about',
+  'around',
+  'between',
+  'through',
+  'under',
+  'over',
+  'inside',
+  'outside',
+  'without',
+  'way',
+  'ways',
+  'example',
+  'examples',
+  'question',
+  'questions',
+  'help',
+  'need',
+  'want',
+]);
+
+export const VAGUE_CONCEPT_MAP: Record<string, string[]> = {
+  loop: ['kvl', 'kirchhoff', 'mesh', 'for', 'while', 'contour'],
+  junction: ['kcl', 'kirchhoff', 'nodal', 'node'],
+  node: ['kcl', 'kirchhoff', 'nodal', 'linked'],
+  simplify: ['thevenin', 'norton', 'equivalent', 'delta', 'wye'],
+  switch: ['transient', 'step', 'rc', 'rl', 'rlc', 'case', 'break'],
+  charge: ['capacitor', 'capacitance', 'transient', 'coulomb', 'kcl'],
+  discharge: ['capacitor', 'transient', 'rc', 'time', 'constant'],
+  slope: ['derivative', 'differentiation', 'tangent', 'gradient'],
+  rate: ['derivative', 'differentiation', 'related', 'velocity'],
+  extreme: ['maxima', 'minima', 'optimization', 'stationary', 'extrema'],
+  optimize: ['maxima', 'minima', 'optimization', 'stationary'],
+  largest: ['maxima', 'maximum', 'optimization', 'array'],
+  smallest: ['minima', 'minimum', 'optimization', 'array'],
+  revolve: ['volume', 'revolution', 'surface', 'solid', 'integral'],
+  spin: ['volume', 'revolution', 'surface', 'solid'],
+  solid: ['volume', 'revolution', 'surface', 'integral'],
+  approximate: ['taylor', 'maclaurin', 'series', 'linearization', 'differentials'],
+  expand: ['taylor', 'maclaurin', 'laurent', 'series', 'binomial'],
+  spring: ['shm', 'harmonic', 'oscillation', 'hooke', 'stiffness'],
+  pendulum: ['shm', 'harmonic', 'oscillation', 'period', 'torsional'],
+  vibrate: ['shm', 'harmonic', 'oscillation', 'resonance', 'wave'],
+  slit: ['interference', 'diffraction', 'young', 'grating', 'fringe'],
+  fringe: ['interference', 'diffraction', 'young', 'newton', 'michelson'],
+  engine: ['carnot', 'thermodynamics', 'efficiency', 'otto', 'diesel', 'heat'],
+  disorder: ['entropy', 'thermodynamics', 'second', 'boltzmann'],
+  flip: ['bitwise', 'bit', 'complement', 'xor', 'toggle', 'invert'],
+  toggle: ['bitwise', 'bit', 'xor', 'mask'],
+  lowest: ['bitwise', 'bit', 'lsb', 'rightmost', 'tricks'],
+  rightmost: ['bitwise', 'bit', 'lsb', 'lowest', 'tricks'],
+  leak: ['malloc', 'calloc', 'free', 'delete', 'destructor', 'memory', 'dynamic'],
+  heap: ['malloc', 'calloc', 'realloc', 'free', 'new', 'delete', 'dynamic'],
+  allocate: ['malloc', 'calloc', 'realloc', 'new', 'dynamic', 'memory'],
+  deallocate: ['free', 'delete', 'destructor', 'dynamic', 'memory'],
+  reverse: ['strrev', 'string', 'array', 'palindrome', 'number'],
+  duplicate: ['array', 'string', 'remove', 'unique'],
+  rotate: ['array', 'bitwise', 'matrix', 'shift'],
+  override: ['virtual', 'polymorphism', 'inheritance', 'derived'],
+  inherit: ['inheritance', 'derived', 'base', 'virtual', 'protected'],
+};
+
+/**
+ * Node in a balanced B-Tree (Bayer–McCreight).
+ * Maintains sorted `keys`, associated `values` buckets, and `children` pointers.
+ */
+export class BTreeNode<V = number> {
+  keys: string[] = [];
+  values: V[][] = [];
+  children: BTreeNode<V>[] = [];
+  leaf: boolean;
+
+  constructor(leaf = true) {
+    this.leaf = leaf;
+  }
+}
+
+function lowerBoundKeys(keys: string[], target: string): number {
+  let lo = 0;
+  let hi = keys.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (keys[mid] < target) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
+}
+
+/**
+ * Balanced B-Tree index supporting:
+ * - O(log N) exact key lookup (`searchExact`)
+ * - O(log N + K) lexicographical range and prefix scans (`searchRange`, `searchPrefix`)
+ * - O(log N) B-Tree-pruned fuzzy and subsequence matching (`searchFuzzy`, `queryVagueToken`)
+ */
+export class SearchBTree<V = number> {
+  readonly t: number;
+  root: BTreeNode<V>;
+  private _size = 0;
+
+  constructor(t = 4) {
+    this.t = Math.max(2, t);
+    this.root = new BTreeNode<V>(true);
+  }
+
+  get size(): number {
+    return this._size;
+  }
+
+  private findNodeAndIndex(
+    node: BTreeNode<V>,
+    key: string
+  ): { node: BTreeNode<V>; index: number } | null {
+    const i = lowerBoundKeys(node.keys, key);
+    if (i < node.keys.length && node.keys[i] === key) {
+      return { node, index: i };
+    }
+    if (node.leaf) {
+      return null;
+    }
+    return this.findNodeAndIndex(node.children[i], key);
+  }
+
+  private splitChild(parent: BTreeNode<V>, i: number): void {
+    const t = this.t;
+    const fullChild = parent.children[i];
+    const rightSibling = new BTreeNode<V>(fullChild.leaf);
+
+    const medianKey = fullChild.keys[t - 1];
+    const medianVal = fullChild.values[t - 1];
+
+    rightSibling.keys = fullChild.keys.slice(t);
+    rightSibling.values = fullChild.values.slice(t);
+    fullChild.keys = fullChild.keys.slice(0, t - 1);
+    fullChild.values = fullChild.values.slice(0, t - 1);
+
+    if (!fullChild.leaf) {
+      rightSibling.children = fullChild.children.slice(t);
+      fullChild.children = fullChild.children.slice(0, t);
+    }
+
+    parent.children.splice(i + 1, 0, rightSibling);
+    parent.keys.splice(i, 0, medianKey);
+    parent.values.splice(i, 0, medianVal);
+  }
+
+  private insertNonFull(node: BTreeNode<V>, key: string, value: V): void {
+    let i = lowerBoundKeys(node.keys, key);
+    if (node.leaf) {
+      node.keys.splice(i, 0, key);
+      node.values.splice(i, 0, [value]);
+      return;
+    }
+
+    if (node.children[i].keys.length === 2 * this.t - 1) {
+      this.splitChild(node, i);
+      if (key === node.keys[i]) {
+        if (!node.values[i].includes(value)) {
+          node.values[i].push(value);
+        }
+        return;
+      }
+      if (key > node.keys[i]) {
+        i++;
+      }
+    }
+    this.insertNonFull(node.children[i], key, value);
+  }
+
+  insert(rawKey: string, value: V): void {
+    const key = rawKey.trim().toLowerCase();
+    if (!key) return;
+
+    const existing = this.findNodeAndIndex(this.root, key);
+    if (existing) {
+      const bucket = existing.node.values[existing.index];
+      if (!bucket.includes(value)) {
+        bucket.push(value);
+      }
+      return;
+    }
+
+    this._size++;
+    const r = this.root;
+    if (r.keys.length === 2 * this.t - 1) {
+      const s = new BTreeNode<V>(false);
+      this.root = s;
+      s.children.push(r);
+      this.splitChild(s, 0);
+      this.insertNonFull(s, key, value);
+    } else {
+      this.insertNonFull(r, key, value);
+    }
+  }
+
+  searchExact(rawKey: string): V[] {
+    const key = rawKey.trim().toLowerCase();
+    if (!key) return [];
+    const hit = this.findNodeAndIndex(this.root, key);
+    return hit ? hit.node.values[hit.index] : [];
+  }
+
+  private rangeTraverse(
+    node: BTreeNode<V>,
+    lowKey: string,
+    highKey: string,
+    out: Array<{ key: string; values: V[] }>,
+    limit: number
+  ): void {
+    if (out.length >= limit) return;
+    const startIdx = lowerBoundKeys(node.keys, lowKey);
+
+    for (let i = startIdx; i < node.keys.length; i++) {
+      if (!node.leaf) {
+        this.rangeTraverse(node.children[i], lowKey, highKey, out, limit);
+        if (out.length >= limit) return;
+      }
+      const k = node.keys[i];
+      if (k > highKey) {
+        return;
+      }
+      if (k >= lowKey) {
+        out.push({ key: k, values: node.values[i] });
+        if (out.length >= limit) return;
+      }
+    }
+
+    if (!node.leaf) {
+      this.rangeTraverse(node.children[node.keys.length], lowKey, highKey, out, limit);
+    }
+  }
+
+  /**
+   * Executes an O(log N + K) lexicographical range scan `[lowKey, highKey]` over the B-Tree,
+   * pruning all subtrees outside the range.
+   */
+  searchRange(
+    lowKey: string,
+    highKey: string,
+    limit = 64
+  ): Array<{ key: string; values: V[] }> {
+    const lo = lowKey.trim().toLowerCase();
+    const hi = highKey.trim().toLowerCase();
+    if (!lo || lo > hi) return [];
+    const out: Array<{ key: string; values: V[] }> = [];
+    this.rangeTraverse(this.root, lo, hi, out, limit);
+    return out;
+  }
+
+  hasExact(rawKey: string): boolean {
+    return this.searchExact(rawKey).length > 0;
+  }
+
+  /**
+   * Executes an O(log N + K) prefix scan over the B-Tree using range `[prefix, prefix + '\uffff']`.
+   */
+  searchPrefix(prefix: string, limit = 64): Array<{ key: string; values: V[] }> {
+    const clean = prefix.trim().toLowerCase();
+    if (!clean) return [];
+    return this.searchRange(clean, clean + '\uffff', limit);
+  }
+
+  hasPrefix(prefix: string): boolean {
+    return this.searchPrefix(prefix, 1).length > 0;
+  }
+}
+
 /**
  * Returns true if a query token is a generic academic qualifier word
  * (like "theorem", "formula", "law", "rule") or a stop word.
@@ -90,6 +401,15 @@ export const GENERIC_QUERY_TERMS = new Set([
 export function isGenericQueryTerm(token: string): boolean {
   const q = normalizeSearchText(token);
   return !q || GENERIC_QUERY_TERMS.has(q) || STOP_WORDS.has(q);
+}
+
+/**
+ * Returns true if a query token is a conversational filler word (like "how", "find",
+ * "calculate", "what", "when") or a stop word.
+ */
+export function isConversationalNoiseTerm(token: string): boolean {
+  const q = normalizeSearchText(token);
+  return !q || STOP_WORDS.has(q) || CONVERSATIONAL_NOISE_WORDS.has(q);
 }
 
 /**
@@ -599,74 +919,190 @@ export function boundedDamerauLevenshtein(a: string, b: string, maxDist: number)
   return prev1[lenB];
 }
 
+const cardBTreeCache = new Map<string, SearchBTree<number>>();
+
 /**
- * Checks whether a single normalized query token matches a card's searchIndex
- * using the 4-stage pipeline:
- * - Step A: Exact Substring match O(1) (plus stem match for plural generic terms)
- * - Step B: Domain Synonym Expansion
- * - Step C: Subsequence / Acronym Prefix on title initials (for 2 <= q.length <= 5)
- * - Step D: Bounded Damerau–Levenshtein Fuzzy Matching (for q.length >= 6 with matching initial char)
+ * Builds and caches a balanced B-Tree (`SearchBTree<number>`) for a card's normalized searchIndex.
+ * Indexes all vocabulary words (length >= 2) and their stemmed forms so exact, prefix range,
+ * stem-root, and B-Tree-pruned fuzzy lookups execute in O(log W).
  */
-function matchesSingleToken(hay: string, rawToken: string, cardTitle?: string): boolean {
-  const q = normalizeSearchText(rawToken);
-  if (!q) return true;
+export function getCardVocabularyBTree(searchIndex: string): SearchBTree<number> {
+  const cached = cardBTreeCache.get(searchIndex);
+  if (cached !== undefined) return cached;
 
-  // Step A: Exact Substring fast path
-  if (hay.includes(q)) return true;
-
-  const qStem = stemSearchToken(q);
-  if (qStem !== q && qStem.length >= 3 && hay.includes(qStem)) {
-    return true;
-  }
-
-  // Step B: Synonym Expansion
-  const synonymExpansion = DOMAIN_SYNONYM_MAP[q];
-  if (synonymExpansion) {
-    const synWords = synonymExpansion.split(/\s+/).filter(Boolean);
-    if (synWords.length > 0 && synWords.every((sw) => hay.includes(sw))) {
-      return true;
+  const btree = new SearchBTree<number>(4);
+  const words = searchIndex.match(/[a-z0-9_]{2,}/g) || [];
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    btree.insert(w, i);
+    const stem = stemSearchToken(w);
+    if (stem !== w && stem.length >= 2) {
+      btree.insert(stem, i);
     }
   }
 
-  // Step C: Subsequence / Acronym Prefix (2 <= q.length <= 5)
-  if (q.length >= 2 && q.length <= 5 && /^[a-z0-9]+$/.test(q)) {
-    if (cardTitle) {
-      const titleInitials = generateTitleInitialisms(cardTitle);
-      if (titleInitials.some((init) => init.includes(q))) {
-        return true;
-      }
-    }
+  if (cardBTreeCache.size > 2500) {
+    cardBTreeCache.clear();
   }
-
-  // Step D: Typo-Tolerant Bounded Damerau–Levenshtein Edit Distance (q.length >= 6)
-  // Requires matching first character so short words don't fuzzy-match unrelated vocabulary
-  if (q.length >= 6 && /^[a-z0-9]+$/.test(q)) {
-    const maxDist = 1;
-    const words = getSearchIndexWords(hay);
-    const firstChar = q.charCodeAt(0);
-    for (let i = 0; i < words.length; i++) {
-      const w = words[i];
-      if (w.charCodeAt(0) !== firstChar) continue;
-      if (Math.abs(w.length - q.length) <= maxDist) {
-        if (boundedDamerauLevenshtein(q, w, maxDist) <= maxDist) {
-          return true;
-        }
-      }
-      // Also allow prefix fuzzy match when user is typing a longer word (w.length > q.length)
-      if (w.length > q.length) {
-        const wPrefix = w.slice(0, q.length);
-        if (boundedDamerauLevenshtein(q, wPrefix, 1) <= 1) {
-          return true;
-        }
-      }
-    }
-  }
-
-  return false;
+  cardBTreeCache.set(searchIndex, btree);
+  return btree;
 }
 
 /**
- * Checks whether a precomputed card search index matches all query tokens.
+ * Builds a corpus-wide inverted B-Tree (`SearchBTree<string>`) mapping every indexed
+ * term, stem, and title initialism across a collection of cards to matching card IDs.
+ */
+export function buildCorpusSearchBTree(cards: FormulaCardRecord[]): SearchBTree<string> {
+  const tree = new SearchBTree<string>(4);
+  for (const card of cards) {
+    const idx = buildFormulaSearchIndex(card);
+    const words = idx.match(/[a-z0-9_]{2,}/g) || [];
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i];
+      tree.insert(w, card.id);
+      const stem = stemSearchToken(w);
+      if (stem !== w && stem.length >= 2) {
+        tree.insert(stem, card.id);
+      }
+    }
+  }
+  return tree;
+}
+
+function isOrderedSubsequence(shortToken: string, word: string): boolean {
+  if (shortToken.length < 3 || word.length < shortToken.length + 2) return false;
+  if (shortToken.charCodeAt(0) !== word.charCodeAt(0)) return false;
+  let si = 0;
+  for (let wi = 0; wi < word.length && si < shortToken.length; wi++) {
+    if (word.charCodeAt(wi) === shortToken.charCodeAt(si)) {
+      si++;
+    }
+  }
+  return si === shortToken.length;
+}
+
+/**
+ * Evaluates a single query token against a card's B-Tree and searchIndex using a 6-stage
+ * B-Tree pipeline:
+ * 1. Exact B-Tree key lookup or substring match (quality = 100)
+ * 2. B-Tree prefix range scan `btree.searchPrefix(q)` for partial/prefix tokens (quality = 85)
+ * 3. Domain synonym & vague concept alias B-Tree lookup (quality = 80)
+ * 4. Title initialism / acronym prefix match (quality = 80)
+ * 5. Shared morphological root range scan in B-Tree (5+ char common prefix, quality = 72)
+ * 6. B-Tree-pruned Damerau–Levenshtein fuzzy & consonant-subsequence match (quality = 60)
+ */
+export function matchTokenWithBTreeQuality(
+  hay: string,
+  btree: SearchBTree<number>,
+  rawToken: string,
+  cardTitle?: string
+): { matched: boolean; quality: number } {
+  const q = normalizeSearchText(rawToken);
+  if (!q) return { matched: true, quality: 100 };
+
+  const qStem = stemSearchToken(q);
+
+  // Stage 1: Exact B-Tree lookup or exact substring fast path
+  if (btree.searchExact(q).length > 0 || hay.includes(q)) {
+    return { matched: true, quality: 100 };
+  }
+  if (qStem !== q && qStem.length >= 3 && (btree.searchExact(qStem).length > 0 || hay.includes(qStem))) {
+    return { matched: true, quality: 95 };
+  }
+
+  // Stage 2: B-Tree Prefix Range Scan [q, q + '\uffff'] for partial words (length >= 3)
+  if (q.length >= 3 && btree.searchPrefix(q, 4).length > 0) {
+    return { matched: true, quality: 85 };
+  }
+  if (qStem.length >= 3 && btree.searchPrefix(qStem, 4).length > 0) {
+    return { matched: true, quality: 82 };
+  }
+
+  // Stage 3: Domain Synonym Expansion & Vague Concept Aliases via B-Tree
+  const synonymExpansion = DOMAIN_SYNONYM_MAP[q];
+  if (synonymExpansion) {
+    const synWords = synonymExpansion.split(/\s+/).filter(Boolean);
+    if (
+      synWords.length > 0 &&
+      synWords.every((sw) => btree.searchPrefix(sw, 1).length > 0 || hay.includes(sw))
+    ) {
+      return { matched: true, quality: 85 };
+    }
+  }
+
+  const vagueTargets = VAGUE_CONCEPT_MAP[q] || (qStem !== q ? VAGUE_CONCEPT_MAP[qStem] : undefined);
+  if (vagueTargets) {
+    for (let i = 0; i < vagueTargets.length; i++) {
+      const vt = vagueTargets[i];
+      if (btree.searchExact(vt).length > 0 || btree.searchPrefix(vt, 1).length > 0) {
+        return { matched: true, quality: 75 };
+      }
+    }
+  }
+
+  // Stage 4: Subsequence / Acronym Prefix on title initials (2 <= q.length <= 5)
+  if (q.length >= 2 && q.length <= 5 && /^[a-z0-9]+$/.test(q) && cardTitle) {
+    const titleInitials = generateTitleInitialisms(cardTitle);
+    if (titleInitials.some((init) => init.includes(q))) {
+      return { matched: true, quality: 80 };
+    }
+  }
+
+  // Stage 5: Shared morphological root range scan in B-Tree (e.g. "differentiating" -> "differentiation")
+  if (q.length >= 5 && /^[a-z0-9]+$/.test(q)) {
+    const rootLen = Math.min(5, q.length - 1);
+    const rootPrefix = q.slice(0, rootLen);
+    const rootHits = btree.searchPrefix(rootPrefix, 12);
+    if (rootHits.some((entry) => entry.key.length >= 5)) {
+      return { matched: true, quality: 72 };
+    }
+  }
+
+  // Stage 6: B-Tree-pruned Bounded Damerau–Levenshtein Fuzzy & Consonant-Subsequence Matching
+  if (q.length >= 4 && /^[a-z0-9]+$/.test(q)) {
+    const maxDist = q.length >= 8 ? 2 : 1;
+    // Use B-Tree prefix scan on the first character (and transposed second character) to prune candidate space
+    const firstCharPrefix = q.slice(0, 1);
+    const candidates = btree.searchPrefix(firstCharPrefix, 80);
+    if (q.length >= 5 && q[0] !== q[1]) {
+      const transposedCandidates = btree.searchPrefix(q[1] + q[0], 16);
+      for (let i = 0; i < transposedCandidates.length; i++) {
+        candidates.push(transposedCandidates[i]);
+      }
+    }
+
+    for (let i = 0; i < candidates.length; i++) {
+      const w = candidates[i].key;
+      if (q.length >= 5 && Math.abs(w.length - q.length) <= maxDist) {
+        if (boundedDamerauLevenshtein(q, w, maxDist) <= maxDist) {
+          return { matched: true, quality: 65 };
+        }
+      }
+      if (q.length >= 5 && w.length > q.length) {
+        const wPrefix = w.slice(0, q.length);
+        if (boundedDamerauLevenshtein(q, wPrefix, 1) <= 1) {
+          return { matched: true, quality: 62 };
+        }
+      }
+      // Consonant abbreviation subsequence (e.g. "trnsnt" -> "transient", "plndrm" -> "palindrome")
+      if (
+        q.length >= 4 &&
+        q.length <= 6 &&
+        !/[aeiou]/.test(q.slice(1)) &&
+        isOrderedSubsequence(q, w)
+      ) {
+        return { matched: true, quality: 55 };
+      }
+    }
+  }
+
+  return { matched: false, quality: 0 };
+}
+
+/**
+ * Checks whether a precomputed card search index matches the query tokens using
+ * the balanced B-Tree index (`SearchBTree`), conversational noise filtering,
+ * and a soft-quorum threshold for 3+ word vague natural-language queries.
  */
 export function matchesSearchTokens(
   searchIndex: string,
@@ -675,12 +1111,40 @@ export function matchesSearchTokens(
 ): boolean {
   if (!tokens.length) return true;
   const hay = (searchIndex || '').toLowerCase();
-  for (let i = 0; i < tokens.length; i++) {
-    if (!matchesSingleToken(hay, tokens[i], cardTitle)) {
+  const btree = getCardVocabularyBTree(hay);
+
+  // Filter out conversational filler words ("how", "to", "find", "what", etc.) when real content tokens exist
+  const contentTokens = tokens.filter((t) => !isConversationalNoiseTerm(t));
+  const effectiveTokens = contentTokens.length > 0 ? contentTokens : tokens;
+
+  let matchedCount = 0;
+  let strongAnchorMatch = false;
+
+  for (let i = 0; i < effectiveTokens.length; i++) {
+    const tok = effectiveTokens[i];
+    const res = matchTokenWithBTreeQuality(hay, btree, tok, cardTitle);
+    if (res.matched) {
+      matchedCount++;
+      if (!isGenericQueryTerm(tok) && res.quality >= 60) {
+        strongAnchorMatch = true;
+      }
+    } else if (effectiveTokens.length <= 2) {
+      // For 1-word and 2-word specific queries, require all content tokens to match
       return false;
     }
   }
-  return true;
+
+  if (matchedCount === effectiveTokens.length) {
+    return true;
+  }
+
+  // For 3+ content-token vague queries, allow B-Tree soft quorum (>= 66% of content tokens + strong anchor)
+  if (effectiveTokens.length >= 3 && strongAnchorMatch) {
+    const requiredQuorum = Math.max(2, Math.ceil(effectiveTokens.length * 0.66));
+    return matchedCount >= requiredQuorum;
+  }
+
+  return false;
 }
 
 /**
@@ -731,8 +1195,15 @@ export function scoreFormulaCardSearch(
   const normTopic = normalizeSearchText(card.topicTitle || '');
   const normQuery = normalizeSearchText(rawQuery || tokens.join(' '));
 
-  const anchorTokens = tokens.filter((t) => !isGenericQueryTerm(t));
+  const rawAnchorCandidates = tokens.filter(
+    (t) => !isGenericQueryTerm(t) && !isConversationalNoiseTerm(t)
+  );
+  const anchorTokens =
+    rawAnchorCandidates.length > 0
+      ? rawAnchorCandidates
+      : tokens.filter((t) => !isGenericQueryTerm(t));
   const genericTokens = tokens.filter((t) => isGenericQueryTerm(t));
+  const cardBTree = getCardVocabularyBTree(idx);
 
   let score = 10;
 
@@ -740,20 +1211,26 @@ export function scoreFormulaCardSearch(
   if (normQuery && normTitle) {
     const stemmedTitlePhrase = titleWords.join(' ');
     const stemmedNoParensPhrase = titleNoParensWords.join(' ');
-    const stemmedQueryPhrase = tokens.map((t) => stemSearchToken(normalizeSearchText(t))).join(' ');
+    const contentTokensForPhrase =
+      rawAnchorCandidates.length > 0 ? tokens.filter((t) => !isConversationalNoiseTerm(t)) : tokens;
+    const stemmedQueryPhrase = contentTokensForPhrase
+      .map((t) => stemSearchToken(normalizeSearchText(t)))
+      .join(' ');
 
     if (
       normTitle === normQuery ||
       normTitleNoParens === normQuery ||
-      stemmedTitlePhrase === stemmedQueryPhrase ||
-      stemmedNoParensPhrase === stemmedQueryPhrase
+      (stemmedQueryPhrase.length >= 3 &&
+        (stemmedTitlePhrase === stemmedQueryPhrase ||
+          stemmedNoParensPhrase === stemmedQueryPhrase))
     ) {
       score += 10000;
     } else if (
       normTitle.includes(normQuery) ||
       normTitleNoParens.includes(normQuery) ||
-      stemmedTitlePhrase.includes(stemmedQueryPhrase) ||
-      stemmedNoParensPhrase.includes(stemmedQueryPhrase)
+      (stemmedQueryPhrase.length >= 3 &&
+        (stemmedTitlePhrase.includes(stemmedQueryPhrase) ||
+          stemmedNoParensPhrase.includes(stemmedQueryPhrase)))
     ) {
       score += 5000;
     }
@@ -767,14 +1244,26 @@ export function scoreFormulaCardSearch(
 
     const wordIdxInTitle = titleWords.findIndex((tw) => tw === a || tw === aStem);
     const exactWordInTitle = wordIdxInTitle !== -1;
-    const substringInTitle = normTitle.includes(a) || (aStem.length >= 3 && normTitle.includes(aStem));
-    const acronymInTitle = a.length >= 2 && a.length <= 5 && titleInitials.some((init) => init === a || init.startsWith(a));
+    const prefixWordInTitle =
+      !exactWordInTitle &&
+      a.length >= 3 &&
+      titleWords.some((tw) => tw.startsWith(a) || (aStem.length >= 3 && tw.startsWith(aStem)));
+    const substringInTitle =
+      normTitle.includes(a) || (aStem.length >= 3 && normTitle.includes(aStem));
+    const acronymInTitle =
+      a.length >= 2 &&
+      a.length <= 5 &&
+      titleInitials.some((init) => init === a || init.startsWith(a));
     const synExpansion = DOMAIN_SYNONYM_MAP[a];
     const synInTitle = synExpansion
       ? synExpansion
           .split(/\s+/)
           .filter((sw) => !isGenericQueryTerm(sw))
           .every((sw) => normTitle.includes(sw))
+      : false;
+    const vagueConcepts = VAGUE_CONCEPT_MAP[a] || (aStem !== a ? VAGUE_CONCEPT_MAP[aStem] : undefined);
+    const vagueInTitle = vagueConcepts
+      ? vagueConcepts.some((vc) => normTitle.includes(vc))
       : false;
 
     if (exactWordInTitle) {
@@ -785,13 +1274,16 @@ export function scoreFormulaCardSearch(
       } else if (wordIdxInTitle === 1) {
         score += 250;
       }
-    } else if (substringInTitle || acronymInTitle || synInTitle) {
+    } else if (substringInTitle || acronymInTitle || synInTitle || prefixWordInTitle) {
       score += 1100;
+      anchorsInTitleCount++;
+    } else if (vagueInTitle) {
+      score += 850;
       anchorsInTitleCount++;
     } else {
       // Check if fuzzy-matched in title (e.g., "formual" or "thevnin" in title)
       const fuzzyInTitle =
-        a.length >= 6 &&
+        a.length >= 5 &&
         titleWords.some(
           (tw) =>
             tw.charCodeAt(0) === a.charCodeAt(0) &&
@@ -801,10 +1293,28 @@ export function scoreFormulaCardSearch(
       if (fuzzyInTitle) {
         score += 900;
         anchorsInTitleCount++;
-      } else if (normTopic.includes(a) || (aStem.length >= 3 && normTopic.includes(aStem))) {
+      } else if (
+        normTopic.includes(a) ||
+        (aStem.length >= 3 && normTopic.includes(aStem)) ||
+        (vagueConcepts && vagueConcepts.some((vc) => normTopic.includes(vc)))
+      ) {
         score += 250;
-      } else if (idx.includes(a) || (aStem.length >= 3 && idx.includes(aStem))) {
-        score += 60;
+      } else if (
+        cardBTree.hasExact(a) ||
+        cardBTree.hasExact(aStem) ||
+        idx.includes(a) ||
+        (aStem.length >= 3 && idx.includes(aStem))
+      ) {
+        score += 80;
+      } else if (
+        (a.length >= 3 && cardBTree.hasPrefix(a)) ||
+        (aStem.length >= 3 && cardBTree.hasPrefix(aStem)) ||
+        (vagueConcepts &&
+          vagueConcepts.some((vc) => cardBTree.hasPrefix(vc) || idx.includes(vc)))
+      ) {
+        score += 55;
+      } else if (a.length >= 5 && cardBTree.hasPrefix(a.slice(0, 4))) {
+        score += 35;
       } else {
         score += 15;
       }
