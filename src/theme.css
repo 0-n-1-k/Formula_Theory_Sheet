@@ -33,6 +33,16 @@
   --dur-med: 0.32s;
   --chrome-h: 58px;
   --fmbar-h: 108px;
+  --blur-sm: 16px;
+  --blur-md: 22px;
+  --blur-lg: 28px;
+  --fs-2xs: 10px;
+  --fs-xs: 11.5px;
+  --fs-sm: 12.5px;
+  --fs-base: 13.5px;
+  --fs-md: 15.5px;
+  --fs-lg: 18px;
+  --fs-xl: 26px;
 }
 
 *, *::before, *::after {
@@ -44,7 +54,7 @@ html {
   background-color: var(--bg);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: var(--fs-md);
   line-height: 1.55;
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
@@ -148,8 +158,8 @@ code, pre, .fmcode, kbd {
   position: relative;
   z-index: 120;
   background: var(--glass-chrome);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(var(--blur-md)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(180%);
   border-bottom: 1px solid var(--border-crisp);
   box-shadow: var(--inner-top), 0 4px 24px rgba(0, 0, 0, 0.4);
 }
@@ -184,7 +194,7 @@ code, pre, .fmcode, kbd {
   background: var(--glass-pill);
   color: var(--text-primary);
   font-family: var(--font-dot);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   letter-spacing: 0.08em;
   cursor: pointer;
   box-shadow: var(--inner-top);
@@ -226,7 +236,7 @@ code, pre, .fmcode, kbd {
 
 .ntype-emblem {
   font-family: var(--font-dot);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   line-height: 1.05;
   color: var(--accent);
   background: rgba(41, 151, 255, 0.08);
@@ -265,8 +275,8 @@ code, pre, .fmcode, kbd {
   padding: 10px;
   border-radius: 14px;
   background: rgba(14, 14, 20, 0.96);
-  backdrop-filter: blur(26px) saturate(190%);
-  -webkit-backdrop-filter: blur(26px) saturate(190%);
+  backdrop-filter: blur(var(--blur-lg)) saturate(190%);
+  -webkit-backdrop-filter: blur(var(--blur-lg)) saturate(190%);
   border: 1px solid rgba(41, 151, 255, 0.42);
   box-shadow: 0 22px 54px rgba(0, 0, 0, 0.82), inset 0 1px 0 rgba(255, 255, 255, 0.14);
   display: flex;
@@ -319,14 +329,14 @@ code, pre, .fmcode, kbd {
 
 .term-archive-code {
   font-family: var(--font-dot);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.08em;
   color: var(--accent);
 }
 
 .term-archive-desc {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -335,7 +345,7 @@ code, pre, .fmcode, kbd {
 
 .term-status-badge {
   font-family: var(--font-dot);
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.08em;
   padding: 2px 7px;
   border-radius: 5px;
@@ -379,15 +389,16 @@ code, pre, .fmcode, kbd {
 
 .buet-ascii-art {
   margin: 0;
-  padding: 3px 6px;
+  padding: 7px 14px;
   font-family: var(--font-mono);
-  font-size: 4.1px;
+  font-size: var(--fs-2xs);
+  zoom: 0.41;
   line-height: 0.92;
   letter-spacing: 0.04em;
   color: #ff6961;
   background: rgba(172, 31, 36, 0.14);
   border: 1px solid rgba(255, 105, 97, 0.34);
-  border-radius: 7px;
+  border-radius: 16px;
   white-space: pre;
   user-select: none;
   flex-shrink: 0;
@@ -425,7 +436,7 @@ code, pre, .fmcode, kbd {
 
 .brand-title {
   margin: 0;
-  font-size: 15.5px;
+  font-size: var(--fs-md);
   font-weight: 600;
   letter-spacing: -0.015em;
   color: var(--text-primary);
@@ -437,7 +448,7 @@ code, pre, .fmcode, kbd {
 
 .brand-sub {
   margin: 0;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   font-family: var(--font-mono);
   letter-spacing: 0.02em;
@@ -473,7 +484,7 @@ code, pre, .fmcode, kbd {
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -497,7 +508,7 @@ code, pre, .fmcode, kbd {
 }
 
 .tab .tn {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 1px 6px;
   border-radius: 5px;
   background: rgba(255, 255, 255, 0.07);
@@ -521,7 +532,7 @@ code, pre, .fmcode, kbd {
   border: 1px solid var(--border-crisp);
   background: var(--glass-pill);
   color: var(--text-primary);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -601,7 +612,7 @@ code, pre, .fmcode, kbd {
 }
 
 #ptxt {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   white-space: nowrap;
 }
@@ -611,7 +622,7 @@ code, pre, .fmcode, kbd {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
 }
 
@@ -631,7 +642,7 @@ code, pre, .fmcode, kbd {
   background: rgba(41, 151, 255, 0.16);
   color: #ffffff;
   font-family: var(--font-dot);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   letter-spacing: 0.06em;
   cursor: pointer;
@@ -679,7 +690,7 @@ code, pre, .fmcode, kbd {
   box-shadow: 0 0 18px rgba(255, 69, 58, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   color: #ff6961;
   font-family: var(--font-dot);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   letter-spacing: 0.08em;
 }
 
@@ -689,7 +700,7 @@ code, pre, .fmcode, kbd {
   background: rgba(255, 69, 58, 0.2);
   border: 1px solid rgba(255, 69, 58, 0.45);
   color: #ff453a;
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.1em;
 }
 
@@ -711,14 +722,14 @@ code, pre, .fmcode, kbd {
 }
 
 .dd-val {
-  font-size: 13.5px;
+  font-size: var(--fs-base);
   font-weight: 700;
   color: #ff453a;
   text-shadow: 0 0 8px rgba(255, 69, 58, 0.45);
 }
 
 .dd-unit {
-  font-size: 9.5px;
+  font-size: var(--fs-2xs);
   color: var(--text-secondary);
   letter-spacing: 0.06em;
 }
@@ -739,8 +750,8 @@ code, pre, .fmcode, kbd {
   position: relative;
   z-index: 110;
   background: var(--glass-chrome);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(var(--blur-md)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(180%);
   border-bottom: 1px solid var(--border-crisp);
   box-shadow: var(--inner-top), 0 10px 30px rgba(0, 0, 0, 0.38);
 }
@@ -775,7 +786,7 @@ code, pre, .fmcode, kbd {
 .course-selector-label,
 .course-selector-toggle {
   font-family: var(--font-dot);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-secondary);
@@ -854,7 +865,7 @@ code, pre, .fmcode, kbd {
   background: rgba(28, 28, 36, 0.65);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -877,7 +888,7 @@ code, pre, .fmcode, kbd {
 .course-pill .course-code,
 .chip-group button[data-c] .course-code {
   font-family: var(--font-dot);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   padding: 2px 7px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.09);
@@ -931,8 +942,8 @@ code, pre, .fmcode, kbd {
   padding: 10px 12px;
   border-radius: 12px;
   background: rgba(14, 14, 20, 0.96);
-  backdrop-filter: blur(24px) saturate(185%);
-  -webkit-backdrop-filter: blur(24px) saturate(185%);
+  backdrop-filter: blur(var(--blur-lg)) saturate(185%);
+  -webkit-backdrop-filter: blur(var(--blur-lg)) saturate(185%);
   border: 1px solid rgba(41, 151, 255, 0.38);
   box-shadow: 0 16px 44px rgba(0, 0, 0, 0.78);
   display: flex;
@@ -949,7 +960,7 @@ code, pre, .fmcode, kbd {
 
 .sh-label {
   font-family: var(--font-dot);
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.1em;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -960,7 +971,7 @@ code, pre, .fmcode, kbd {
   border: none;
   color: var(--accent);
   font-family: var(--font-dot);
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.08em;
   cursor: pointer;
   padding: 2px 5px;
@@ -999,7 +1010,7 @@ code, pre, .fmcode, kbd {
   border: none;
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   padding: 4px 6px;
   cursor: pointer;
   overflow: hidden;
@@ -1012,7 +1023,7 @@ code, pre, .fmcode, kbd {
   border: 1px solid transparent;
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 2px 6px;
   border-radius: 5px;
   cursor: pointer;
@@ -1040,7 +1051,7 @@ code, pre, .fmcode, kbd {
   background: rgba(41, 151, 255, 0.11);
   color: var(--text-primary);
   font-family: var(--font-dot);
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.06em;
   cursor: pointer;
   transition: all var(--dur-fast) var(--ease-out);
@@ -1056,7 +1067,7 @@ code, pre, .fmcode, kbd {
   position: absolute;
   left: 12px;
   font-family: var(--font-dot);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--accent);
   pointer-events: none;
   letter-spacing: 0.08em;
@@ -1071,7 +1082,7 @@ code, pre, .fmcode, kbd {
   background: rgba(8, 8, 12, 0.68);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 13.5px;
+  font-size: var(--fs-base);
   outline: none;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
   transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
@@ -1107,7 +1118,7 @@ code, pre, .fmcode, kbd {
   background: rgba(41, 151, 255, 0.14);
   color: var(--accent);
   font-family: var(--font-dot);
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.06em;
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
@@ -1129,7 +1140,7 @@ code, pre, .fmcode, kbd {
 .fmstat {
   position: absolute;
   right: 10px;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   padding: 2px 7px;
   border-radius: 6px;
@@ -1225,7 +1236,7 @@ mark.search-hl {
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -1266,7 +1277,7 @@ mark.search-hl {
   background: var(--glass-pill);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -1286,7 +1297,7 @@ mark.search-hl {
 
 .tools-trigger-ind {
   font-family: var(--font-dot);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--accent);
   transition: transform var(--dur-fast) var(--ease-out);
 }
@@ -1304,8 +1315,8 @@ mark.search-hl {
   padding: 8px;
   border-radius: 14px;
   background: var(--glass-elevated);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(var(--blur-lg)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-lg)) saturate(180%);
   border: 1px solid var(--border-crisp);
   box-shadow: var(--shadow-dropdown);
   opacity: 0;
@@ -1324,7 +1335,7 @@ mark.search-hl {
 
 .dropdown-sec-label {
   font-family: var(--font-dot);
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-secondary);
@@ -1350,7 +1361,7 @@ mark.search-hl {
   background: transparent;
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--fs-base);
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
@@ -1376,7 +1387,7 @@ mark.search-hl {
 }
 
 .dropdown-item .ntype-badge {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   padding: 1px 6px;
   border-radius: 5px;
@@ -1416,8 +1427,8 @@ mark.search-hl {
   padding: 14px;
   border-radius: 16px;
   background: var(--glass-chrome);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(var(--blur-md)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(180%);
   border: 1px solid var(--border-crisp);
   box-shadow: var(--shadow-card);
   scrollbar-width: thin;
@@ -1434,14 +1445,14 @@ mark.search-hl {
   border-radius: 10px;
   background: rgba(41, 151, 255, 0.1);
   border: 1px solid rgba(41, 151, 255, 0.25);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   flex-shrink: 0;
 }
 
 .focus-pill-tag {
   font-family: var(--font-dot);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--accent);
   letter-spacing: 0.08em;
 }
@@ -1478,7 +1489,7 @@ mark.search-hl {
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--accent);
   padding: 3px 8px;
   margin-bottom: 4px;
@@ -1494,7 +1505,7 @@ mark.search-hl {
   border-radius: 8px;
   color: var(--text-secondary);
   text-decoration: none;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   line-height: 1.35;
   border: 1px solid transparent;
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
@@ -1551,7 +1562,7 @@ mark.search-hl {
   border: 1px solid rgba(41, 151, 255, 0.32);
   color: var(--accent);
   font-family: var(--font-dot);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.06em;
 }
 
@@ -1623,7 +1634,7 @@ details.fmt > summary:hover {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font-size: 15.5px;
+  font-size: var(--fs-md);
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-primary);
@@ -1633,7 +1644,7 @@ details.fmt > summary:hover {
 .fmtt::before {
   content: "[+]";
   font-family: var(--font-dot);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--accent);
   display: inline-block;
   min-width: 24px;
@@ -1658,7 +1669,7 @@ details.fmt > summary::after {
 }
 
 .fmfreq {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 2px 8px;
   border-radius: 6px;
   background: rgba(88, 86, 214, 0.18);
@@ -1667,7 +1678,7 @@ details.fmt > summary::after {
 }
 
 .fmcnt {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   padding: 2px 9px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.07);
@@ -1745,7 +1756,7 @@ body.single-col .fmgrid {
 }
 
 .fmn {
-  font-size: 13.5px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-primary);
   display: inline-flex;
@@ -1756,7 +1767,7 @@ body.single-col .fmgrid {
 }
 
 .thty {
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   padding: 1px 7px;
   border-radius: 5px;
   background: rgba(41, 151, 255, 0.16);
@@ -1780,7 +1791,7 @@ body.single-col .fmgrid {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-secondary);
   font-family: var(--font-dot);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.05em;
   cursor: pointer;
   white-space: nowrap;
@@ -1816,7 +1827,7 @@ body.single-col .fmgrid {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-secondary);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
@@ -1892,7 +1903,7 @@ body.single-col .fmgrid {
   background: rgba(255, 255, 255, 0.04);
   color: var(--accent);
   font-family: var(--font-dot);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.06em;
   cursor: pointer;
   white-space: nowrap;
@@ -1906,7 +1917,7 @@ body.single-col .fmgrid {
 }
 
 .fm-expand-chevron {
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   line-height: 1;
   opacity: 0.85;
 }
@@ -1983,7 +1994,7 @@ body.hide-details .fmdet {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  font-size: 12.8px;
+  font-size: var(--fs-sm);
   line-height: 1.48;
   color: var(--text-secondary);
   padding-top: 2px;
@@ -1996,7 +2007,7 @@ body.hide-details .fmdet {
 }
 
 .fmnote {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: #c7c6ff;
   background: rgba(88, 86, 214, 0.14);
   border: 1px solid rgba(88, 86, 214, 0.28);
@@ -2011,7 +2022,7 @@ body.hide-details .fmdet {
   background: rgba(0, 0, 0, 0.48);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: #e5e5ea;
-  font-size: 12.2px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -2020,7 +2031,7 @@ body.hide-details .fmdet {
 }
 
 .fmhtml {
-  font-size: 13px;
+  font-size: var(--fs-base);
   line-height: 1.52;
   color: var(--text-primary);
   overflow-x: auto;
@@ -2060,7 +2071,7 @@ table.mini {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   border-collapse: collapse;
-  font-size: 12.2px;
+  font-size: var(--fs-sm);
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -2094,7 +2105,7 @@ details.fmd {
 details.fmd > summary {
   list-style: none;
   padding: 7px 11px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--accent);
   cursor: pointer;
@@ -2110,7 +2121,7 @@ details.fmd > summary::-webkit-details-marker {
 details.fmd > summary::after {
   content: "[STEPS +]";
   font-family: var(--font-dot);
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
 }
 
 details.fmd[open] > summary::after {
@@ -2121,7 +2132,7 @@ details.fmd[open] > summary::after {
   margin: 0;
   padding: 8px 14px 10px 28px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   display: flex;
   flex-direction: column;
@@ -2136,9 +2147,7 @@ details.fmd[open] > summary::after {
   gap: 12px;
   padding: 12px 16px;
   border-radius: 14px;
-  background: var(--glass-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(24, 24, 30, 0.88);
   border: 1px solid var(--border-card);
   box-shadow: var(--shadow-card);
 }
@@ -2161,9 +2170,7 @@ details.fmd[open] > summary::after {
   flex-wrap: wrap;
   padding: 12px 14px;
   border-radius: 14px;
-  background: var(--glass-chrome);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background: rgba(18, 18, 24, 0.9);
   border: 1px solid var(--border-crisp);
   box-shadow: var(--shadow-card);
 }
@@ -2178,7 +2185,7 @@ details.fmd[open] > summary::after {
   background: rgba(24, 24, 34, 0.72);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   cursor: pointer;
   transition: all var(--dur-fast) var(--ease-out);
@@ -2199,9 +2206,7 @@ details.fmd[open] > summary::after {
 .practice-slot-card {
   padding: 28px 26px;
   border-radius: 18px;
-  background: var(--glass-card);
-  backdrop-filter: blur(22px) saturate(180%);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  background: rgba(22, 22, 28, 0.9);
   border: 1px solid var(--border-crisp);
   box-shadow: var(--shadow-card);
   display: flex;
@@ -2228,7 +2233,7 @@ details.fmd[open] > summary::after {
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 12.8px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   display: flex;
   align-items: center;
@@ -2312,7 +2317,7 @@ details.fmd[open] > summary::after {
   color: #f5f5f7;
   padding: 2px 7px;
   border-radius: 5px;
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   border: 1px solid rgba(255, 255, 255, 0.18);
   pointer-events: none;
 }
@@ -2334,8 +2339,8 @@ details.fmd[open] > summary::after {
   z-index: 10020;
   padding: 12px 22px 16px;
   background: rgba(10, 10, 16, 0.94);
-  backdrop-filter: blur(28px) saturate(190%);
-  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  backdrop-filter: blur(var(--blur-lg)) saturate(190%);
+  -webkit-backdrop-filter: blur(var(--blur-lg)) saturate(190%);
   border-bottom: 1px solid rgba(41, 151, 255, 0.45);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.9);
   transform: translateY(-105%);
@@ -2444,7 +2449,7 @@ details.fmd[open] > summary::after {
   background: rgba(24, 24, 34, 0.88);
   color: var(--text-secondary);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.2;
   font-weight: 500;
   cursor: pointer;
@@ -2484,7 +2489,7 @@ details.fmd[open] > summary::after {
 }
 
 .fs-hud-topic-title {
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-primary);
   flex: 1 1 auto;
@@ -2496,7 +2501,7 @@ details.fmd[open] > summary::after {
   padding: 2px 8px;
   border-radius: 5px;
   font-family: var(--font-dot);
-  font-size: 9.5px;
+  font-size: var(--fs-2xs);
   line-height: 1.35;
   letter-spacing: 0.04em;
   color: var(--accent);
@@ -2515,7 +2520,7 @@ details.fmd[open] > summary::after {
   background: rgba(41, 151, 255, 0.12);
   color: var(--accent);
   font-family: var(--font-dot);
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.06em;
   cursor: pointer;
   transition: all var(--dur-fast) var(--ease-out);
@@ -2553,8 +2558,8 @@ details.fmd[open] > summary::after {
   border-radius: 12px;
   border: 1px solid rgba(41, 151, 255, 0.45);
   background: rgba(16, 16, 24, 0.94);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(var(--blur-md));
+  -webkit-backdrop-filter: blur(var(--blur-md));
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.85);
   display: flex;
   flex-direction: column;
@@ -2583,7 +2588,7 @@ details.fmd[open] > summary::after {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-primary);
   min-width: 0;
@@ -2620,7 +2625,7 @@ details.fmd[open] > summary::after {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   flex: 1 1 auto;
   overflow-y: auto;
   overflow-x: auto;
@@ -2715,8 +2720,8 @@ details.fmd[open] > summary::after {
   padding: 6px 10px;
   border-radius: 12px;
   background: rgba(14, 14, 20, 0.88);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(var(--blur-sm));
+  -webkit-backdrop-filter: blur(var(--blur-sm));
   border: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65);
   opacity: 0.55;
@@ -2763,8 +2768,8 @@ details.fmd[open] > summary::after {
   padding: 10px 12px;
   border-radius: 12px;
   background: rgba(14, 14, 22, 0.96);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(var(--blur-md));
+  -webkit-backdrop-filter: blur(var(--blur-md));
   border: 1px solid rgba(41, 151, 255, 0.48);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.82);
   display: flex;
@@ -2783,7 +2788,7 @@ details.fmd[open] > summary::after {
 .pdf-zoom-fit-btn {
   height: 22px;
   padding: 0 7px;
-  font-size: 9.5px;
+  font-size: var(--fs-2xs);
 }
 
 .pdf-zoom-slider-row {
@@ -2802,7 +2807,7 @@ details.fmd[open] > summary::after {
 
 .pdf-ctrl-label {
   font-family: var(--font-dot);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.06em;
   color: var(--text-secondary);
   white-space: nowrap;
@@ -2817,7 +2822,7 @@ details.fmd[open] > summary::after {
   background: rgba(0, 0, 0, 0.65);
   color: var(--text-primary);
   font-family: var(--font-dot);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   text-align: center;
   outline: none;
 }
@@ -2841,7 +2846,7 @@ details.fmd[open] > summary::after {
   background: rgba(28, 28, 38, 0.85);
   color: var(--text-primary);
   font-family: var(--font-dot);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.06em;
   cursor: pointer;
   transition: all var(--dur-fast) var(--ease-out);
@@ -2868,7 +2873,8 @@ details.fmd[open] > summary::after {
 .pdf-search-ascii-icon {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 4.5px;
+  font-size: var(--fs-2xs);
+  zoom: 0.45;
   line-height: 0.88;
   letter-spacing: 0.02em;
   color: var(--accent);
@@ -2904,8 +2910,8 @@ details.fmd[open] > summary::after {
   justify-content: center;
   padding: 20px;
   background: rgba(3, 3, 5, 0.72);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(var(--blur-sm));
+  -webkit-backdrop-filter: blur(var(--blur-sm));
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--dur-fast) var(--ease-out);
@@ -2927,9 +2933,7 @@ details.fmd[open] > summary::after {
   overflow-y: auto;
   padding: 22px;
   border-radius: 18px;
-  background: var(--glass-elevated);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  background: rgba(22, 22, 30, 0.96);
   border: 1px solid var(--border-crisp);
   box-shadow: var(--shadow-dropdown);
   transform: scale(0.96);
@@ -2950,12 +2954,12 @@ details.fmd[open] > summary::after {
   padding: 9px 16px;
   border-radius: 999px;
   background: rgba(24, 24, 32, 0.92);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(var(--blur-sm));
+  -webkit-backdrop-filter: blur(var(--blur-sm));
   border: 1px solid rgba(41, 151, 255, 0.45);
   color: var(--text-primary);
   font-family: var(--font-dot);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   letter-spacing: 0.06em;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
   opacity: 0;
@@ -2978,11 +2982,11 @@ details.fmd[open] > summary::after {
   border-radius: 999px;
   border: 1px solid var(--border-crisp);
   background: var(--glass-elevated);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(var(--blur-sm));
+  -webkit-backdrop-filter: blur(var(--blur-sm));
   color: var(--text-primary);
   font-family: var(--font-dot);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.08em;
   cursor: pointer;
   box-shadow: var(--shadow-card);
@@ -3012,7 +3016,7 @@ details.fmd[open] > summary::after {
   border: 1px solid rgba(255, 69, 58, 0.38);
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3038,9 +3042,7 @@ details.fmd[open] > summary::after {
     position: fixed;
     inset: 0;
     z-index: 195;
-    background: rgba(3, 3, 5, 0.62);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    background: rgba(3, 3, 5, 0.72);
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--dur-fast) var(--ease-out);
@@ -3089,7 +3091,7 @@ details.fmd[open] > summary::after {
     background: rgba(255, 214, 10, 0.16);
     color: #ffd60a;
     font-family: var(--font-dot);
-    font-size: 10.5px;
+    font-size: var(--fs-2xs);
     letter-spacing: 0.06em;
     cursor: pointer;
     flex-shrink: 0;
@@ -3120,7 +3122,7 @@ details.fmd[open] > summary::after {
 
   #termSwitcherBtn.ntype-emblem {
     display: inline-flex;
-    font-size: 9.5px;
+    font-size: var(--fs-2xs);
     padding: 3px 6px;
   }
 
@@ -3135,19 +3137,20 @@ details.fmd[open] > summary::after {
   }
 
   .buet-ascii-art {
-    font-size: 3.1px;
-    padding: 2px 4px;
+    font-size: var(--fs-2xs);
+    zoom: 0.31;
+    padding: 6px 12px;
   }
 
   .brand-title {
-    font-size: 13.5px;
+    font-size: var(--fs-base);
   }
 
   .sb-btn,
   .goal-toggle-btn {
     height: 30px;
     padding: 0 9px;
-    font-size: 11px;
+    font-size: var(--fs-xs);
   }
 
   .tabs {
@@ -3158,7 +3161,7 @@ details.fmd[open] > summary::after {
   .tab {
     height: 27px;
     padding: 0 9px;
-    font-size: 11.5px;
+    font-size: var(--fs-xs);
     gap: 5px;
   }
 
@@ -3188,13 +3191,13 @@ details.fmd[open] > summary::after {
   .course-pill,
   .chip-group button[data-c] {
     padding: 5px 11px;
-    font-size: 11.5px;
+    font-size: var(--fs-xs);
     gap: 5px;
   }
 
   .course-pill .course-code,
   .chip-group button[data-c] .course-code {
-    font-size: 10.5px;
+    font-size: var(--fs-2xs);
     padding: 1px 5px;
   }
 
@@ -3213,7 +3216,7 @@ details.fmd[open] > summary::after {
 
   #fmq {
     height: 33px;
-    font-size: 12.5px;
+    font-size: var(--fs-sm);
     padding: 0 110px 0 38px;
   }
 
@@ -3229,13 +3232,13 @@ details.fmd[open] > summary::after {
   .chip-btn {
     height: 26px;
     padding: 0 8px;
-    font-size: 11.5px;
+    font-size: var(--fs-xs);
   }
 
   .tools-trigger {
     height: 30px;
     padding: 0 10px;
-    font-size: 11.5px;
+    font-size: var(--fs-xs);
   }
 
   .tools-dropdown {
@@ -3267,7 +3270,7 @@ details.fmd[open] > summary::after {
   }
 
   .brand-title {
-    font-size: 12.5px;
+    font-size: var(--fs-sm);
   }
 
   .hd-right {
@@ -3296,19 +3299,19 @@ details.fmd[open] > summary::after {
   .tab {
     height: 25px;
     padding: 0 6px;
-    font-size: 11px;
+    font-size: var(--fs-xs);
     gap: 4px;
   }
 
   .tab .tn {
-    font-size: 10px;
+    font-size: var(--fs-2xs);
     padding: 1px 4px;
   }
 
   .goal-toggle-btn {
     height: 27px;
     padding: 0 7px;
-    font-size: 10px;
+    font-size: var(--fs-2xs);
   }
 
   .fmbar-inner {
@@ -3332,13 +3335,13 @@ details.fmd[open] > summary::after {
   .chip-btn {
     height: 24px;
     padding: 0 6px;
-    font-size: 11px;
+    font-size: var(--fs-xs);
   }
 
   .tools-trigger {
     height: 28px;
     padding: 0 8px;
-    font-size: 11px;
+    font-size: var(--fs-xs);
   }
 
   .tools-trigger span:first-child {
@@ -3352,7 +3355,7 @@ details.fmd[open] > summary::after {
   }
 
   .fmtt {
-    font-size: 13.5px;
+    font-size: var(--fs-base);
   }
 
   .fmh {
@@ -3419,7 +3422,7 @@ details.fmd[open] > summary::after {
 }
 
 .bento-deck-sub {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   letter-spacing: 0.01em;
 }
@@ -3439,7 +3442,7 @@ details.fmd[open] > summary::after {
   background: rgba(255, 214, 10, 0.15);
   color: var(--warning);
   font-family: var(--font-dot);
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.05em;
   cursor: pointer;
   white-space: nowrap;
@@ -3453,7 +3456,7 @@ details.fmd[open] > summary::after {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-secondary);
   font-family: var(--font-dot);
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.05em;
   cursor: pointer;
   white-space: nowrap;
@@ -3494,7 +3497,7 @@ details.fmd[open] > summary::after {
 
 .bento-eyebrow {
   font-family: var(--font-dot);
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.08em;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -3502,7 +3505,7 @@ details.fmd[open] > summary::after {
 
 .bento-scope-chip {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   padding: 2px 7px;
   border-radius: 5px;
   background: rgba(41, 151, 255, 0.12);
@@ -3526,7 +3529,7 @@ details.fmd[open] > summary::after {
 
 .bento-kpi-num {
   font-family: var(--font-mono);
-  font-size: 26px;
+  font-size: var(--fs-xl);
   font-weight: 700;
   line-height: 1;
   color: var(--text-primary);
@@ -3535,7 +3538,7 @@ details.fmd[open] > summary::after {
 
 .bento-kpi-sub {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
@@ -3595,14 +3598,14 @@ details.fmd[open] > summary::after {
 
 .bento-course-code {
   font-family: var(--font-dot);
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   color: var(--text-primary);
   letter-spacing: 0.04em;
 }
 
 .bento-course-pct {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--fs-2xs);
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
@@ -3621,7 +3624,7 @@ details.fmd[open] > summary::after {
 
 .bento-signal-dots {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.06em;
   color: var(--warning);
   padding: 2px 7px;
@@ -3632,7 +3635,7 @@ details.fmd[open] > summary::after {
 
 .bento-radar-desc {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.45;
   color: var(--text-secondary);
 }
@@ -3664,7 +3667,7 @@ details.fmd[open] > summary::after {
   background: rgba(0, 0, 0, 0.35);
   color: var(--text-primary);
   font-family: var(--font-dot);
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.03em;
   cursor: pointer;
   transition: all var(--dur-fast) var(--ease-out);
@@ -3698,7 +3701,7 @@ details.fmd[open] > summary::after {
 .bento-chip-count {
   flex-shrink: 0;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   padding: 1px 6px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.08);
@@ -3738,14 +3741,14 @@ details.fmd[open] > summary::after {
 }
 
 .bento-launch-title {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .bento-launch-meta {
   font-family: var(--font-dot);
-  font-size: 9.5px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.05em;
   color: var(--text-secondary);
 }
@@ -3762,7 +3765,7 @@ details.fmt[open].is-high-yield {
 
 .fmt-course-tag {
   font-family: var(--font-dot);
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.06em;
   padding: 2px 7px;
   border-radius: 5px;
@@ -3782,7 +3785,7 @@ details.fmt[open].is-high-yield {
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 3px 9px;
   border-radius: 6px;
   background: rgba(88, 86, 214, 0.16);
@@ -3804,7 +3807,7 @@ details.fmt[open].is-high-yield {
 }
 
 .freq-dots {
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   letter-spacing: 1px;
   line-height: 1;
 }
@@ -3814,7 +3817,7 @@ details.fmt[open].is-high-yield {
   align-items: center;
   gap: 7px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 3px 9px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.05);
@@ -3879,7 +3882,7 @@ details.fmt[open].is-high-yield {
 
 .fm-idx-badge {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   color: var(--text-tertiary);
   padding: 1px 5px;
@@ -3891,7 +3894,7 @@ details.fmt[open].is-high-yield {
 }
 
 .fmn-title-text {
-  font-size: 13.5px;
+  font-size: var(--fs-base);
   font-weight: 650;
   color: var(--text-primary);
   line-height: 1.3;
@@ -3899,7 +3902,7 @@ details.fmt[open].is-high-yield {
 
 .fm-year-tag {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   padding: 1px 6px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.05);
@@ -3947,7 +3950,7 @@ details.fmt[open].is-high-yield {
 
 .fm-spec-label {
   font-family: var(--font-dot);
-  font-size: 9.5px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.08em;
   color: var(--text-tertiary);
   text-transform: uppercase;
@@ -3963,7 +3966,7 @@ details.fmt[open].is-high-yield {
 
 .fmw,
 .fmu {
-  font-size: 12.25px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   color: var(--text-secondary);
 }
@@ -4030,13 +4033,13 @@ details.fmt[open].is-high-yield {
     min-width: 0;
     padding: 6px 9px;
     border-radius: 7px;
-    font-size: 10px;
+    font-size: var(--fs-2xs);
     text-align: left;
   }
 
   .sb-phone-term-caret {
     font-family: var(--font-dot);
-    font-size: 10px;
+    font-size: var(--fs-2xs);
     color: var(--accent);
     flex-shrink: 0;
   }
@@ -4067,7 +4070,7 @@ details.fmt[open].is-high-yield {
 
   .sb-phone-sec-val {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-2xs);
     color: var(--accent);
     padding: 1px 6px;
     border-radius: 4px;
@@ -4120,7 +4123,7 @@ details.fmt[open].is-high-yield {
 
   .sb-phone-course-code {
     font-family: var(--font-dot);
-    font-size: 10.5px;
+    font-size: var(--fs-2xs);
     letter-spacing: 0.05em;
     color: var(--text-primary);
   }
@@ -4130,7 +4133,7 @@ details.fmt[open].is-high-yield {
   }
 
   .sb-phone-course-name {
-    font-size: 10.5px;
+    font-size: var(--fs-2xs);
     color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;

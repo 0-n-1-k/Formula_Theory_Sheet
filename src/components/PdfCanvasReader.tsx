@@ -375,7 +375,7 @@ export const PdfCanvasReader = memo(function PdfCanvasReader({
               aria-label="PDF Zoom Slider Menu"
             >
               <div className="pdf-zoom-dropup-head">
-                <span className="ntype-badge" style={{ color: 'var(--accent)', fontSize: '10.5px' }}>
+                <span className="ntype-badge" style={{ color: 'var(--accent)', fontSize: 'var(--fs-2xs)' }}>
                   ZOOM // {Math.round(scale * 100)}%
                 </span>
                 <button

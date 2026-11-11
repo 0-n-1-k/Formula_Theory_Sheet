@@ -2438,7 +2438,7 @@ export default function App() {
                   >
                     <div className="term-archive-header">
                       <span className="sh-label">BUET EEE TERM ARCHIVE</span>
-                      <span className="ntype-badge" style={{ color: 'var(--accent)', fontSize: '10px' }}>
+                      <span className="ntype-badge" style={{ color: 'var(--accent)', fontSize: 'var(--fs-2xs)' }}>
                         {CURRENT_TERM_CONFIG.shortCode}
                       </span>
                     </div>
@@ -3005,7 +3005,7 @@ export default function App() {
               <div className="sb-phone-term-list" role="menu" aria-label="BUET EEE Term Archive">
                 <div className="term-archive-header">
                   <span className="sh-label">BUET EEE TERM ARCHIVE</span>
-                  <span className="ntype-badge" style={{ color: 'var(--accent)', fontSize: '10px' }}>
+                  <span className="ntype-badge" style={{ color: 'var(--accent)', fontSize: 'var(--fs-2xs)' }}>
                     {CURRENT_TERM_CONFIG.shortCode}
                   </span>
                 </div>
@@ -3178,7 +3178,7 @@ export default function App() {
                           className="ntype-badge"
                           style={{
                             marginLeft: '6px',
-                            fontSize: '9.5px',
+                            fontSize: 'var(--fs-2xs)',
                             color: 'var(--success)',
                           }}
                         >
@@ -3391,7 +3391,7 @@ export default function App() {
           {isZeroMatch ? (
             <div className="search-empty-state" role="status">
               <div className="ntype-badge">[:: 0 CARDS MATCH CURRENT FILTER ::]</div>
-              <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '13.5px' }}>
+              <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--fs-base)' }}>
                 No formulas or theorems matched your active search query or filter criteria.
               </p>
               <button
@@ -3448,7 +3448,7 @@ export default function App() {
                           className="ntype-badge"
                           style={{
                             color: isModActive ? '#ffffff' : 'var(--accent)',
-                            fontSize: '10.5px',
+                            fontSize: 'var(--fs-2xs)',
                           }}
                         >
                           {mod.courseBadge}
@@ -3467,10 +3467,10 @@ export default function App() {
                         <span className="ntype-badge">{activePracticeModule.courseBadge}</span>
                         <span className="thty">MODULE: {activePracticeModule.id.toUpperCase()}</span>
                       </div>
-                      <h2 style={{ margin: '0 0 4px', fontSize: '18px' }}>
+                      <h2 style={{ margin: '0 0 4px', fontSize: 'var(--fs-lg)' }}>
                         {activePracticeModule.title}
                       </h2>
-                      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '13px' }}>
+                      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--fs-base)' }}>
                         {activePracticeModule.subtitle}
                       </p>
                     </div>
@@ -3628,7 +3628,7 @@ export default function App() {
                             border: '1px solid var(--accent)',
                             background: 'rgba(8, 8, 12, 0.92)',
                             color: 'var(--text-primary)',
-                            fontSize: '13.5px',
+                            fontSize: 'var(--fs-base)',
                             outline: 'none',
                           }}
                         />
@@ -4033,7 +4033,7 @@ export default function App() {
                           <div
                             style={{
                               fontFamily: 'var(--font-mono)',
-                              fontSize: '14px',
+                              fontSize: 'var(--fs-base)',
                               letterSpacing: '0.12em',
                               textTransform: 'uppercase',
                               color: 'var(--text-secondary)',
@@ -4117,7 +4117,7 @@ export default function App() {
             <div className="fcbody">
               <div
                 style={{
-                  fontSize: '15px',
+                  fontSize: 'var(--fs-md)',
                   fontWeight: 600,
                   marginBottom: '10px',
                   color: 'var(--text-primary)',
@@ -4208,7 +4208,7 @@ export default function App() {
                   borderRadius: '10px',
                   padding: '10px',
                   fontFamily: 'var(--font-mono)',
-                  fontSize: '12px',
+                  fontSize: 'var(--fs-sm)',
                 }}
               />
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
