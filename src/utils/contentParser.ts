@@ -1,6 +1,7 @@
 import type { FormulaCardRecord } from './formulaSearch';
 import { decodeHtmlEntities } from './mathParser';
 import type { CourseCode } from './storageSafety';
+import { cleanCardTitle } from './titleCleaner';
 
 export interface TopicSectionRecord {
   id: string;
@@ -100,9 +101,10 @@ export function parseTopicSections(html: string): TopicSectionRecord[] {
         (rawCard.match(/<span class="fmn">([\s\S]*?)<\/span>\s*<span class="fmb">/) || [])[1] || '';
       const badgeMatch = fmnRaw.match(/<span class="thty">([\s\S]*?)<\/span>/);
       const badge = badgeMatch ? decodeHtmlEntities(badgeMatch[1]).trim() : undefined;
-      const cardTitle = decodeHtmlEntities(
+      const rawCardTitle = decodeHtmlEntities(
         fmnRaw.replace(/<span class="thty">[\s\S]*?<\/span>/g, '')
       ).trim();
+      const cleanedTitle = cleanCardTitle(rawCardTitle, cardId);
 
       const copyAttrMatch = rawCard.match(/data-t="([^"]*)"/);
       const copyText = copyAttrMatch
@@ -155,7 +157,9 @@ export function parseTopicSections(html: string): TopicSectionRecord[] {
         course,
         topicId: id,
         topicTitle: title,
-        title: cardTitle,
+        title: cleanedTitle.title,
+        fullTitle: rawCardTitle,
+        examTag: cleanedTitle.examTag,
         badge,
         cardTypeClass,
         copyText,

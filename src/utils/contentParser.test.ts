@@ -40,8 +40,18 @@ test('parseTopicSections extracts all 66 formula sections (59 course + 7 GEN = 5
 
   const allThmCards = thmSections.flatMap((s) => s.cards);
   const rolleCard = allThmCards.find((c) => c.id === 't-m1571:9');
-  assert.ok(rolleCard?.title.includes("Rolle's Geometric Mean Proof"), 't-m1571:9 should retain Rolle & MVT proof card');
+  assert.equal(rolleCard?.title, "Rolle's & MVT Exam Proofs", 't-m1571:9 should have cleaned textbook title');
+  assert.equal(rolleCard?.examTag, '2012–2025', 't-m1571:9 should have extracted examTag');
+  assert.ok(
+    rolleCard?.fullTitle?.includes("Rolle's Geometric Mean Proof"),
+    't-m1571:9 should retain fullTitle with Rolle & MVT proof details'
+  );
   assert.equal(rolleCard?.steps?.length, 4, 't-m1571:9 should have 4 proof steps');
+
+  const cseReminders = allFmCards.find((c) => c.id === 'cse-c:6');
+  assert.equal(cseReminders?.title, 'Top 40 C Exam Reminders & Core Mnemonics');
+  assert.equal(cseReminders?.examTag, 'Sec. 1.1–1.2');
+  assert.ok(cseReminders?.fullTitle?.includes('Top 40 Exam Reminders (1–40)'));
 });
 
 test('parseNavContent extracts all course navigation groups for #navF and #navT', () => {
@@ -97,7 +107,11 @@ test('parseTopicSections decodes residual HTML entities in copyText and rawLatex
     't-m1571:8',
   ]) {
     const card = cardById.get(id);
-    assert.ok(card?.title.includes('$'), `Expected ${id} title to contain $...$ math delimiters`);
+    assert.ok(
+      (card?.fullTitle || card?.title || '').includes('$'),
+      `Expected ${id} fullTitle or title to contain $...$ math delimiters`
+    );
   }
 });
+
 

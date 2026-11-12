@@ -36,6 +36,15 @@ import {
   type FormulaCardRecord,
   type TheoremCategoryFilter,
 } from './utils/formulaSearch';
+import { warmUpEmbeddingModel } from './utils/embeddingModel';
+import {
+  computeHybridCardScore,
+  computeLexicalConfidence,
+  getSearchDebugMode,
+  MIN_SEMANTIC_SIMILARITY,
+  rankBySemanticSimilarity,
+  shouldUseSemanticRanking,
+} from './utils/semanticSearch';
 import {
   highlightHtmlContent,
   highlightPlainTextToHtml,
@@ -59,7 +68,6 @@ import {
   PINNED_DEFAULT_WIDTH,
   PINNED_MIN_HEIGHT,
   PINNED_MIN_WIDTH,
-  shouldCardBodyBeCollapsible,
   type CourseCode,
   type PersistedAppState,
   type PinnedCardLayout,
@@ -364,14 +372,23 @@ function computeCardLengthScore(card: FormulaCardRecord): number {
 }
 
 /**
- * Determines whether a card contains wide tables, multi-column matrices, or
- * long code blocks that look cleaner spanning the full grid width (`grid-column: 1 / -1`).
+ * Determines whether a card contains wide tables, multi-column matrices,
+ * long code blocks, or dense multi-item lists/prose that look cleaner spanning
+ * the full grid width (`grid-column: 1 / -1`) with no neighboring card beside them.
  */
-function shouldCardSpanFullWidth(card: FormulaCardRecord): boolean {
-  if (card.htmlContent && /<table[\s>]/i.test(card.htmlContent)) {
-    const rows = (card.htmlContent.match(/<tr[\s>]/gi) || []).length;
-    const cols = (card.htmlContent.match(/<th[\s>]/gi) || []).length;
-    if (rows >= 4 || cols >= 4 || card.htmlContent.length > 620) return true;
+export function shouldCardSpanFullWidth(card: FormulaCardRecord): boolean {
+  if (card.htmlContent) {
+    if (/<table[\s>]/i.test(card.htmlContent)) {
+      const rows = (card.htmlContent.match(/<tr[\s>]/gi) || []).length;
+      const cols = (card.htmlContent.match(/<th[\s>]/gi) || []).length;
+      if (rows >= 4 || cols >= 4 || card.htmlContent.length > 620) return true;
+    }
+    const listItems = (card.htmlContent.match(/<li[\s>]/gi) || []).length;
+    const paragraphs = (card.htmlContent.match(/<p[\s>]/gi) || []).length;
+    const breaks = (card.htmlContent.match(/<br[\s/>]/gi) || []).length;
+    if (listItems >= 6 || paragraphs >= 4 || breaks >= 6 || card.htmlContent.length >= 600) {
+      return true;
+    }
   }
   if (card.codeContent) {
     const lines = card.codeContent.split('\n');
@@ -379,6 +396,9 @@ function shouldCardSpanFullWidth(card: FormulaCardRecord): boolean {
     if (lines.length >= 12 || maxLineLen >= 68) return true;
   }
   if (card.rawLatex && card.rawLatex.length > 290) {
+    return true;
+  }
+  if (card.steps && card.steps.length >= 10) {
     return true;
   }
   return false;
@@ -453,18 +473,39 @@ export const FormulaCardView = memo(function FormulaCardView({
   highlightTokens,
 }: FormulaCardViewProps) {
   const [isRevealed, setIsRevealed] = useState<boolean>(false);
-  const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [stepsOpen, setStepsOpen] = useState<boolean>(false);
-  const cardRef = useRef<HTMLDivElement | null>(null);
-  const bodyRef = useRef<HTMLDivElement | null>(null);
   const copyPayload = card.copyText ?? (card.rawLatex || card.codeContent || card.title);
   const typeCls = card.cardTypeClass || 'tex';
   const hasHighlight = Boolean(highlightTokens && highlightTokens.length > 0);
   const activeHighlightTokens = hasHighlight ? highlightTokens : undefined;
 
-  const { mainTitle, metaTag } = useMemo(
-    () => splitCardTitleAndMeta(card.title),
-    [card.title]
+  const { mainTitle, metaTag } = useMemo(() => {
+    if (card.examTag) {
+      return { mainTitle: card.title, metaTag: card.examTag };
+    }
+    return splitCardTitleAndMeta(card.title);
+  }, [card.title, card.examTag]);
+
+  const cleanBodyText = useMemo(
+    () =>
+      card.bodyText
+        ? card.bodyText.replace(
+            /^\s*(?:<(?:b|strong)>\s*)?(?:Where|Conditions)\s*:?\s*(?:<\/(?:b|strong)>\s*)?:?\s*/i,
+            ''
+          )
+        : '',
+    [card.bodyText]
+  );
+
+  const cleanUseText = useMemo(
+    () =>
+      card.useText
+        ? card.useText.replace(
+            /^\s*(?:<(?:b|strong)>\s*)?(?:Use|Exam Application)\s*:?\s*(?:<\/(?:b|strong)>\s*)?:?\s*/i,
+            ''
+          )
+        : '',
+    [card.useText]
   );
 
   useEffect(() => {
@@ -473,27 +514,66 @@ export const FormulaCardView = memo(function FormulaCardView({
     }
   }, [selfTest]);
 
-  const isCollapsible = useMemo(
-    () => shouldCardBodyBeCollapsible(card),
-    [card]
-  );
-  const effectivelyExpanded = isExpanded || hasHighlight;
-  const isCollapsed = isCollapsible && !effectivelyExpanded;
+  const htmlMultiColClass = useMemo(() => {
+    if (!isWide || !card.htmlContent) {
+      return 'fmhtml';
+    }
+    const len = card.htmlContent.length;
+    const liCount = (card.htmlContent.match(/<li[\s>]/gi) || []).length;
+    const pCount = (card.htmlContent.match(/<p[\s>]/gi) || []).length;
+    const tblCount = (card.htmlContent.match(/<table[\s>]/gi) || []).length;
+    const trCount = (card.htmlContent.match(/<tr[\s>]/gi) || []).length;
+    const brCount = (card.htmlContent.match(/<br\s*\/?>/gi) || []).length;
 
-  const handleToggleExpand = useCallback(() => {
-    setIsExpanded((prev) => {
-      const next = !prev;
-      if (!next && cardRef.current && typeof window !== 'undefined') {
-        const rect = cardRef.current.getBoundingClientRect();
-        if (rect.top < 80) {
-          window.requestAnimationFrame(() => {
-            cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          });
+    const shouldMultiCol =
+      liCount >= 6 ||
+      tblCount >= 2 ||
+      (tblCount >= 1 && trCount >= 12) ||
+      pCount >= 3 ||
+      (len >= 1800 && brCount >= 5);
+
+    if (!shouldMultiCol) {
+      return 'fmhtml';
+    }
+    if (liCount >= 14 || (tblCount === 0 && len >= 2200)) {
+      return 'fmhtml fmhtml-cols fmhtml-cols-3';
+    }
+    return 'fmhtml fmhtml-cols';
+  }, [isWide, card.htmlContent]);
+
+  const splitCodeCols = useMemo(() => {
+    if (!isWide || !card.codeContent) return null;
+    const lines = card.codeContent.split('\n');
+    if (lines.length < 16) return null;
+
+    const mid = Math.floor(lines.length / 2);
+    const minIdx = Math.max(6, Math.floor(lines.length * 0.32));
+    const maxIdx = Math.min(lines.length - 6, Math.ceil(lines.length * 0.68));
+
+    let bestSplit = -1;
+    let bestDist = Infinity;
+    for (let i = minIdx; i <= maxIdx; i++) {
+      const trimmed = lines[i].trim();
+      const prevTrimmed = lines[i - 1]?.trim() || '';
+      const isBlank = trimmed === '';
+      const isTopCommentAfterBrace =
+        (trimmed.startsWith('/*') || trimmed.startsWith('//')) &&
+        (prevTrimmed === '}' || prevTrimmed === '};' || prevTrimmed === '');
+      if (isBlank || isTopCommentAfterBrace) {
+        const dist = Math.abs(i - mid);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestSplit = isBlank ? i + 1 : i;
         }
       }
-      return next;
-    });
-  }, []);
+    }
+
+    const splitAt = bestSplit !== -1 ? bestSplit : mid;
+    const leftCode = lines.slice(0, splitAt).join('\n').replace(/\n+$/, '');
+    const rightCode = lines.slice(splitAt).join('\n').replace(/^\n+/, '');
+    if (!leftCode || !rightCode) return null;
+    return [leftCode, rightCode] as const;
+  }, [isWide, card.codeContent]);
 
   const handleCardClick = useCallback(() => {
     if (selfTest || (typeof document !== 'undefined' && document.body.classList.contains('self-test'))) {
@@ -503,15 +583,14 @@ export const FormulaCardView = memo(function FormulaCardView({
 
   return (
     <div
-      ref={cardRef}
-      className={`fmi ${typeCls}${isWide ? ' is-wide' : ''}${isStarred ? ' starred' : ''}${isLearned ? ' learned' : ''}${isRevealed ? ' revealed' : ''}${isCollapsible ? ' is-collapsible' : ''}${isCollapsed ? ' is-collapsed' : ''}${effectivelyExpanded ? ' is-expanded' : ''}${isHidden ? ' hidden' : ''}`}
+      className={`fmi ${typeCls}${isWide ? ' is-wide' : ''}${isStarred ? ' starred' : ''}${isLearned ? ' learned' : ''}${isRevealed ? ' revealed' : ''}${isHidden ? ' hidden' : ''}`}
       data-k={card.id}
       data-s={card.keywords}
       hidden={isHidden}
       onClick={handleCardClick}
     >
       <div className="fmh">
-        <span className="fmn">
+        <span className="fmn" title={card.fullTitle || card.title}>
           {cardIndex !== undefined ? (
             <span className="fm-idx-badge">
               #{String(cardIndex).padStart(2, '0')}
@@ -604,13 +683,10 @@ export const FormulaCardView = memo(function FormulaCardView({
           ) : null}
         </span>
       </div>
-      <div
-        ref={bodyRef}
-        className={`fmbody${isCollapsed ? ' is-collapsed' : ''}${effectivelyExpanded ? ' is-expanded' : ''}`}
-      >
+      <div className="fmbody">
         {card.htmlContent ? (
           <SecondaryMathText
-            className="fmhtml"
+            className={htmlMultiColClass}
             content={card.htmlContent}
             highlightTokens={activeHighlightTokens}
           />
@@ -623,42 +699,54 @@ export const FormulaCardView = memo(function FormulaCardView({
           />
         ) : null}
         {card.codeContent ? (
-          <pre className="fmcode">
-            {hasHighlight ? (
-              <code
-                dangerouslySetInnerHTML={{
-                  __html: highlightPlainTextToHtml(card.codeContent, activeHighlightTokens),
-                }}
-              />
-            ) : (
-              <code>{card.codeContent}</code>
-            )}
-          </pre>
+          splitCodeCols ? (
+            <div className="fmcode-multicol-grid">
+              {splitCodeCols.map((colText, colIdx) => (
+                <pre key={colIdx} className="fmcode">
+                  {hasHighlight ? (
+                    <code
+                      dangerouslySetInnerHTML={{
+                        __html: highlightPlainTextToHtml(colText, activeHighlightTokens),
+                      }}
+                    />
+                  ) : (
+                    <code>{colText}</code>
+                  )}
+                </pre>
+              ))}
+            </div>
+          ) : (
+            <pre className="fmcode">
+              {hasHighlight ? (
+                <code
+                  dangerouslySetInnerHTML={{
+                    __html: highlightPlainTextToHtml(card.codeContent, activeHighlightTokens),
+                  }}
+                />
+              ) : (
+                <code>{card.codeContent}</code>
+              )}
+            </pre>
+          )
         ) : null}
-        {card.bodyText || card.useText ? (
+        {cleanBodyText || cleanUseText ? (
           <div className="fmdet">
-            {card.bodyText ? (
+            {cleanBodyText ? (
               <div className="fm-spec-pod fmw-pod">
                 <span className="fm-spec-label">PARAMETERS // CONTEXT</span>
                 <SecondaryMathText
-                  className={`fmw${isCollapsed ? ' is-clamped' : ''}`}
-                  content={card.bodyText.replace(
-                    /^\s*(?:<(?:b|strong)>\s*)?(?:Where|Conditions)\s*:?\s*(?:<\/(?:b|strong)>\s*)?:?\s*/i,
-                    ''
-                  )}
+                  className="fmw"
+                  content={cleanBodyText}
                   highlightTokens={activeHighlightTokens}
                 />
               </div>
             ) : null}
-            {card.useText ? (
+            {cleanUseText ? (
               <div className="fm-spec-pod fmu-pod">
                 <span className="fm-spec-label">APPLICATION // STRATEGY</span>
                 <SecondaryMathText
-                  className={`fmu${isCollapsed ? ' is-clamped' : ''}`}
-                  content={card.useText.replace(
-                    /^\s*(?:<(?:b|strong)>\s*)?(?:Use|Exam Application)\s*:?\s*(?:<\/(?:b|strong)>\s*)?:?\s*/i,
-                    ''
-                  )}
+                  className="fmu"
+                  content={cleanUseText}
                   highlightTokens={activeHighlightTokens}
                 />
               </div>
@@ -682,13 +770,10 @@ export const FormulaCardView = memo(function FormulaCardView({
         {card.steps && card.steps.length > 0 ? (
           <details
             className="fmd"
-            open={stepsOpen || hasHighlight}
+            open={stepsOpen}
             onToggle={(e) => {
               const isOpenNow = (e.currentTarget as HTMLDetailsElement).open;
               setStepsOpen(isOpenNow);
-              if (isOpenNow && !isExpanded) {
-                setIsExpanded(true);
-              }
             }}
           >
             <summary>
@@ -699,7 +784,7 @@ export const FormulaCardView = memo(function FormulaCardView({
                 highlightTokens={activeHighlightTokens}
               />
             </summary>
-            {stepsOpen || hasHighlight ? (
+            {stepsOpen ? (
               <ol className="fmsteps">
                 {card.steps.map((step, idx) => (
                   <SecondaryMathText
@@ -715,28 +800,42 @@ export const FormulaCardView = memo(function FormulaCardView({
           </details>
         ) : null}
       </div>
-      {isCollapsible && !hasHighlight ? (
-        <div className={`fm-expand-bar${isExpanded ? ' expanded' : ''}`}>
-          <button
-            type="button"
-            className="fm-expand-btn"
-            aria-expanded={isExpanded}
-            aria-label={isExpanded ? `Show less of ${card.title}` : `Show more of ${card.title}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleToggleExpand();
-            }}
-          >
-            <span>{isExpanded ? 'Show Less' : 'Show More'}</span>
-            <span className="fm-expand-chevron" aria-hidden="true">
-              {isExpanded ? '▴' : '▾'}
-            </span>
-          </button>
-        </div>
-      ) : null}
     </div>
   );
 });
+
+export function computeGridRowLayout(
+  items: ReadonlyArray<{ card: FormulaCardRecord; isWide: boolean }>
+): {
+  partnerById: Map<string, string>;
+  promotedWideIds: Set<string>;
+} {
+  const partnerById = new Map<string, string>();
+  const promotedWideIds = new Set<string>();
+
+  let pendingLeftId: string | null = null;
+  for (const item of items) {
+    if (item.isWide) {
+      if (pendingLeftId !== null) {
+        promotedWideIds.add(pendingLeftId);
+        pendingLeftId = null;
+      }
+    } else {
+      if (pendingLeftId === null) {
+        pendingLeftId = item.card.id;
+      } else {
+        partnerById.set(pendingLeftId, item.card.id);
+        partnerById.set(item.card.id, pendingLeftId);
+        pendingLeftId = null;
+      }
+    }
+  }
+  if (pendingLeftId !== null && items.some((v) => v.isWide)) {
+    promotedWideIds.add(pendingLeftId);
+  }
+
+  return { partnerById, promotedWideIds };
+}
 
 export interface VisibleSectionCardItem {
   card: FormulaCardRecord;
@@ -785,6 +884,8 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
   const freqScore = useMemo(() => parseFreqScore(section.freqBadge), [section.freqBadge]);
   const totalCards = section.cards.length;
   const topicPct = totalCards > 0 ? Math.round((learnedInTopic / totalCards) * 100) : 0;
+
+  const rowLayout = useMemo(() => computeGridRowLayout(visibleCards), [visibleCards]);
 
   return (
     <details
@@ -837,24 +938,28 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
           ) : null}
         </span>
       </summary>
-      {isOpen ? (
+      {isOpen && !sectionHidden ? (
         <div className="fmgrid">
-          {visibleCards.map(({ card, isLearned, isStarred, isWide }, idx) => (
-            <FormulaCardView
-              key={`${keyPrefix}${card.id}`}
-              card={card}
-              cardIndex={idx + 1}
-              isWide={isWide}
-              isLearned={isLearned}
-              isStarred={isStarred}
-              isHidden={false}
-              selfTest={selfTest}
-              onToggleStar={onToggleStar}
-              onToggleLearned={onToggleLearned}
-              onCopyLatex={onCopyLatex}
-              highlightTokens={highlightTokens}
-            />
-          ))}
+          {visibleCards.map(({ card, isLearned, isStarred, isWide }, idx) => {
+            const effectiveIsWide = isWide || rowLayout.promotedWideIds.has(card.id);
+
+            return (
+              <FormulaCardView
+                key={`${keyPrefix}${card.id}`}
+                card={card}
+                cardIndex={idx + 1}
+                isWide={effectiveIsWide}
+                isLearned={isLearned}
+                isStarred={isStarred}
+                isHidden={false}
+                selfTest={selfTest}
+                onToggleStar={onToggleStar}
+                onToggleLearned={onToggleLearned}
+                onCopyLatex={onCopyLatex}
+                highlightTokens={highlightTokens}
+              />
+            );
+          })}
         </div>
       ) : null}
     </details>
@@ -914,6 +1019,11 @@ export default function App() {
   );
   const [searchInput, setSearchInput] = useState<string>('');
   const deferredQuery = useDeferredValue(searchInput);
+  const [semanticResult, setSemanticResult] = useState<{
+    query: string;
+    scores: Map<string, number>;
+  } | null>(null);
+  const searchDebugMode = useMemo(() => getSearchDebugMode(), []);
 
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth > 1024 : true
@@ -943,6 +1053,10 @@ export default function App() {
   // Decoupled Fullscreen HUD state (never exits fullscreen or changes persisted.tab)
   const [hudQuery, setHudQuery] = useState<string>('');
   const deferredHudQuery = useDeferredValue(hudQuery);
+  const [hudSemanticResult, setHudSemanticResult] = useState<{
+    query: string;
+    scores: Map<string, number>;
+  } | null>(null);
   const [hudScope, setHudScope] = useState<'ALL' | 'FM' | 'THM'>('ALL');
   const [hudCourseScope, setHudCourseScope] = useState<'COURSE' | 'ALL'>('COURSE');
   const [hudRenderLimit, setHudRenderLimit] = useState<number>(12);
@@ -969,6 +1083,7 @@ export default function App() {
     }
     return initial;
   });
+  const [searchToggledTopics, setSearchToggledTopics] = useState<Record<string, boolean>>({});
 
   const topChromeRef = useRef<HTMLElement | null>(null);
   const fmbarRef = useRef<HTMLElement | null>(null);
@@ -1410,12 +1525,137 @@ export default function App() {
     [deferredQuery]
   );
 
+  // Debounced semantic similarity scoring (180ms) with cancellation flag
+  useEffect(() => {
+    const trimmed = deferredQuery.trim();
+    if (!trimmed || searchDebugMode === 'lexical') {
+      setSemanticResult(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      rankBySemanticSimilarity(trimmed)
+        .then((scores) => {
+          if (!cancelled) {
+            setSemanticResult({ query: trimmed, scores });
+          }
+        })
+        .catch(() => {});
+    }, 180);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [deferredQuery, searchDebugMode]);
+
+  useEffect(() => {
+    const trimmed = deferredHudQuery.trim();
+    if (!trimmed || searchDebugMode === 'lexical') {
+      setHudSemanticResult(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      rankBySemanticSimilarity(trimmed)
+        .then((scores) => {
+          if (!cancelled) {
+            setHudSemanticResult({ query: trimmed, scores });
+          }
+        })
+        .catch(() => {});
+    }, 180);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [deferredHudQuery, searchDebugMode]);
+
+  const semanticScores = useMemo(
+    () =>
+      semanticResult && semanticResult.query === deferredQuery.trim()
+        ? semanticResult.scores
+        : null,
+    [semanticResult, deferredQuery]
+  );
+
+  const hudSemanticScores = useMemo(
+    () =>
+      hudSemanticResult && hudSemanticResult.query === deferredHudQuery.trim()
+        ? hudSemanticResult.scores
+        : null,
+    [hudSemanticResult, deferredHudQuery]
+  );
+
   const activeIndexedPool = useMemo(() => {
     if (isGenSelected) return genCardsWithIndex;
     if (persisted.tab === 'fm') return fmCardsWithIndex;
     if (persisted.tab === 'thm') return thmCardsWithIndex;
     return [...fmCardsWithIndex, ...thmCardsWithIndex];
   }, [isGenSelected, persisted.tab, fmCardsWithIndex, thmCardsWithIndex, genCardsWithIndex]);
+
+  const bestTabLexicalConfidence = useMemo(() => {
+    if (deferredTokens.length === 0) return 0;
+    const isThmTab = persisted.tab === 'thm' && !isGenSelected;
+    const combinedPool =
+      !isGenSelected && persisted.course === 'ALL'
+        ? [...activeIndexedPool, ...genCardsWithIndex]
+        : activeIndexedPool;
+    let bestRawScore = 0;
+    for (const { card, searchIndex } of combinedPool) {
+      const courseMatch =
+        persisted.course === 'ALL' || card.course === persisted.course;
+      const thmMatch =
+        isThmTab && (card.course !== 'GEN' || thmFilter !== 'all')
+          ? matchesTheoremCategoryFilter(card.badge, thmFilter)
+          : true;
+      if (!courseMatch || !thmMatch) continue;
+      if (highYieldOnly && !highYieldTopicIds.has(card.topicId)) continue;
+      const isLearned = Boolean(persisted.learned[card.id]);
+      const isStarred = Boolean(persisted.starred[card.id]);
+      const statusMatch =
+        persisted.status === 'all'
+          ? true
+          : persisted.status === 'starred'
+          ? isStarred
+          : card.course !== 'GEN' && !isLearned;
+      if (!statusMatch) continue;
+      const lexScore = scoreFormulaCardSearch(
+        card,
+        deferredTokens,
+        deferredQuery,
+        searchIndex
+      );
+      if (lexScore > bestRawScore) {
+        bestRawScore = lexScore;
+      }
+    }
+    return computeLexicalConfidence(bestRawScore, deferredTokens);
+  }, [
+    deferredTokens,
+    deferredQuery,
+    persisted.tab,
+    persisted.course,
+    persisted.status,
+    persisted.learned,
+    persisted.starred,
+    isGenSelected,
+    thmFilter,
+    highYieldOnly,
+    highYieldTopicIds,
+    activeIndexedPool,
+    genCardsWithIndex,
+  ]);
+
+  const useTabSemantic = useMemo(
+    () =>
+      deferredTokens.length > 0 &&
+      shouldUseSemanticRanking(
+        bestTabLexicalConfidence,
+        semanticScores,
+        searchDebugMode
+      ),
+    [deferredTokens.length, bestTabLexicalConfidence, semanticScores, searchDebugMode]
+  );
 
   const filterSummary = useMemo(() => {
     const isThmTab = persisted.tab === 'thm' && !isGenSelected;
@@ -1447,11 +1687,22 @@ export default function App() {
           ? isStarred
           : card.course !== 'GEN' && !isLearned;
 
-      if (
-        statusMatch &&
-        (deferredTokens.length === 0 ||
-          matchesSearchTokens(searchIndex, deferredTokens, card.title))
-      ) {
+      const queryMatch =
+        deferredTokens.length === 0
+          ? true
+          : useTabSemantic
+          ? computeHybridCardScore(
+              card.id,
+              scoreFormulaCardSearch(card, deferredTokens, deferredQuery, searchIndex),
+              semanticScores,
+              true,
+              MIN_SEMANTIC_SIMILARITY,
+              searchIndex,
+              deferredTokens
+            ) > 0
+          : matchesSearchTokens(searchIndex, deferredTokens, card.title);
+
+      if (statusMatch && queryMatch) {
         visibleCards++;
         visibleIds.push(card.id);
       }
@@ -1474,6 +1725,9 @@ export default function App() {
     isGenSelected,
     thmFilter,
     deferredTokens,
+    deferredQuery,
+    useTabSemantic,
+    semanticScores,
     highYieldOnly,
     highYieldTopicIds,
   ]);
@@ -1495,11 +1749,21 @@ export default function App() {
           : persisted.status === 'starred'
           ? isStarred
           : false;
-      if (
-        statusMatch &&
-        (deferredTokens.length === 0 ||
-          matchesSearchTokens(searchIndex, deferredTokens, card.title))
-      ) {
+      const queryMatch =
+        deferredTokens.length === 0
+          ? true
+          : useTabSemantic
+          ? computeHybridCardScore(
+              card.id,
+              scoreFormulaCardSearch(card, deferredTokens, deferredQuery, searchIndex),
+              semanticScores,
+              true,
+              MIN_SEMANTIC_SIMILARITY,
+              searchIndex,
+              deferredTokens
+            ) > 0
+          : matchesSearchTokens(searchIndex, deferredTokens, card.title);
+      if (statusMatch && queryMatch) {
         count++;
       }
     }
@@ -1510,6 +1774,9 @@ export default function App() {
     persisted.status,
     persisted.starred,
     deferredTokens,
+    deferredQuery,
+    useTabSemantic,
+    semanticScores,
     genCardsWithIndex,
   ]);
 
@@ -1574,14 +1841,41 @@ export default function App() {
     setPersisted((prev) => ({ ...prev, goalOpen: !prev.goalOpen }));
   }, []);
 
-  const handleToggleTopic = useCallback((topicId: string) => {
-    setOpenTopics((prev) => ({
-      ...prev,
-      [topicId]: !prev[topicId],
-    }));
-  }, []);
+  // Auto-hide dashboard upon searching
+  useEffect(() => {
+    if (searchInput.trim().length > 0) {
+      setBentoOpen(false);
+    }
+  }, [searchInput]);
+
+  // Clear temporary search accordion overrides when search query is cleared
+  useEffect(() => {
+    if (deferredTokens.length === 0) {
+      setSearchToggledTopics((prev) =>
+        Object.keys(prev).length > 0 ? {} : prev
+      );
+    }
+  }, [deferredTokens.length]);
+
+  const handleToggleTopic = useCallback(
+    (topicId: string) => {
+      if (deferredTokens.length > 0) {
+        setSearchToggledTopics((prev) => ({
+          ...prev,
+          [topicId]: prev[topicId] !== undefined ? !prev[topicId] : false,
+        }));
+        return;
+      }
+      setOpenTopics((prev) => ({
+        ...prev,
+        [topicId]: !prev[topicId],
+      }));
+    },
+    [deferredTokens.length]
+  );
 
   const handleSelectTopicFromNav = useCallback((targetId: string, href: string) => {
+    setBentoOpen(false);
     setSelectedTopicId(targetId);
     setOpenTopics((prev) => ({ ...prev, [targetId]: true }));
     if (typeof window !== 'undefined' && window.innerWidth <= 1024) {
@@ -1602,9 +1896,11 @@ export default function App() {
 
   const handleBrandReset = useCallback(() => {
     setPersisted((prev) => resetToHomeFormulasState(prev));
+    setBentoOpen(false);
     setThmFilter('all');
     setHighYieldOnly(false);
     setSearchInput('');
+    setSearchToggledTopics({});
     setSelectedTopicId('');
     setToolsOpen(false);
     setTermMenuOpen(false);
@@ -1725,10 +2021,19 @@ export default function App() {
         }
         return next;
       });
+      if (deferredTokens.length > 0) {
+        setSearchToggledTopics(() => {
+          const next: Record<string, boolean> = {};
+          for (const sec of targetSections) {
+            next[sec.id] = expand;
+          }
+          return next;
+        });
+      }
       setToolsOpen(false);
       showToast(expand ? 'ALL TOPICS EXPANDED' : 'ALL TOPICS COLLAPSED');
     },
-    [isGenSelected, persisted.tab, fmSections, thmSections, genSections, showToast]
+    [isGenSelected, persisted.tab, fmSections, thmSections, genSections, deferredTokens.length, showToast]
   );
 
   const handleResetProgress = useCallback(() => {
@@ -1763,70 +2068,6 @@ export default function App() {
     (persisted.tab !== 'prac' || isGenSelected) &&
     filterSummary.visibleCards === 0 &&
     genMatchedCardsCount === 0;
-
-  // Automatically mark matching sections open in openTopics when deferred search query is active
-  useEffect(() => {
-    if (deferredTokens.length === 0) return;
-    const activeSections = isGenSelected
-      ? genSections
-      : persisted.tab === 'fm'
-      ? [...fmSections, ...genSections]
-      : [...thmSections, ...genSections];
-    const isThmTab = persisted.tab === 'thm' && !isGenSelected;
-    setOpenTopics((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      for (const section of activeSections) {
-        const courseMatch =
-          persisted.course === 'ALL' || section.course === persisted.course;
-        const highYieldMatch =
-          !highYieldOnly || highYieldTopicIds.has(section.id);
-        if (!courseMatch || !highYieldMatch) continue;
-        const hasMatch = section.cards.some((card) => {
-          const isLearned = Boolean(persisted.learned[card.id]);
-          const isStarred = Boolean(persisted.starred[card.id]);
-          const statusMatch =
-            persisted.status === 'all'
-              ? true
-              : persisted.status === 'starred'
-              ? isStarred
-              : !isLearned;
-          const thmMatch =
-            isThmTab && section.course !== 'GEN'
-              ? matchesTheoremCategoryFilter(card.badge, thmFilter)
-              : isThmTab && thmFilter !== 'all'
-              ? matchesTheoremCategoryFilter(card.badge, thmFilter)
-              : true;
-          const sIdx = searchIndexById.get(card.id) || '';
-          return (
-            statusMatch &&
-            thmMatch &&
-            matchesSearchTokens(sIdx, deferredTokens, card.title)
-          );
-        });
-        if (hasMatch && !next[section.id]) {
-          next[section.id] = true;
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [
-    deferredTokens,
-    isGenSelected,
-    persisted.tab,
-    persisted.course,
-    persisted.status,
-    persisted.learned,
-    persisted.starred,
-    thmFilter,
-    fmSections,
-    thmSections,
-    genSections,
-    searchIndexById,
-    highYieldOnly,
-    highYieldTopicIds,
-  ]);
 
   const computeSectionDescriptor = useCallback(
     (
@@ -1865,11 +2106,22 @@ export default function App() {
               ? matchesTheoremCategoryFilter(card.badge, thmFilter)
               : true;
           const sIdx = searchIndexById.get(card.id) || '';
-          const score = hasActiveSearch
+          const lexicalScore = hasActiveSearch
             ? scoreFormulaCardSearch(card, deferredTokens, deferredQuery, sIdx)
             : matchesSearchTokens(sIdx, deferredTokens, card.title)
             ? 1
             : 0;
+          const score = hasActiveSearch
+            ? computeHybridCardScore(
+                card.id,
+                lexicalScore,
+                semanticScores,
+                useTabSemantic,
+                MIN_SEMANTIC_SIMILARITY,
+                sIdx,
+                deferredTokens
+              )
+            : lexicalScore;
           const queryMatch = score > 0;
           const isVisible =
             courseMatch && highYieldMatch && statusMatch && thmMatch && queryMatch;
@@ -1939,6 +2191,8 @@ export default function App() {
       searchIndexById,
       deferredTokens,
       deferredQuery,
+      semanticScores,
+      useTabSemantic,
       highYieldOnly,
       highYieldTopicIds,
       cardLayoutMetaById,
@@ -1996,29 +2250,45 @@ export default function App() {
   const activeHighlightTokensForTab =
     deferredTokens.length > 0 ? deferredTokens : undefined;
 
+  const totalMatchedCardsForSearch =
+    filterSummary.visibleCards + genMatchedCardsCount;
+
   const renderedFmSections = useMemo(() => {
     if (computedFmSections.length === 0) return [];
-    return computedFmSections.map((item) => (
-      <TopicSectionAccordion
-        key={`fm-${item.section.id}`}
-        section={item.section}
-        visibleCards={item.visibleCards}
-        learnedInTopic={item.learnedInTopic}
-        sectionHidden={item.sectionHidden}
-        isOpen={Boolean(openTopics[item.section.id])}
-        isIndexSelected={selectedTopicId === item.section.id}
-        domId={item.section.id}
-        keyPrefix="fm-"
-        selfTest={Boolean(persisted.selfTest)}
-        highlightTokens={activeHighlightTokensForTab}
-        onToggleTopic={handleToggleTopic}
-        onToggleStar={handleToggleStar}
-        onToggleLearned={handleToggleLearned}
-        onCopyLatex={handleCopyLatex}
-      />
-    ));
+    const hasActiveSearch = deferredTokens.length > 0;
+    return computedFmSections.map((item, idx) => {
+      const defaultSearchOpen =
+        !item.sectionHidden && (totalMatchedCardsForSearch <= 60 || idx < 6);
+      const isSectionOpen = hasActiveSearch
+        ? !item.sectionHidden &&
+          (searchToggledTopics[item.section.id] ?? defaultSearchOpen)
+        : Boolean(openTopics[item.section.id]);
+
+      return (
+        <TopicSectionAccordion
+          key={`fm-${item.section.id}`}
+          section={item.section}
+          visibleCards={item.visibleCards}
+          learnedInTopic={item.learnedInTopic}
+          sectionHidden={item.sectionHidden}
+          isOpen={isSectionOpen}
+          isIndexSelected={selectedTopicId === item.section.id}
+          domId={item.section.id}
+          keyPrefix="fm-"
+          selfTest={Boolean(persisted.selfTest)}
+          highlightTokens={activeHighlightTokensForTab}
+          onToggleTopic={handleToggleTopic}
+          onToggleStar={handleToggleStar}
+          onToggleLearned={handleToggleLearned}
+          onCopyLatex={handleCopyLatex}
+        />
+      );
+    });
   }, [
     computedFmSections,
+    deferredTokens.length,
+    totalMatchedCardsForSearch,
+    searchToggledTopics,
     openTopics,
     selectedTopicId,
     persisted.selfTest,
@@ -2031,27 +2301,40 @@ export default function App() {
 
   const renderedThmSections = useMemo(() => {
     if (computedThmSections.length === 0) return [];
-    return computedThmSections.map((item) => (
-      <TopicSectionAccordion
-        key={`thm-${item.section.id}`}
-        section={item.section}
-        visibleCards={item.visibleCards}
-        learnedInTopic={item.learnedInTopic}
-        sectionHidden={item.sectionHidden}
-        isOpen={Boolean(openTopics[item.section.id])}
-        isIndexSelected={selectedTopicId === item.section.id}
-        domId={item.section.id}
-        keyPrefix="thm-"
-        selfTest={Boolean(persisted.selfTest)}
-        highlightTokens={activeHighlightTokensForTab}
-        onToggleTopic={handleToggleTopic}
-        onToggleStar={handleToggleStar}
-        onToggleLearned={handleToggleLearned}
-        onCopyLatex={handleCopyLatex}
-      />
-    ));
+    const hasActiveSearch = deferredTokens.length > 0;
+    return computedThmSections.map((item, idx) => {
+      const defaultSearchOpen =
+        !item.sectionHidden && (totalMatchedCardsForSearch <= 60 || idx < 6);
+      const isSectionOpen = hasActiveSearch
+        ? !item.sectionHidden &&
+          (searchToggledTopics[item.section.id] ?? defaultSearchOpen)
+        : Boolean(openTopics[item.section.id]);
+
+      return (
+        <TopicSectionAccordion
+          key={`thm-${item.section.id}`}
+          section={item.section}
+          visibleCards={item.visibleCards}
+          learnedInTopic={item.learnedInTopic}
+          sectionHidden={item.sectionHidden}
+          isOpen={isSectionOpen}
+          isIndexSelected={selectedTopicId === item.section.id}
+          domId={item.section.id}
+          keyPrefix="thm-"
+          selfTest={Boolean(persisted.selfTest)}
+          highlightTokens={activeHighlightTokensForTab}
+          onToggleTopic={handleToggleTopic}
+          onToggleStar={handleToggleStar}
+          onToggleLearned={handleToggleLearned}
+          onCopyLatex={handleCopyLatex}
+        />
+      );
+    });
   }, [
     computedThmSections,
+    deferredTokens.length,
+    totalMatchedCardsForSearch,
+    searchToggledTopics,
     openTopics,
     selectedTopicId,
     persisted.selfTest,
@@ -2116,6 +2399,22 @@ export default function App() {
 
   // Fullscreen Practice HUD in-place search & topic peek across ALL Formulas, Theorems, and GEN (no artificial slice truncation)
   const hudDisplayedCards = useMemo(() => {
+    const sortCardsShortToLong = (cards: FormulaCardRecord[]) =>
+      cards
+        .map((card, order) => {
+          const meta = cardLayoutMetaById.get(card.id) || {
+            lengthScore: 100,
+            isWide: false,
+          };
+          return { card, order, lengthScore: meta.lengthScore, isWide: meta.isWide };
+        })
+        .sort((a, b) => {
+          const wideDiff = (a.isWide ? 1 : 0) - (b.isWide ? 1 : 0);
+          if (wideDiff !== 0) return wideDiff;
+          return a.lengthScore - b.lengthScore || a.order - b.order;
+        })
+        .map((item) => item.card);
+
     const pool =
       hudScope === 'FM'
         ? [...fmCardsWithIndex, ...genCardsWithIndex]
@@ -2126,20 +2425,51 @@ export default function App() {
     // When a search query is entered, always search across all cards in the pool
     if (hudTokens.length > 0) {
       const targetCourse = activePracticeModule?.course || 'M159';
+      let bestHudRawLexicalScore = 0;
+      const lexByIndex = new Array<number>(pool.length);
+      for (let i = 0; i < pool.length; i++) {
+        const { card, searchIndex } = pool[i];
+        const lex = scoreFormulaCardSearch(card, hudTokens, deferredHudQuery, searchIndex);
+        lexByIndex[i] = lex;
+        if (lex > bestHudRawLexicalScore) {
+          bestHudRawLexicalScore = lex;
+        }
+      }
+      const bestHudConfidence = computeLexicalConfidence(bestHudRawLexicalScore, hudTokens);
+      const useHudSemantic = shouldUseSemanticRanking(
+        bestHudConfidence,
+        hudSemanticScores,
+        searchDebugMode
+      );
+
       const scoredMatches: Array<{
         card: FormulaCardRecord;
         score: number;
         inTargetCourse: number;
+        lengthScore: number;
         order: number;
       }> = [];
       for (let i = 0; i < pool.length; i++) {
         const { card, searchIndex } = pool[i];
-        const score = scoreFormulaCardSearch(card, hudTokens, deferredHudQuery, searchIndex);
+        const score = computeHybridCardScore(
+          card.id,
+          lexByIndex[i],
+          hudSemanticScores,
+          useHudSemantic,
+          MIN_SEMANTIC_SIMILARITY,
+          searchIndex,
+          hudTokens
+        );
         if (score > 0) {
+          const meta = cardLayoutMetaById.get(card.id) || {
+            lengthScore: 100,
+            isWide: false,
+          };
           scoredMatches.push({
             card,
             score,
             inTargetCourse: card.course === targetCourse ? 1 : 0,
+            lengthScore: meta.lengthScore,
             order: i,
           });
         }
@@ -2148,16 +2478,17 @@ export default function App() {
         (a, b) =>
           b.score - a.score ||
           b.inTargetCourse - a.inTargetCourse ||
+          a.lengthScore - b.lengthScore ||
           a.order - b.order
       );
       return scoredMatches.map((item) => item.card);
     }
 
     if (peekedSection) {
-      return peekedSection.cards;
+      return sortCardsShortToLong(peekedSection.cards);
     }
 
-    return hudCourseSections.flatMap((sec) => sec.cards);
+    return hudCourseSections.flatMap((sec) => sortCardsShortToLong(sec.cards));
   }, [
     peekedSection,
     hudScope,
@@ -2167,7 +2498,10 @@ export default function App() {
     genCardsWithIndex,
     hudTokens,
     deferredHudQuery,
+    hudSemanticScores,
+    searchDebugMode,
     activePracticeModule,
+    cardLayoutMetaById,
   ]);
 
   // Reset windowed HUD render batch and scroll position when scope, topic, or search query changes
@@ -2181,6 +2515,17 @@ export default function App() {
   const hudVisibleCards = useMemo(
     () => hudDisplayedCards.slice(0, hudRenderLimit),
     [hudDisplayedCards, hudRenderLimit]
+  );
+
+  const hudRowLayout = useMemo(
+    () =>
+      computeGridRowLayout(
+        hudVisibleCards.map((card) => ({
+          card,
+          isWide: Boolean(cardLayoutMetaById.get(card.id)?.isWide),
+        }))
+      ),
+    [hudVisibleCards, cardLayoutMetaById]
   );
 
   const bringPinnedCardToFront = useCallback((cardId: string) => {
@@ -2411,7 +2756,10 @@ export default function App() {
               id="sbBtn"
               aria-label="Toggle Topic Index Sidebar"
               aria-expanded={sidebarOpen}
-              onClick={() => setSidebarOpen((open) => !open)}
+              onClick={() => {
+                setBentoOpen(false);
+                setSidebarOpen((open) => !open);
+              }}
             >
               [INDEX]
             </button>
@@ -2669,13 +3017,23 @@ export default function App() {
                 type="search"
                 id="fmq"
                 value={searchInput}
-                onFocus={() => setSearchFocused(true)}
+                onFocus={() => {
+                  setSearchFocused(true);
+                  warmUpEmbeddingModel();
+                }}
                 onBlur={() => setSearchFocused(false)}
-                onChange={(e) => setSearchInput(e.target.value)}
+                onChange={(e) => {
+                  const nextVal = e.target.value;
+                  setSearchInput(nextVal);
+                  if (nextVal.trim().length > 0) {
+                    setBentoOpen(false);
+                  }
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && searchInput.trim().length >= 2) {
                     recordSearchHistory(searchInput);
                     setSearchFocused(false);
+                    setBentoOpen(false);
                   }
                 }}
                 placeholder="Search formulas, theories or definitions"
@@ -2733,6 +3091,7 @@ export default function App() {
                                 setSearchInput(histItem);
                                 recordSearchHistory(histItem);
                                 setSearchFocused(false);
+                                setBentoOpen(false);
                               }}
                             >
                               {histItem}
@@ -2764,6 +3123,7 @@ export default function App() {
                           setSearchInput(sc);
                           recordSearchHistory(sc);
                           setSearchFocused(false);
+                          setBentoOpen(false);
                         }}
                       >
                         {sc}
@@ -3603,7 +3963,10 @@ export default function App() {
                           type="search"
                           id="fsFmq"
                           value={hudQuery}
-                          onFocus={() => setFsSearchFocused(true)}
+                          onFocus={() => {
+                            setFsSearchFocused(true);
+                            warmUpEmbeddingModel();
+                          }}
                           onBlur={() => setFsSearchFocused(false)}
                           onChange={(e) => {
                             setHudQuery(e.target.value);
@@ -3738,24 +4101,32 @@ export default function App() {
                         }}
                       >
                         <div className="fmgrid">
-                          {hudVisibleCards.map((card) => (
-                            <FormulaCardView
-                              key={`hud-${card.id}`}
-                              card={card}
-                              topicTitle={topicTitleById.get(card.topicId)}
-                              isLearned={Boolean(persisted.learned[card.id])}
-                              isStarred={Boolean(persisted.starred[card.id])}
-                              isHidden={false}
-                              selfTest={Boolean(persisted.selfTest)}
-                              onToggleStar={handleToggleStar}
-                              onToggleLearned={handleToggleLearned}
-                              onCopyLatex={handleCopyLatex}
-                              onPeekTopic={(tId) => setPeekTopicId(tId)}
-                              onPinCard={handlePinCard}
-                              isPinned={pinnedCards.some((p) => p.id === card.id)}
-                              highlightTokens={hudTokens.length > 0 ? hudTokens : undefined}
-                            />
-                          ))}
+                          {hudVisibleCards.map((card, idx) => {
+                            const rawWide = Boolean(cardLayoutMetaById.get(card.id)?.isWide);
+                            const effectiveIsWide =
+                              rawWide || hudRowLayout.promotedWideIds.has(card.id);
+
+                            return (
+                              <FormulaCardView
+                                key={`hud-${card.id}`}
+                                card={card}
+                                cardIndex={idx + 1}
+                                isWide={effectiveIsWide}
+                                topicTitle={topicTitleById.get(card.topicId)}
+                                isLearned={Boolean(persisted.learned[card.id])}
+                                isStarred={Boolean(persisted.starred[card.id])}
+                                isHidden={false}
+                                selfTest={Boolean(persisted.selfTest)}
+                                onToggleStar={handleToggleStar}
+                                onToggleLearned={handleToggleLearned}
+                                onCopyLatex={handleCopyLatex}
+                                onPeekTopic={(tId) => setPeekTopicId(tId)}
+                                onPinCard={handlePinCard}
+                                isPinned={pinnedCards.some((p) => p.id === card.id)}
+                                highlightTokens={hudTokens.length > 0 ? hudTokens : undefined}
+                              />
+                            );
+                          })}
                         </div>
                         {hudVisibleCards.length < hudDisplayedCards.length ? (
                           <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>

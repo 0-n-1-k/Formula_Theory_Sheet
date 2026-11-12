@@ -12,6 +12,16 @@ import {
  */
 export const katexRenderCache = new Map<string, string>();
 
+/**
+ * Session-wide memoization cache for full prose-with-math strings (`renderTextWithMath` base output).
+ * Avoids re-running multi-pass HTML/LaTeX regex tokenization on re-renders, accordion toggles, or search highlighting.
+ */
+export const parsedMathTextCache = new Map<string, string>();
+
+const highlightRegexCache = new Map<string, RegExp | null>();
+let activeHighlightCacheKey = '';
+const highlightedHtmlCache = new Map<string, string>();
+
 const DIACRITIC_CHAR_CLASSES: Record<string, string> = {
   a: '[aàáâãäå]',
   c: '[cç]',
@@ -20,6 +30,7 @@ const DIACRITIC_CHAR_CLASSES: Record<string, string> = {
   n: '[nñ]',
   o: '[oòóôõöø]',
   u: '[uùúûü]',
+  v: 'v',
   y: '[yýÿ]',
 };
 
@@ -90,12 +101,39 @@ function termToDiacriticPattern(term: string): string {
 }
 
 export function buildHighlightRegex(tokens: readonly string[]): RegExp | null {
+  if (!tokens || tokens.length === 0) return null;
+  const cacheKey = tokens.join('\u0001');
+  if (highlightRegexCache.has(cacheKey)) {
+    const cached = highlightRegexCache.get(cacheKey) ?? null;
+    if (cached) cached.lastIndex = 0;
+    return cached;
+  }
+
   const expanded = expandHighlightTerms(tokens);
-  if (expanded.length === 0) return null;
+  if (expanded.length === 0) {
+    highlightRegexCache.set(cacheKey, null);
+    return null;
+  }
   const pattern = expanded.map(termToDiacriticPattern).join('|');
-  if (!pattern) return null;
-  return new RegExp(`(${pattern})`, 'gi');
+  if (!pattern) {
+    highlightRegexCache.set(cacheKey, null);
+    return null;
+  }
+  const compiled = new RegExp(`(${pattern})`, 'gi');
+  if (highlightRegexCache.size > 128) {
+    highlightRegexCache.clear();
+  }
+  highlightRegexCache.set(cacheKey, compiled);
+  return compiled;
 }
+
+const KATEX_MORD_RUN_RE =
+  /(?:<span class="mord[^"]*"(?:\s+style="[^"]*")?>[a-zA-Z0-9]<\/span>){2,}/g;
+const SINGLE_MORD_RE =
+  /(<span class="mord[^"]*"(?:\s+style="[^"]*")?>)([a-zA-Z0-9])(<\/span>)/g;
+const MATH_SVG_BLOCK_RE = /<(math|svg)(?:\s[^<>]*)?>[\s\S]*?<\/\1>/gi;
+const HTML_SPLIT_TOKEN_RE = /(&[a-zA-Z0-9#]+;|<[^>]+>|\u0000HPROT_\d+\u0000)/g;
+const HPROT_RESTORE_RE = /\u0000HPROT_(\d+)\u0000/g;
 
 /**
  * Highlights matching search keywords inside HTML strings (including prose, notes,
@@ -112,6 +150,17 @@ export function highlightHtmlContent(
   const regex = buildHighlightRegex(highlightTokens);
   if (!regex) return html;
 
+  const tokenCacheKey = highlightTokens.join('\u0001');
+  if (activeHighlightCacheKey !== tokenCacheKey) {
+    activeHighlightCacheKey = tokenCacheKey;
+    highlightedHtmlCache.clear();
+  } else {
+    const cached = highlightedHtmlCache.get(html);
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
+
   const protectedBlocks: string[] = [];
   const protect = (block: string): string => {
     const idx = protectedBlocks.length;
@@ -120,54 +169,51 @@ export function highlightHtmlContent(
   };
 
   // 1. Protect hidden <math>...</math> and <svg>...</svg> blocks inside KaTeX
-  let working = String(html).replace(
-    /<(math|svg)(?:\s[^<>]*)?>[\s\S]*?<\/\1>/gi,
-    (m) => protect(m)
-  );
+  let working =
+    html.indexOf('<math') !== -1 || html.indexOf('<svg') !== -1
+      ? String(html).replace(MATH_SVG_BLOCK_RE, (m) => protect(m))
+      : String(html);
 
   // 2. Highlight multi-character runs across consecutive KaTeX <span class="mord...">c</span> spans
-  const katexMordRunRe =
-    /(?:<span class="mord[^"]*"(?:\s+style="[^"]*")?>[a-zA-Z0-9]<\/span>){2,}/g;
-  const singleMordRe =
-    /(<span class="mord[^"]*"(?:\s+style="[^"]*")?>)([a-zA-Z0-9])(<\/span>)/g;
-
-  working = working.replace(katexMordRunRe, (runMatch) => {
-    const spans: Array<{ open: string; ch: string; close: string }> = [];
-    let m: RegExpExecArray | null;
-    singleMordRe.lastIndex = 0;
-    while ((m = singleMordRe.exec(runMatch)) !== null) {
-      spans.push({ open: m[1], ch: m[2], close: m[3] });
-    }
-    if (spans.length < 2) return runMatch;
-
-    const word = spans.map((s) => s.ch).join('');
-    const matchedIndices = new Uint8Array(spans.length);
-    let anyMatch = false;
-    regex.lastIndex = 0;
-    let rm: RegExpExecArray | null;
-    while ((rm = regex.exec(word)) !== null) {
-      if (rm[0].length === 0) {
-        regex.lastIndex++;
-        continue;
+  if (working.indexOf('class="mord') !== -1) {
+    working = working.replace(KATEX_MORD_RUN_RE, (runMatch) => {
+      const spans: Array<{ open: string; ch: string; close: string }> = [];
+      let m: RegExpExecArray | null;
+      SINGLE_MORD_RE.lastIndex = 0;
+      while ((m = SINGLE_MORD_RE.exec(runMatch)) !== null) {
+        spans.push({ open: m[1], ch: m[2], close: m[3] });
       }
-      anyMatch = true;
-      for (let i = rm.index; i < rm.index + rm[0].length && i < spans.length; i++) {
-        matchedIndices[i] = 1;
-      }
-    }
-    if (!anyMatch) return runMatch;
+      if (spans.length < 2) return runMatch;
 
-    return spans
-      .map((s, idx) =>
-        matchedIndices[idx]
-          ? `${s.open}${protect(`<mark class="fm-hl">${s.ch}</mark>`)}${s.close}`
-          : `${s.open}${s.ch}${s.close}`
-      )
-      .join('');
-  });
+      const word = spans.map((s) => s.ch).join('');
+      const matchedIndices = new Uint8Array(spans.length);
+      let anyMatch = false;
+      regex.lastIndex = 0;
+      let rm: RegExpExecArray | null;
+      while ((rm = regex.exec(word)) !== null) {
+        if (rm[0].length === 0) {
+          regex.lastIndex++;
+          continue;
+        }
+        anyMatch = true;
+        for (let i = rm.index; i < rm.index + rm[0].length && i < spans.length; i++) {
+          matchedIndices[i] = 1;
+        }
+      }
+      if (!anyMatch) return runMatch;
+
+      return spans
+        .map((s, idx) =>
+          matchedIndices[idx]
+            ? `${s.open}${protect(`<mark class="fm-hl">${s.ch}</mark>`)}${s.close}`
+            : `${s.open}${s.ch}${s.close}`
+        )
+        .join('');
+    });
+  }
 
   // 3. Split by HTML entities, HTML tags, and protected blocks; highlight only visible text nodes
-  const parts = working.split(/(&[a-zA-Z0-9#]+;|<[^>]+>|\u0000HPROT_\d+\u0000)/g);
+  const parts = working.split(HTML_SPLIT_TOKEN_RE);
   for (let i = 0; i < parts.length; i += 2) {
     const textNode = parts[i];
     if (textNode) {
@@ -176,9 +222,17 @@ export function highlightHtmlContent(
     }
   }
 
-  return parts.join('').replace(/\u0000HPROT_(\d+)\u0000/g, (_, idxStr: string) => {
-    return protectedBlocks[Number(idxStr)] ?? '';
-  });
+  const finalHtml =
+    protectedBlocks.length > 0
+      ? parts.join('').replace(HPROT_RESTORE_RE, (_, idxStr: string) => {
+          return protectedBlocks[Number(idxStr)] ?? '';
+        })
+      : parts.join('');
+
+  if (highlightedHtmlCache.size < 4000) {
+    highlightedHtmlCache.set(html, finalHtml);
+  }
+  return finalHtml;
 }
 
 /**
@@ -202,6 +256,7 @@ export function highlightPlainTextToHtml(
 }
 
 export function decodeHtmlEntities(str: string): string {
+  if (str.indexOf('&') === -1) return str;
   return String(str)
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
@@ -214,7 +269,7 @@ export function decodeHtmlEntities(str: string): string {
  * Memoized wrapper around katex.renderToString(math, { displayMode, throwOnError: false }).
  */
 export function renderLatexCached(latex: string, displayMode = false): string {
-  const clean = decodeHtmlEntities(latex).trim();
+  const clean = decodeHtmlEntities(String(latex)).trim();
   if (!clean) return '';
   const cacheKey = (displayMode ? 'D:' : 'I:') + clean;
   const cached = katexRenderCache.get(cacheKey);
@@ -235,6 +290,15 @@ export function renderLatexCached(latex: string, displayMode = false): string {
   return rendered;
 }
 
+const PRE_CODE_BLOCK_RE = /<(pre|code)(?:\s[^<>]*)?>[\s\S]*?<\/\1>/gi;
+const HTML_TAG_RE = /<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^<>]*)?>/g;
+const DISPLAY_DOLLAR_RE = /\$\$([\s\S]+?)\$\$/g;
+const DISPLAY_BRACKET_RE = /\\\[([\s\S]+?)\\\]/g;
+const INLINE_PAREN_RE = /\\\(([\s\S]+?)\\\)/g;
+const INLINE_DOLLAR_RE = /\$([^$\n\u0000]+?)\$/g;
+const BOLD_MARKDOWN_RE = /\*\*([^*\n\u0000]+?)\*\*/g;
+const PROT_RESTORE_RE = /\u0000PROT_(\d+)\u0000/g;
+
 /**
  * Universal math-text parser that parses mixed HTML (such as <b>, <code>, <i>, <sub>, <sup>)
  * alongside $$...$$, \[...\], \(...\), and $...$ delimiters and converts all math segments
@@ -249,57 +313,76 @@ export function renderTextWithMath(
     return '';
   }
 
-  let result: string;
-  if (
-    input.indexOf('$') === -1 &&
-    input.indexOf('\\(') === -1 &&
-    input.indexOf('\\[') === -1 &&
-    input.indexOf('**') === -1
-  ) {
-    result = input;
-  } else {
-    const protectedBlocks: string[] = [];
+  if (katexRenderCache.size === 0 && parsedMathTextCache.size > 0) {
+    parsedMathTextCache.clear();
+  }
 
-    // 1. Protect <pre>...</pre> and <code>...</code> blocks so C/C++ code is never altered by KaTeX
-    let masked = String(input).replace(
-      /<(pre|code)(?:\s[^<>]*)?>[\s\S]*?<\/\1>/gi,
-      (match) => {
-        const idx = protectedBlocks.length;
-        protectedBlocks.push(match);
-        return `\u0000PROT_${idx}\u0000`;
+  let result = parsedMathTextCache.get(input);
+  if (result === undefined) {
+    if (
+      input.indexOf('$') === -1 &&
+      input.indexOf('\\(') === -1 &&
+      input.indexOf('\\[') === -1 &&
+      input.indexOf('**') === -1
+    ) {
+      result = input;
+    } else {
+      const protectedBlocks: string[] = [];
+
+      // 1. Protect <pre>...</pre> and <code>...</code> blocks so C/C++ code is never altered by KaTeX
+      let masked =
+        input.indexOf('<pre') !== -1 || input.indexOf('<code') !== -1
+          ? String(input).replace(PRE_CODE_BLOCK_RE, (match) => {
+              const idx = protectedBlocks.length;
+              protectedBlocks.push(match);
+              return `\u0000PROT_${idx}\u0000`;
+            })
+          : String(input);
+
+      // 2. Protect HTML tags (e.g. <b>, <i>, <sub>, <sup>, <br>) so inline $...$ never spans across tags
+      if (masked.indexOf('<') !== -1) {
+        masked = masked.replace(HTML_TAG_RE, (match) => {
+          const idx = protectedBlocks.length;
+          protectedBlocks.push(match);
+          return `\u0000PROT_${idx}\u0000`;
+        });
       }
-    );
 
-    // 2. Protect HTML tags (e.g. <b>, <i>, <sub>, <sup>, <br>) so inline $...$ never spans across tags
-    masked = masked.replace(
-      /<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^<>]*)?>/g,
-      (match) => {
-        const idx = protectedBlocks.length;
-        protectedBlocks.push(match);
-        return `\u0000PROT_${idx}\u0000`;
+      // 3. Convert display ($$...$$, \[...\]) and inline (\(...\), $...$) math segments
+      let processed = masked;
+      if (processed.indexOf('$$') !== -1) {
+        processed = processed.replace(DISPLAY_DOLLAR_RE, (_, math: string) =>
+          renderLatexCached(math, true)
+        );
       }
-    );
+      if (processed.indexOf('\\[') !== -1) {
+        processed = processed.replace(DISPLAY_BRACKET_RE, (_, math: string) =>
+          renderLatexCached(math, true)
+        );
+      }
+      if (processed.indexOf('\\(') !== -1) {
+        processed = processed.replace(INLINE_PAREN_RE, (_, math: string) =>
+          renderLatexCached(math, false)
+        );
+      }
+      if (processed.indexOf('$') !== -1) {
+        processed = processed.replace(INLINE_DOLLAR_RE, (_, math: string) =>
+          renderLatexCached(math, false)
+        );
+      }
+      if (processed.indexOf('**') !== -1) {
+        processed = processed.replace(BOLD_MARKDOWN_RE, '<b>$1</b>');
+      }
 
-    // 3. Convert display ($$...$$, \[...\]) and inline (\(...\), $...$) math segments
-    const processed = masked
-      .replace(/\$\$([\s\S]+?)\$\$/g, (_, math: string) =>
-        renderLatexCached(math, true)
-      )
-      .replace(/\\\[([\s\S]+?)\\\]/g, (_, math: string) =>
-        renderLatexCached(math, true)
-      )
-      .replace(/\\\(([\s\S]+?)\\\)/g, (_, math: string) =>
-        renderLatexCached(math, false)
-      )
-      .replace(/\$([^$\n\u0000]+?)\$/g, (_, math: string) =>
-        renderLatexCached(math, false)
-      )
-      .replace(/\*\*([^*\n\u0000]+?)\*\*/g, '<b>$1</b>');
-
-    // 4. Restore protected HTML tags and code blocks
-    result = processed.replace(/\u0000PROT_(\d+)\u0000/g, (_, idxStr: string) => {
-      return protectedBlocks[Number(idxStr)] ?? '';
-    });
+      // 4. Restore protected HTML tags and code blocks
+      result =
+        protectedBlocks.length > 0
+          ? processed.replace(PROT_RESTORE_RE, (_, idxStr: string) => {
+              return protectedBlocks[Number(idxStr)] ?? '';
+            })
+          : processed;
+    }
+    parsedMathTextCache.set(input, result);
   }
 
   if (highlightTokens && highlightTokens.length > 0) {
@@ -307,4 +390,3 @@ export function renderTextWithMath(
   }
   return result;
 }
-

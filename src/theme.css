@@ -43,6 +43,13 @@
   --fs-md: 15.5px;
   --fs-lg: 18px;
   --fs-xl: 26px;
+  /* Semantic inline definition & section headings inside cards */
+  --def-heading: #64d2ff;
+  --def-heading-bg: rgba(100, 210, 255, 0.1);
+  --def-heading-border: rgba(90, 200, 250, 0.55);
+  --cond-heading: #b4b2ff;
+  --use-heading: #4ae072;
+  --step-heading: #5ac8fa;
 }
 
 *, *::before, *::after {
@@ -1859,69 +1866,6 @@ body.single-col .fmgrid {
   flex-shrink: 0;
 }
 
-.fmbody.is-collapsed {
-  max-height: 280px;
-  overflow: hidden;
-}
-
-.fmbody.is-collapsed::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 68px;
-  background: linear-gradient(
-    to bottom,
-    rgba(22, 22, 26, 0) 0%,
-    rgba(22, 22, 26, 0.78) 55%,
-    rgba(22, 22, 26, 0.98) 100%
-  );
-  pointer-events: none;
-  z-index: 2;
-}
-
-.fm-expand-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 14px 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.015);
-}
-
-.fm-expand-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  height: 28px;
-  padding: 0 12px;
-  border-radius: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--accent);
-  font-family: var(--font-dot);
-  font-size: var(--fs-xs);
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
-}
-
-.fm-expand-btn:hover {
-  background: rgba(41, 151, 255, 0.14);
-  border-color: rgba(41, 151, 255, 0.42);
-  color: var(--text-primary);
-}
-
-.fm-expand-chevron {
-  font-size: var(--fs-2xs);
-  line-height: 1;
-  opacity: 0.85;
-}
-
 /* Search Keyword Highlighting (mark.fm-hl) */
 mark.fm-hl {
   background: rgba(255, 214, 10, 0.24);
@@ -2034,8 +1978,7 @@ body.hide-details .fmdet {
   font-size: var(--fs-base);
   line-height: 1.52;
   color: var(--text-primary);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  width: 100%;
   max-width: 100%;
   min-width: 0;
 }
@@ -2065,15 +2008,21 @@ body.hide-details .fmdet {
 
 /* Mini Tables (.mini) */
 table.mini {
-  display: block;
+  display: table;
   width: 100%;
   max-width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
   border-collapse: collapse;
   font-size: var(--fs-sm);
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 640px) {
+  table.mini {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 table.mini th,
@@ -3366,26 +3315,6 @@ details.fmd[open] > summary::after {
   .fmbody {
     padding: 10px;
   }
-
-  .fmbody.is-collapsed {
-    max-height: 240px;
-  }
-
-  .fm-expand-bar {
-    padding: 6px 10px 9px;
-  }
-}
-
-@media print {
-  .fmbody.is-collapsed {
-    max-height: none !important;
-    overflow: visible !important;
-  }
-
-  .fmbody.is-collapsed::after,
-  .fm-expand-bar {
-    display: none !important;
-  }
 }
 
 /* ======================== BENTO COMMAND DECK & 3-TIER CARD HIERARCHY ======================== */
@@ -3864,13 +3793,13 @@ details.fmt[open].is-high-yield {
 /* Full-width XL cards (multi-column comparison tables, wide matrices, long C/C++ code)
    automatically span both columns at the bottom of the topic */
 @media (min-width: 960px) {
+  body:not(.single-col) .fmgrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   body:not(.single-col) .fmgrid > .fmi.is-wide {
     grid-column: 1 / -1;
   }
-}
-
-.fm-expand-bar {
-  margin-top: auto;
 }
 
 /* Tier 1: Clean Card Header Bar (.fmh) */
@@ -3969,15 +3898,6 @@ details.fmt[open].is-high-yield {
   font-size: var(--fs-sm);
   line-height: 1.5;
   color: var(--text-secondary);
-}
-
-/* Keep collapsed cards scannable by clamping extra-verbose Where/Use paragraphs until expanded */
-.fmw.is-clamped,
-.fmu.is-clamped {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 
 /* ======================== PHONE-ONLY INDEX MENU CONTROLS (<= 768px) ======================== */
@@ -4161,6 +4081,159 @@ details.fmt[open].is-high-yield {
   }
 }
 
+/* ==========================================================================
+   Inline Definition Heading Color Hierarchy, 1-Line Definition Spacing,
+   and Multi-Column Horizontal Flow for Wide Cards on Larger Screens
+   ========================================================================== */
+
+/* 1. Theorem / Definition Statement Sub-Headings inside .fmhtml */
+.fmhtml b {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.fmhtml p > b:first-child,
+.fmhtml li > b:first-child,
+.fmhtml > b:first-child,
+.fmhtml br + b {
+  color: var(--def-heading);
+  font-weight: 700;
+  letter-spacing: 0.015em;
+  background: var(--def-heading-bg);
+  border-left: 2px solid var(--def-heading-border);
+  padding: 1px 6px 1px 6px;
+  border-radius: 3px;
+  margin-right: 4px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* 1-Line Vertical Space Between Definitions inside .fmhtml */
+.fmhtml p {
+  margin: 0 0 1em 0;
+  line-height: 1.65;
+}
+.fmhtml p:last-child {
+  margin-bottom: 0;
+}
+.fmhtml p + p {
+  margin-top: 1em;
+}
+.fmhtml ul,
+.fmhtml ol {
+  margin: 0.55em 0 1em 0;
+  padding-left: 1.35em;
+}
+.fmhtml ul:last-child,
+.fmhtml ol:last-child {
+  margin-bottom: 0;
+}
+.fmhtml li {
+  line-height: 1.6;
+}
+.fmhtml li + li {
+  margin-top: 0.85em;
+}
+.fmhtml br {
+  display: block;
+  content: "";
+  margin-top: 0.9em;
+}
+
+/* 2. Parameters / Conditions Sub-Headings inside .fmw */
+.fmw b {
+  color: var(--cond-heading);
+  font-weight: 600;
+  background: rgba(180, 178, 255, 0.08);
+  padding: 0 5px;
+  border-radius: 3px;
+}
+
+/* 3. Exam Application / Strategy Sub-Headings inside .fmu */
+.fmu b {
+  color: var(--use-heading);
+  font-weight: 600;
+  background: rgba(74, 224, 114, 0.08);
+  padding: 0 5px;
+  border-radius: 3px;
+}
+
+/* 4. Numbered Proof / Derivation Step Lead-ins inside .fmsteps */
+.fmsteps li > b {
+  color: var(--step-heading);
+  font-weight: 600;
+}
+
+/* 5. Extracted Exam-Year Pill in Card Header (.fm-year-tag) */
+.fm-year-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 6. Horizontal Multi-Column Expansion for Very Long Wide Cards on Larger Screens */
+.fmcode-multicol-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+@media (min-width: 960px) {
+  .fmcode-multicol-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    align-items: start;
+  }
+
+  .fmi.is-wide .fmhtml.fmhtml-cols {
+    column-count: 2;
+    column-gap: 32px;
+    column-rule: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .fmi.is-wide .fmhtml.fmhtml-cols li,
+  .fmi.is-wide .fmhtml.fmhtml-cols tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .fmi.is-wide .fmhtml.fmhtml-cols table.mini {
+    margin: 4px 0 10px;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .fmi.is-wide .fmhtml.fmhtml-cols table.mini th,
+  .fmi.is-wide .fmhtml.fmhtml-cols table.mini td {
+    padding: 5px 7px;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .fmi.is-wide .fmhtml.fmhtml-cols table.mini:has(th:nth-child(5)) {
+    column-span: all;
+    margin: 6px 0 12px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .fmi.is-wide .fmhtml.fmhtml-cols.fmhtml-cols-3 {
+    column-count: 3;
+    column-gap: 32px;
+  }
+}
+
 /* Accessibility: Reduced Motion Fallback */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -4170,4 +4243,5 @@ details.fmt[open].is-high-yield {
     scroll-behavior: auto !important;
   }
 }
+
 

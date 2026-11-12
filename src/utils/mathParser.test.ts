@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   katexRenderCache,
+  parsedMathTextCache,
   renderLatexCached,
   renderTextWithMath,
   highlightHtmlContent,
@@ -100,4 +101,18 @@ test('renderTextWithMath and highlightHtmlContent highlight matching keywords in
     'Preserves escaped angle brackets and ampersands in code block'
   );
 });
+
+test('renderTextWithMath memoizes full prose-with-math strings in parsedMathTextCache', () => {
+  katexRenderCache.clear();
+  parsedMathTextCache.clear();
+  const sample = '<b>Use:</b> Compute $V_{th} = V_{oc}$ and $R_{th} = V_{oc}/I_{sc}$ for linear networks.';
+  const first = renderTextWithMath(sample);
+  assert.equal(parsedMathTextCache.has(sample), true);
+  assert.equal(parsedMathTextCache.get(sample), first);
+
+  const highlighted = renderTextWithMath(sample, ['thevenin', 'voc']);
+  assert.ok(highlighted.includes('<mark class="fm-hl">'));
+  assert.equal(parsedMathTextCache.get(sample), first, 'Base math cache remains intact after highlighting');
+});
+
 

@@ -8,10 +8,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "embeddings:build": "node scripts/generate-card-embeddings.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
+    "@huggingface/transformers": "^4.3.2",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
     "dotenv": "^17.2.3",

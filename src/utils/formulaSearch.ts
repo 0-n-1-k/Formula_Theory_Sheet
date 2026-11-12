@@ -6,6 +6,8 @@ export interface FormulaCardRecord {
   topicId: string;
   topicTitle: string;
   title: string;
+  fullTitle?: string;
+  examTag?: string;
   badge?: string;
   cardTypeClass?: string;
   copyText?: string;
@@ -683,6 +685,8 @@ function sanitizeTopicHeaderForCard(rawKeywords: string, rawTopicTitle: string):
 export function buildFormulaSearchIndex(card: {
   keywords?: string;
   title?: string;
+  fullTitle?: string;
+  examTag?: string;
   badge?: string;
   topicTitle?: string;
   course?: string;
@@ -710,6 +714,8 @@ export function buildFormulaSearchIndex(card: {
   const ownParts = [
     cleanedKeywords,
     card.title || '',
+    card.fullTitle || '',
+    card.examTag || '',
     card.badge || '',
     card.course || '',
     normalizeLatexForSearch(card.rawLatex || ''),
@@ -741,7 +747,12 @@ export function buildFormulaSearchIndex(card: {
     .replace(/[-–—]/g, ' ')
     .replace(/\\/g, ' ');
 
-  const initialisms = generateTitleInitialisms(card.title || '');
+  const initialisms = Array.from(
+    new Set([
+      ...generateTitleInitialisms(card.title || ''),
+      ...(card.fullTitle ? generateTitleInitialisms(card.fullTitle) : []),
+    ])
+  );
 
   // Expand domain synonyms into the card index based strictly on the card's OWN content (not multi-topic section headers)
   const synonymAdditions: string[] = [];
@@ -1157,6 +1168,8 @@ export function matchesSearchTokens(
 export function scoreFormulaCardSearch(
   card: {
     title?: string;
+    fullTitle?: string;
+    examTag?: string;
     badge?: string;
     topicTitle?: string;
     keywords?: string;
@@ -1175,11 +1188,15 @@ export function scoreFormulaCardSearch(
 ): number {
   if (!tokens.length) return 1;
   const idx = (precomputedIndex ?? buildFormulaSearchIndex(card)).toLowerCase();
-  if (!matchesSearchTokens(idx, tokens, card.title)) {
+  const combinedTitle =
+    card.fullTitle && card.fullTitle !== card.title
+      ? `${card.title || ''} ${card.fullTitle}`
+      : card.title || '';
+  if (!matchesSearchTokens(idx, tokens, combinedTitle)) {
     return 0;
   }
 
-  const rawTitle = card.title || '';
+  const rawTitle = combinedTitle;
   const normTitle = normalizeSearchText(rawTitle);
   const normTitleNoParens = normalizeSearchText(rawTitle.replace(/\([^)]*\)/g, ' '));
   const titleWords = normTitle
@@ -1190,7 +1207,12 @@ export function scoreFormulaCardSearch(
     .split(/[^a-z0-9]+/)
     .filter(Boolean)
     .map((w) => stemSearchToken(w));
-  const titleInitials = generateTitleInitialisms(rawTitle);
+  const titleInitials = Array.from(
+    new Set([
+      ...generateTitleInitialisms(card.title || ''),
+      ...(card.fullTitle ? generateTitleInitialisms(card.fullTitle) : []),
+    ])
+  );
   const normBadge = stemSearchToken(normalizeSearchText(card.badge || ''));
   const normTopic = normalizeSearchText(card.topicTitle || '');
   const normQuery = normalizeSearchText(rawQuery || tokens.join(' '));
