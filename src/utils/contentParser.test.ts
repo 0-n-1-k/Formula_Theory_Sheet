@@ -50,8 +50,48 @@ test('parseTopicSections extracts all 66 formula sections (59 course + 7 GEN = 5
 
   const cseReminders = allFmCards.find((c) => c.id === 'cse-c:6');
   assert.equal(cseReminders?.title, 'Top 40 C Exam Reminders & Core Mnemonics');
-  assert.equal(cseReminders?.examTag, 'Sec. 1.1–1.2');
+  assert.equal(cseReminders?.examTag, undefined, 'cse-c:6 should not have a Sec. tag as examTag');
   assert.ok(cseReminders?.fullTitle?.includes('Top 40 Exam Reminders (1–40)'));
+});
+
+test('parseTopicSections strips all PDF/textbook/Sec. artifacts, ensures meaningful context, and formats C/C++ code blocks', () => {
+  const allCards = [
+    ...parseTopicSections(fmCourseHtml).flatMap((s) => s.cards),
+    ...parseTopicSections(thmHtml).flatMap((s) => s.cards),
+    ...parseTopicSections(genHtml).flatMap((s) => s.cards),
+  ];
+
+  for (const card of allCards) {
+    if (card.examTag) {
+      assert.match(
+        card.examTag,
+        /^(?:19|20)\d{2}/,
+        `Card ${card.id} examTag "${card.examTag}" must be a real academic year`
+      );
+    }
+    const combinedText = `${card.title} ${card.bodyText} ${card.useText || ''} ${card.htmlContent || ''} ${card.note || ''}`;
+    assert.ok(
+      !/Rev\.\s*Guide|\bSec(?:t|tion)?s?\.\s*\d|\bSadiku\b|\bSchildt\b/i.test(combinedText),
+      `Card ${card.id} should not contain PDF/textbook/section artifacts`
+    );
+    if (card.course !== 'GEN') {
+      assert.ok(
+        card.bodyText && card.bodyText.trim().length > 0,
+        `Card ${card.id} must have non-empty bodyText (PARAMETERS // CONTEXT)`
+      );
+      assert.ok(
+        card.useText && card.useText.trim().length > 0,
+        `Card ${card.id} must have non-empty useText (APPLICATION // STRATEGY)`
+      );
+    }
+  }
+
+  const strCard = allCards.find((c) => c.id === 'cse-str:9');
+  assert.ok(strCard?.codeContent, 'cse-str:9 should have formatted codeContent');
+  assert.ok(
+    strCard.codeContent.includes('int myStrlen(char *s) {\n  char *p = s;'),
+    'cse-str:9 should unpack one-liner functions into 2-space K&R indented blocks'
+  );
 });
 
 test('parseNavContent extracts all course navigation groups for #navF and #navT', () => {
@@ -113,5 +153,6 @@ test('parseTopicSections decodes residual HTML entities in copyText and rawLatex
     );
   }
 });
+
 
 

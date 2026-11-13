@@ -255,6 +255,38 @@ export function highlightPlainTextToHtml(
   return highlightHtmlContent(escaped, highlightTokens);
 }
 
+const CPP_SYNTAX_TOKEN_RE =
+  /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|(^[ \t]*#[ \t]*[a-zA-Z_][^\n]*)|\b(int|long|short|char|void|float|double|unsigned|signed|const|static|struct|union|enum|typedef|sizeof|return|if|else|for|while|do|switch|case|break|continue|default|goto|NULL|FILE|size_t|bool|true|false|class|public|private|protected|virtual|friend|inline|template|typename|namespace|using|new|delete|this|operator|try|catch|throw)\b|\b(0x[0-9a-fA-F]+|\d+(?:\.\d+)?[uUlLfF]*)\b/gm;
+
+/**
+ * Fast, zero-dependency, single-pass C/C++ syntax highlighter for `.fmcode` blocks.
+ * Falls back to `highlightPlainTextToHtml` when search keyword tokens are active.
+ */
+export function highlightCppCodeToHtml(
+  rawCode: string,
+  highlightTokens?: readonly string[]
+): string {
+  if (!rawCode) return '';
+  if (highlightTokens && highlightTokens.length > 0) {
+    return highlightPlainTextToHtml(rawCode, highlightTokens);
+  }
+  const escaped = String(rawCode)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return escaped.replace(
+    CPP_SYNTAX_TOKEN_RE,
+    (match, com, str, pre, kw, num) => {
+      if (com !== undefined) return `<span class="tok-com">${match}</span>`;
+      if (str !== undefined) return `<span class="tok-str">${match}</span>`;
+      if (pre !== undefined) return `<span class="tok-pre">${match}</span>`;
+      if (kw !== undefined) return `<span class="tok-kw">${match}</span>`;
+      if (num !== undefined) return `<span class="tok-num">${match}</span>`;
+      return match;
+    }
+  );
+}
+
 export function decodeHtmlEntities(str: string): string {
   if (str.indexOf('&') === -1) return str;
   return String(str)
@@ -291,7 +323,10 @@ export function renderLatexCached(latex: string, displayMode = false): string {
 }
 
 const PRE_CODE_BLOCK_RE = /<(pre|code)(?:\s[^<>]*)?>[\s\S]*?<\/\1>/gi;
-const HTML_TAG_RE = /<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^<>]*)?>/g;
+const HTML_TAG_RE =
+  /<\/?(?:b|strong|i|em|u|code|pre|sub|sup|span|br|mark|p|ul|ol|li|table|thead|tbody|tr|th|td|small|div)\b(?:\s[^<>]*)?>/gi;
+const NON_HTML_TAG_OPEN_RE =
+  /<(?!(?:\/?(?:b|strong|i|em|u|code|pre|sub|sup|span|br|mark|p|ul|ol|li|table|thead|tbody|tr|th|td|small|div|math|svg|semantics|mrow|mi|mn|mo|msub|msup|msubsup|mfrac|msqrt|mroot|mtext|mspace|mstyle|mover|munder|munderover|mtable|mtr|mtd|annotation|path|line|g)\b|!--))/gi;
 const DISPLAY_DOLLAR_RE = /\$\$([\s\S]+?)\$\$/g;
 const DISPLAY_BRACKET_RE = /\\\[([\s\S]+?)\\\]/g;
 const INLINE_PAREN_RE = /\\\(([\s\S]+?)\\\)/g;
@@ -325,7 +360,10 @@ export function renderTextWithMath(
       input.indexOf('\\[') === -1 &&
       input.indexOf('**') === -1
     ) {
-      result = input;
+      result =
+        input.indexOf('<') !== -1
+          ? input.replace(NON_HTML_TAG_OPEN_RE, '&lt;')
+          : input;
     } else {
       const protectedBlocks: string[] = [];
 
@@ -339,7 +377,7 @@ export function renderTextWithMath(
             })
           : String(input);
 
-      // 2. Protect HTML tags (e.g. <b>, <i>, <sub>, <sup>, <br>) so inline $...$ never spans across tags
+      // 2. Protect known HTML tags (e.g. <b>, <i>, <sub>, <sup>, <br>) so inline $...$ never spans across tags
       if (masked.indexOf('<') !== -1) {
         masked = masked.replace(HTML_TAG_RE, (match) => {
           const idx = protectedBlocks.length;
@@ -374,13 +412,17 @@ export function renderTextWithMath(
         processed = processed.replace(BOLD_MARKDOWN_RE, '<b>$1</b>');
       }
 
-      // 4. Restore protected HTML tags and code blocks
-      result =
+      // 4. Restore protected HTML tags and code blocks, then escape any non-HTML angle brackets (e.g. <stdio.h>)
+      const restored =
         protectedBlocks.length > 0
           ? processed.replace(PROT_RESTORE_RE, (_, idxStr: string) => {
               return protectedBlocks[Number(idxStr)] ?? '';
             })
           : processed;
+      result =
+        restored.indexOf('<') !== -1
+          ? restored.replace(NON_HTML_TAG_OPEN_RE, '&lt;')
+          : restored;
     }
     parsedMathTextCache.set(input, result);
   }
@@ -390,3 +432,100 @@ export function renderTextWithMath(
   }
   return result;
 }
+
+export interface PrewarmMathCardLike {
+  rawLatex?: string;
+  fmmDisplayMode?: boolean;
+  title?: string;
+  htmlContent?: string;
+  bodyText?: string;
+  useText?: string;
+  note?: string;
+  seeAlso?: string;
+}
+
+/**
+ * Pre-warms `katexRenderCache` and `parsedMathTextCache` in small non-blocking idle slices
+ * (10 cards per slice) so opening any topic accordion or switching tabs is an instantaneous
+ * O(1) memory lookup with zero main-thread KaTeX compilation lag.
+ */
+export function prewarmCardsMathCache(
+  cards: ReadonlyArray<PrewarmMathCardLike>
+): () => void {
+  if (!cards || cards.length === 0 || typeof window === 'undefined') {
+    return () => {};
+  }
+
+  let cursor = 0;
+  let cancelled = false;
+  let timerId: number | null = null;
+  let idleId: number | null = null;
+  const win = window as Window & {
+    requestIdleCallback?: (
+      cb: (deadline: { timeRemaining: () => number; didTimeout: boolean }) => void,
+      opts?: { timeout: number }
+    ) => number;
+    cancelIdleCallback?: (id: number) => void;
+  };
+
+  const processBatch = (deadline?: { timeRemaining: () => number }) => {
+    if (cancelled) return;
+    const startMs = performance.now();
+    let count = 0;
+    while (cursor < cards.length && count < 10) {
+      const card = cards[cursor++];
+      count++;
+      if (card.rawLatex) {
+        renderLatexCached(card.rawLatex, card.fmmDisplayMode ?? true);
+      }
+      if (card.title) {
+        renderTextWithMath(card.title);
+      }
+      if (card.htmlContent) {
+        renderTextWithMath(card.htmlContent);
+      }
+      if (card.bodyText) {
+        renderTextWithMath(card.bodyText);
+      }
+      if (card.useText) {
+        renderTextWithMath(card.useText);
+      }
+      if (card.note) {
+        renderTextWithMath(card.note);
+      }
+      if (card.seeAlso) {
+        renderTextWithMath(card.seeAlso);
+      }
+      if (deadline && deadline.timeRemaining() < 2 && performance.now() - startMs > 10) {
+        break;
+      }
+    }
+    if (cursor < cards.length && !cancelled) {
+      scheduleNext();
+    }
+  };
+
+  const scheduleNext = () => {
+    if (cancelled) return;
+    if (typeof win.requestIdleCallback === 'function') {
+      idleId = win.requestIdleCallback((deadline) => processBatch(deadline), {
+        timeout: 400,
+      });
+    } else {
+      timerId = window.setTimeout(() => processBatch(), 16);
+    }
+  };
+
+  scheduleNext();
+
+  return () => {
+    cancelled = true;
+    if (idleId !== null && typeof win.cancelIdleCallback === 'function') {
+      win.cancelIdleCallback(idleId);
+    }
+    if (timerId !== null) {
+      window.clearTimeout(timerId);
+    }
+  };
+}
+

@@ -46,11 +46,14 @@ import {
   shouldUseSemanticRanking,
 } from './utils/semanticSearch';
 import {
+  highlightCppCodeToHtml,
   highlightHtmlContent,
   highlightPlainTextToHtml,
+  prewarmCardsMathCache,
   renderLatexCached,
   renderTextWithMath,
 } from './utils/mathParser';
+import { extractValidExamTag } from './utils/titleCleaner';
 import {
   BUET_LOGO_ASCII_ART,
   DEFAULT_APP_STATE,
@@ -413,13 +416,16 @@ function splitCardTitleAndMeta(rawTitle: string): {
   metaTag: string | null;
 } {
   const match = rawTitle.match(
-    /^(.*?)\s*\(((?:19|20)\d{2}[^)]*|reference|new in [^)]+)\)\s*$/i
+    /^(.*?)\s*\(((?:19|20)\d{2}[^)]*)\)\s*$/i
   );
   if (match && match[1].trim().length > 0) {
-    return {
-      mainTitle: match[1].trim(),
-      metaTag: match[2].trim(),
-    };
+    const validTag = extractValidExamTag(match[2].trim());
+    if (validTag) {
+      return {
+        mainTitle: match[1].trim(),
+        metaTag: validTag,
+      };
+    }
   }
   return { mainTitle: rawTitle, metaTag: null };
 }
@@ -544,33 +550,81 @@ export const FormulaCardView = memo(function FormulaCardView({
   const splitCodeCols = useMemo(() => {
     if (!isWide || !card.codeContent) return null;
     const lines = card.codeContent.split('\n');
-    if (lines.length < 16) return null;
+    if (lines.length < 18) return null;
+
+    // Track brace depth after each line so we ONLY split between top-level functions/blocks
+    const depthAfterLine: number[] = [];
+    let depth = 0;
+    let inBlockComment = false;
+
+    for (const line of lines) {
+      let inStr = false;
+      let strCh = '';
+      for (let c = 0; c < line.length; c++) {
+        const ch = line[c];
+        const next = line[c + 1] || '';
+        if (inBlockComment) {
+          if (ch === '*' && next === '/') {
+            inBlockComment = false;
+            c++;
+          }
+          continue;
+        }
+        if (inStr) {
+          if (ch === '\\') {
+            c++;
+            continue;
+          }
+          if (ch === strCh) inStr = false;
+          continue;
+        }
+        if (ch === '/' && next === '/') break;
+        if (ch === '/' && next === '*') {
+          inBlockComment = true;
+          c++;
+          continue;
+        }
+        if (ch === '"' || ch === "'") {
+          inStr = true;
+          strCh = ch;
+          continue;
+        }
+        if (ch === '{') depth++;
+        else if (ch === '}') depth = Math.max(0, depth - 1);
+      }
+      depthAfterLine.push(depth);
+    }
 
     const mid = Math.floor(lines.length / 2);
-    const minIdx = Math.max(6, Math.floor(lines.length * 0.32));
-    const maxIdx = Math.min(lines.length - 6, Math.ceil(lines.length * 0.68));
+    const minIdx = Math.max(6, Math.floor(lines.length * 0.28));
+    const maxIdx = Math.min(lines.length - 6, Math.ceil(lines.length * 0.72));
 
     let bestSplit = -1;
     let bestDist = Infinity;
     for (let i = minIdx; i <= maxIdx; i++) {
+      // Never split inside a function or control block
+      if (depthAfterLine[i - 1] !== 0) continue;
+
       const trimmed = lines[i].trim();
       const prevTrimmed = lines[i - 1]?.trim() || '';
       const isBlank = trimmed === '';
-      const isTopCommentAfterBrace =
-        (trimmed.startsWith('/*') || trimmed.startsWith('//')) &&
-        (prevTrimmed === '}' || prevTrimmed === '};' || prevTrimmed === '');
-      if (isBlank || isTopCommentAfterBrace) {
-        const dist = Math.abs(i - mid);
+      const isAfterTopCloseBrace =
+        prevTrimmed === '}' || prevTrimmed === '};' || prevTrimmed.endsWith('}');
+      if (isBlank || isAfterTopCloseBrace) {
+        const candidate = isBlank ? i + 1 : i;
+        const dist = Math.abs(candidate - mid);
         if (dist < bestDist) {
           bestDist = dist;
-          bestSplit = isBlank ? i + 1 : i;
+          bestSplit = candidate;
         }
       }
     }
 
-    const splitAt = bestSplit !== -1 ? bestSplit : mid;
-    const leftCode = lines.slice(0, splitAt).join('\n').replace(/\n+$/, '');
-    const rightCode = lines.slice(splitAt).join('\n').replace(/^\n+/, '');
+    // If no safe top-level boundary exists (e.g. a single long function), keep it in 1 column
+    if (bestSplit === -1) return null;
+
+    const leftCode = lines.slice(0, bestSplit).join('\n').replace(/\n+$/, '');
+    const rightCode = lines.slice(bestSplit).join('\n').replace(/^\n+/, '');
     if (!leftCode || !rightCode) return null;
     return [leftCode, rightCode] as const;
   }, [isWide, card.codeContent]);
@@ -703,29 +757,21 @@ export const FormulaCardView = memo(function FormulaCardView({
             <div className="fmcode-multicol-grid">
               {splitCodeCols.map((colText, colIdx) => (
                 <pre key={colIdx} className="fmcode">
-                  {hasHighlight ? (
-                    <code
-                      dangerouslySetInnerHTML={{
-                        __html: highlightPlainTextToHtml(colText, activeHighlightTokens),
-                      }}
-                    />
-                  ) : (
-                    <code>{colText}</code>
-                  )}
+                  <code
+                    dangerouslySetInnerHTML={{
+                      __html: highlightCppCodeToHtml(colText, activeHighlightTokens),
+                    }}
+                  />
                 </pre>
               ))}
             </div>
           ) : (
             <pre className="fmcode">
-              {hasHighlight ? (
-                <code
-                  dangerouslySetInnerHTML={{
-                    __html: highlightPlainTextToHtml(card.codeContent, activeHighlightTokens),
-                  }}
-                />
-              ) : (
-                <code>{card.codeContent}</code>
-              )}
+              <code
+                dangerouslySetInnerHTML={{
+                  __html: highlightCppCodeToHtml(card.codeContent, activeHighlightTokens),
+                }}
+              />
             </pre>
           )
         ) : null}
@@ -830,7 +876,7 @@ export function computeGridRowLayout(
       }
     }
   }
-  if (pendingLeftId !== null && items.some((v) => v.isWide)) {
+  if (pendingLeftId !== null && items.length > 1) {
     promotedWideIds.add(pendingLeftId);
   }
 
@@ -891,7 +937,8 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
     <details
       id={domId}
       data-c={section.course}
-      className={`fmt${isIndexSelected ? ' index-selected' : ''}${sectionHidden ? ' hidden' : ''}${freqScore === 5 ? ' is-high-yield' : ''}`}
+      style={{ '--topic-pct': `${topicPct}%` } as React.CSSProperties}
+      className={`fmt${isIndexSelected ? ' index-selected' : ''}${sectionHidden ? ' hidden' : ''}${freqScore === 5 ? ' is-high-yield' : ''}${topicPct === 100 ? ' is-mastered' : ''}`}
       open={isOpen}
       hidden={sectionHidden}
     >
@@ -1079,7 +1126,7 @@ export default function App() {
   const [openTopics, setOpenTopics] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     for (const sec of [...fmSections, ...thmSections, ...genSections]) {
-      initial[sec.id] = sec.isOpenByDefault;
+      initial[sec.id] = sec.course === 'GEN' ? false : sec.isOpenByDefault;
     }
     return initial;
   });
@@ -1468,6 +1515,16 @@ export default function App() {
     return map;
   }, [fmCardsWithIndex, thmCardsWithIndex, genCardsWithIndex]);
 
+  // Pre-warm KaTeX cache across all cards in non-blocking idle slices so opening any topic is instantaneous
+  useEffect(() => {
+    const allCards = [
+      ...fmCardsWithIndex.map((x) => x.card),
+      ...thmCardsWithIndex.map((x) => x.card),
+      ...genCardsWithIndex.map((x) => x.card),
+    ];
+    return prewarmCardsMathCache(allCards);
+  }, [fmCardsWithIndex, thmCardsWithIndex, genCardsWithIndex]);
+
   // Pre-compute visual length score and full-width (`isWide`) flag once per card ID
   const cardLayoutMetaById = useMemo(() => {
     const map = new Map<string, { lengthScore: number; isWide: boolean }>();
@@ -1822,9 +1879,21 @@ export default function App() {
     setSelectedTopicId('');
   }, []);
 
-  const handleCourseChange = useCallback((course: CourseCode) => {
-    setPersisted((prev) => ({ ...prev, course }));
-  }, []);
+  const handleCourseChange = useCallback(
+    (course: CourseCode) => {
+      setPersisted((prev) => ({ ...prev, course }));
+      if (course === 'GEN') {
+        setOpenTopics((prev) => {
+          const next = { ...prev };
+          for (const sec of genSections) {
+            next[sec.id] = true;
+          }
+          return next;
+        });
+      }
+    },
+    [genSections]
+  );
 
   const handleToggleCourseBar = useCallback(() => {
     setPersisted((prev) => ({
@@ -4292,7 +4361,11 @@ export default function App() {
                                 ) : null}
                                 {pCard.codeContent ? (
                                   <pre className="fmcode">
-                                    <code>{pCard.codeContent}</code>
+                                    <code
+                                      dangerouslySetInnerHTML={{
+                                        __html: highlightCppCodeToHtml(pCard.codeContent),
+                                      }}
+                                    />
                                   </pre>
                                 ) : null}
 
@@ -4521,7 +4594,11 @@ export default function App() {
               ) : null}
               {activeFlashcard.codeContent ? (
                 <pre className="fmcode">
-                  <code>{activeFlashcard.codeContent}</code>
+                  <code
+                    dangerouslySetInnerHTML={{
+                      __html: highlightCppCodeToHtml(activeFlashcard.codeContent),
+                    }}
+                  />
                 </pre>
               ) : null}
               {activeFlashcard.bodyText || activeFlashcard.useText ? (

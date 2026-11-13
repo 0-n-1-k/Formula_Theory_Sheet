@@ -7,6 +7,7 @@ import {
   renderTextWithMath,
   highlightHtmlContent,
   highlightPlainTextToHtml,
+  highlightCppCodeToHtml,
 } from './mathParser.ts';
 
 test('renderTextWithMath parses mixed HTML tags alongside inline $...$ and display $$...$$ math', () => {
@@ -114,5 +115,34 @@ test('renderTextWithMath memoizes full prose-with-math strings in parsedMathText
   assert.ok(highlighted.includes('<mark class="fm-hl">'));
   assert.equal(parsedMathTextCache.get(sample), first, 'Base math cache remains intact after highlighting');
 });
+
+test('highlightCppCodeToHtml tokenizes C/C++ comments, preprocessor directives, keywords, strings, and numbers in a single pass', () => {
+  const snippet = [
+    '#include <stdio.h>',
+    '/* Multi-line comment with int and 42 */',
+    'int myStrlen(const char *s) { // count chars',
+    '  if (!s || *s == \'\\0\') return 0x0;',
+    '  printf("len=%d\\n", 100);',
+    '}',
+  ].join('\n');
+
+  const html = highlightCppCodeToHtml(snippet);
+  assert.ok(html.includes('<span class="tok-pre">#include &lt;stdio.h&gt;</span>'));
+  assert.ok(html.includes('<span class="tok-com">/* Multi-line comment with int and 42 */</span>'));
+  assert.ok(html.includes('<span class="tok-com">// count chars</span>'));
+  assert.ok(html.includes('<span class="tok-kw">int</span>'));
+  assert.ok(html.includes('<span class="tok-kw">const</span>'));
+  assert.ok(html.includes('<span class="tok-kw">char</span>'));
+  assert.ok(html.includes('<span class="tok-kw">return</span>'));
+  assert.ok(html.includes('<span class="tok-str">\'\\0\'</span>'));
+  assert.ok(html.includes('<span class="tok-str">"len=%d\\n"</span>'));
+  assert.ok(html.includes('<span class="tok-num">0x0</span>'));
+  assert.ok(html.includes('<span class="tok-num">100</span>'));
+
+  const searchMode = highlightCppCodeToHtml(snippet, ['mystrlen']);
+  assert.ok(searchMode.includes('<mark class="fm-hl">myStrlen</mark>'));
+  assert.equal(searchMode.includes('tok-kw'), false, 'Falls back to search highlight when highlightTokens are present');
+});
+
 
 

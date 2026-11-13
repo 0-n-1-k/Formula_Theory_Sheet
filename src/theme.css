@@ -16,6 +16,7 @@
   --shadow-dropdown: 0 20px 50px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.14);
   --text-primary: #f5f5f7;
   --text-secondary: #98989d;
+  --text-tertiary: #7c7c82;
   --text-muted: #6e6e73;
   --accent: #2997ff;
   --accent-hover: #5ac8fa;
@@ -33,6 +34,7 @@
   --dur-med: 0.32s;
   --chrome-h: 58px;
   --fmbar-h: 108px;
+  --radius-lg: 16px;
   --blur-sm: 16px;
   --blur-md: 22px;
   --blur-lg: 28px;
@@ -1710,8 +1712,6 @@ body.single-col .fmgrid {
 }
 
 .fmi {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 260px;
   display: flex;
   flex-direction: column;
   align-self: start;
@@ -4243,5 +4243,179 @@ details.fmt[open].is-high-yield {
     scroll-behavior: auto !important;
   }
 }
+
+/* ======================== 1. COURSE-SPECIFIC HARDWARE SIGNAL ACCENTS ======================== */
+:root {
+  --course-signal: var(--accent);
+  --course-signal-soft: rgba(41, 151, 255, 0.13);
+  --course-signal-border: rgba(41, 151, 255, 0.36);
+}
+
+[data-c="EEE"], [data-course="EEE"] {
+  --course-signal: #2997ff;
+  --course-signal-soft: rgba(41, 151, 255, 0.14);
+  --course-signal-border: rgba(41, 151, 255, 0.38);
+}
+
+[data-c="M157"], [data-course="M157"] {
+  --course-signal: #9d9bff;
+  --course-signal-soft: rgba(142, 140, 232, 0.15);
+  --course-signal-border: rgba(157, 155, 255, 0.38);
+}
+
+[data-c="M159"], [data-course="M159"] {
+  --course-signal: #32d7b4;
+  --course-signal-soft: rgba(50, 215, 180, 0.13);
+  --course-signal-border: rgba(50, 215, 180, 0.36);
+}
+
+[data-c="PHY"], [data-course="PHY"] {
+  --course-signal: #ffaa2b;
+  --course-signal-soft: rgba(255, 170, 43, 0.13);
+  --course-signal-border: rgba(255, 170, 43, 0.38);
+}
+
+[data-c="CSE"], [data-course="CSE"] {
+  --course-signal: #30d158;
+  --course-signal-soft: rgba(48, 209, 88, 0.13);
+  --course-signal-border: rgba(48, 209, 88, 0.38);
+}
+
+[data-c="GEN"], [data-course="GEN"] {
+  --course-signal: #b0b0b8;
+  --course-signal-soft: rgba(176, 176, 184, 0.12);
+  --course-signal-border: rgba(176, 176, 184, 0.32);
+}
+
+.fmt-course-tag,
+.fmnavrow > b {
+  color: var(--course-signal) !important;
+  background: var(--course-signal-soft) !important;
+  border-color: var(--course-signal-border) !important;
+}
+
+.course-pill[data-c]:not([data-c="ALL"]).active,
+.course-pill[data-c]:not([data-c="ALL"])[aria-pressed="true"] {
+  background: var(--course-signal-soft);
+  border-color: var(--course-signal);
+  box-shadow: 0 0 18px var(--course-signal-soft), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.course-pill[data-c]:not([data-c="ALL"]).active .course-code,
+.course-pill[data-c]:not([data-c="ALL"])[aria-pressed="true"] .course-code {
+  background: var(--course-signal);
+  color: #030305;
+}
+
+/* ======================== 2. TOPIC ACCORDION TELEMETRY TRACK ======================== */
+details.fmt > summary {
+  position: relative;
+  border-left: 3px solid transparent;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+details.fmt:hover > summary,
+details.fmt[open] > summary {
+  border-left-color: var(--course-signal);
+}
+
+details.fmt > summary::after {
+  content: "";
+  display: block !important;
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 1.5px;
+  width: var(--topic-pct, 0%);
+  background: linear-gradient(90deg, var(--course-signal), var(--success));
+  opacity: 0.75;
+  pointer-events: none;
+  transition: width var(--dur-med) var(--ease-out);
+}
+
+/* ======================== 3. QUIET CARD CHROME (GHOST UNTIL HOVER) ======================== */
+.fmi .fmb .fmst:not(.on),
+.fmi .fmb .fmcp,
+.fmi:not(.learned) .fmb .fml {
+  opacity: 0.42;
+  border-color: transparent;
+  background: transparent;
+  transition: opacity 0.18s ease, background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.fmi:hover .fmb .fmst,
+.fmi:hover .fmb .fmcp,
+.fmi:hover .fmb .fml,
+.fmi:focus-within .fmb .fmst,
+.fmi:focus-within .fmb .fmcp,
+.fmi:focus-within .fmb .fml {
+  opacity: 1;
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.fmi.learned .fmb .fml {
+  opacity: 1;
+  color: var(--success);
+  border-color: rgba(48, 209, 88, 0.35);
+  background: rgba(48, 209, 88, 0.1);
+}
+
+/* ======================== 4. FLUSH ARCHITECTURAL SPEC GRID (NO BOX-IN-BOX) ======================== */
+.fmbody {
+  padding: 12px 14px 0;
+  gap: 12px;
+}
+
+.fmbody > :last-child:not(.fmdet) {
+  margin-bottom: 14px;
+}
+
+.fmdet {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 0;
+  margin: 2px -14px 0;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.24);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.fm-spec-pod {
+  padding: 10px 14px 12px;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.fm-spec-pod:last-child {
+  border-right: none;
+}
+
+/* ======================== 5. C/C++ IDE SYNTAX HIGHLIGHTING TOKENS ======================== */
+.fmcode .tok-com {
+  color: #6e7681;
+  font-style: italic;
+}
+
+.fmcode .tok-pre {
+  color: #b4b2ff;
+}
+
+.fmcode .tok-kw {
+  color: #64d2ff;
+  font-weight: 600;
+}
+
+.fmcode .tok-str {
+  color: #ffd60a;
+}
+
+.fmcode .tok-num {
+  color: #4ae072;
+}
+
 
 
