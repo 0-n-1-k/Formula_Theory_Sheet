@@ -323,10 +323,18 @@ export function renderLatexCached(latex: string, displayMode = false): string {
 }
 
 const PRE_CODE_BLOCK_RE = /<(pre|code)(?:\s[^<>]*)?>[\s\S]*?<\/\1>/gi;
-const HTML_TAG_RE =
-  /<\/?(?:b|strong|i|em|u|code|pre|sub|sup|span|br|mark|p|ul|ol|li|table|thead|tbody|tr|th|td|small|div)\b(?:\s[^<>]*)?>/gi;
-const NON_HTML_TAG_OPEN_RE =
-  /<(?!(?:\/?(?:b|strong|i|em|u|code|pre|sub|sup|span|br|mark|p|ul|ol|li|table|thead|tbody|tr|th|td|small|div|math|svg|semantics|mrow|mi|mn|mo|msub|msup|msubsup|mfrac|msqrt|mroot|mtext|mspace|mstyle|mover|munder|munderover|mtable|mtr|mtd|annotation|path|line|g)\b|!--))/gi;
+const HTML5_TAG_NAMES =
+  'a|abbr|address|article|aside|b|bdi|bdo|blockquote|br|button|caption|cite|code|col|colgroup|data|dd|del|details|dfn|div|dl|dt|em|figcaption|figure|footer|h[1-6]|header|hr|i|img|input|ins|kbd|label|li|main|mark|nav|ol|option|p|pre|q|rp|rt|ruby|s|samp|section|select|small|span|strong|sub|summary|sup|table|tbody|td|textarea|tfoot|th|thead|time|tr|u|ul|var|wbr';
+const MATHML_SVG_TAG_NAMES =
+  'math|svg|semantics|mrow|mi|mn|mo|msub|msup|msubsup|mfrac|msqrt|mroot|mtext|mspace|mstyle|mover|munder|munderover|mtable|mtr|mtd|annotation|path|line|g';
+const HTML_TAG_RE = new RegExp(
+  `<\\/?(?:${HTML5_TAG_NAMES})\\b(?:\\s[^<>]*)?>`,
+  'gi'
+);
+const NON_HTML_TAG_OPEN_RE = new RegExp(
+  `<(?!(?:\\/?(?:${HTML5_TAG_NAMES}|${MATHML_SVG_TAG_NAMES})\\b(?=[\\s/>])|!--))`,
+  'gi'
+);
 const DISPLAY_DOLLAR_RE = /\$\$([\s\S]+?)\$\$/g;
 const DISPLAY_BRACKET_RE = /\\\[([\s\S]+?)\\\]/g;
 const INLINE_PAREN_RE = /\\\(([\s\S]+?)\\\)/g;

@@ -26,6 +26,7 @@ import {
   CURRENT_TERM_CONFIG,
   TERM_REGISTRY,
   buildEffectiveCoursePills,
+  syncDocumentMetaForTerm,
 } from './termConfig';
 import {
   buildFormulaSearchIndex,
@@ -1232,9 +1233,7 @@ export default function App() {
   }, [hideDetails]);
 
   useEffect(() => {
-    if (typeof document !== 'undefined') {
-      document.title = CURRENT_TERM_CONFIG.brandTitle;
-    }
+    syncDocumentMetaForTerm(CURRENT_TERM_CONFIG);
   }, []);
 
   const updateChromeHeight = useCallback(() => {

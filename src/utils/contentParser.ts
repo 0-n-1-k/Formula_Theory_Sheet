@@ -633,6 +633,41 @@ function extractBalancedDivContent(html: string, className: string): string | un
 }
 
 /**
+ * Finds the closing `>` of an opening HTML tag while ignoring any `>` characters
+ * that appear inside quoted attribute values.
+ *
+ * @param rawTagContent Remainder of the opening tag after splitting on its prefix
+ * @param startsInsideDoubleQuote Set to `true` when the split prefix opened a `"` (e.g. `<div class="fmi `)
+ */
+export function findOpeningTagEndIndex(
+  rawTagContent: string,
+  startsInsideDoubleQuote = false
+): number {
+  let quoteChar: string | null = startsInsideDoubleQuote ? '"' : null;
+  for (let i = 0; i < rawTagContent.length; i++) {
+    const ch = rawTagContent[i];
+    if (quoteChar !== null) {
+      if (ch === quoteChar) {
+        quoteChar = null;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      quoteChar = '"';
+      continue;
+    }
+    if (ch === "'" && i > 0 && rawTagContent[i - 1] === '=') {
+      quoteChar = "'";
+      continue;
+    }
+    if (ch === '>') {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
  * Parses `<details class="fmt" ...>` topic accordions and `.fmi` cards from
  * `content-fmroot.html` or `content-thmroot.html`, applying:
  * - `cleanCardTitle` & `extractValidExamTag` (real exam years only, no `Sec.` or stray digits)
@@ -646,7 +681,7 @@ export function parseTopicSections(html: string): TopicSectionRecord[] {
   const sections: TopicSectionRecord[] = [];
 
   for (const rawSec of rawSections) {
-    const openTagEnd = rawSec.indexOf('>');
+    const openTagEnd = findOpeningTagEndIndex(rawSec, false);
     if (openTagEnd === -1) continue;
     const openTagAttrs = rawSec.slice(0, openTagEnd);
     const id = (openTagAttrs.match(/id="([^"]+)"/) || [])[1] || '';
@@ -664,7 +699,7 @@ export function parseTopicSections(html: string): TopicSectionRecord[] {
     const cards: FormulaCardRecord[] = [];
 
     for (const rawCard of rawCards) {
-      const cardTagEnd = rawCard.indexOf('>');
+      const cardTagEnd = findOpeningTagEndIndex(rawCard, true);
       if (cardTagEnd === -1) continue;
       const cardAttrs = rawCard.slice(0, cardTagEnd);
       const cardTypeClass = (cardAttrs.match(/^([a-zA-Z0-9_-]+)/) || [])[1] || 'tex';
@@ -683,7 +718,7 @@ export function parseTopicSections(html: string): TopicSectionRecord[] {
 
       const copyAttrMatch = rawCard.match(/data-t="([^"]*)"/);
       const copyText = copyAttrMatch
-        ? decodeHtmlEntities(decodeHtmlEntities(copyAttrMatch[1]))
+        ? decodeHtmlEntities(copyAttrMatch[1])
         : undefined;
 
       const bodyStartIdx = rawCard.indexOf('<div class="fmbody">');
@@ -694,13 +729,13 @@ export function parseTopicSections(html: string): TopicSectionRecord[] {
       let fmmDisplayMode = true;
       if (fmmInner !== undefined) {
         if (fmmInner.startsWith('$$') && fmmInner.endsWith('$$')) {
-          rawLatex = decodeHtmlEntities(decodeHtmlEntities(fmmInner.slice(2, -2).trim()));
+          rawLatex = decodeHtmlEntities(fmmInner.slice(2, -2).trim());
           fmmDisplayMode = true;
         } else if (fmmInner.startsWith('$') && fmmInner.endsWith('$')) {
-          rawLatex = decodeHtmlEntities(decodeHtmlEntities(fmmInner.slice(1, -1).trim()));
+          rawLatex = decodeHtmlEntities(fmmInner.slice(1, -1).trim());
           fmmDisplayMode = false;
         } else {
-          rawLatex = decodeHtmlEntities(decodeHtmlEntities(fmmInner));
+          rawLatex = decodeHtmlEntities(fmmInner);
           fmmDisplayMode = true;
         }
       }

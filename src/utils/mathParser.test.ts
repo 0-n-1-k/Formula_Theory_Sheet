@@ -144,5 +144,18 @@ test('highlightCppCodeToHtml tokenizes C/C++ comments, preprocessor directives, 
   assert.equal(searchMode.includes('tok-kw'), false, 'Falls back to search highlight when highlightTokens are present');
 });
 
+test('renderTextWithMath preserves standard HTML5 tags like <a>, <kbd>, and <abbr> while escaping C/C++ <stdio.h> headers', () => {
+  const input =
+    'Press <kbd>/</kbd> or see <a href="#fm-cse-lib">Reference</a> (<abbr title="Standard Input Output">I/O</abbr>) for <stdio.h> and <stdlib.h> where $x > 0$.';
+  const rendered = renderTextWithMath(input);
+  assert.ok(rendered.includes('<kbd>/</kbd>'), 'Preserves <kbd> tag');
+  assert.ok(rendered.includes('<a href="#fm-cse-lib">Reference</a>'), 'Preserves <a> tag');
+  assert.ok(rendered.includes('<abbr title="Standard Input Output">I/O</abbr>'), 'Preserves <abbr> tag');
+  assert.ok(rendered.includes('&lt;stdio.h>'), 'Escapes non-HTML <stdio.h> header');
+  assert.ok(rendered.includes('&lt;stdlib.h>'), 'Escapes non-HTML <stdlib.h> header');
+  assert.ok(rendered.includes('class="katex"'), 'Renders inline math $x > 0$');
+});
+
+
 
 

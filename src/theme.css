@@ -52,6 +52,10 @@
   --cond-heading: #b4b2ff;
   --use-heading: #4ae072;
   --step-heading: #5ac8fa;
+  /* Course-specific hardware signal accents */
+  --course-signal: var(--accent);
+  --course-signal-soft: rgba(41, 151, 255, 0.13);
+  --course-signal-border: rgba(41, 151, 255, 0.36);
 }
 
 *, *::before, *::after {
@@ -4245,12 +4249,6 @@ details.fmt[open].is-high-yield {
 }
 
 /* ======================== 1. COURSE-SPECIFIC HARDWARE SIGNAL ACCENTS ======================== */
-:root {
-  --course-signal: var(--accent);
-  --course-signal-soft: rgba(41, 151, 255, 0.13);
-  --course-signal-border: rgba(41, 151, 255, 0.36);
-}
-
 [data-c="EEE"], [data-course="EEE"] {
   --course-signal: #2997ff;
   --course-signal-soft: rgba(41, 151, 255, 0.14);

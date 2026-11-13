@@ -122,3 +122,41 @@ export function buildEffectiveCoursePills(
     genEntry,
   ];
 }
+
+/**
+ * Generates a term-specific SEO & OpenGraph description string from a `TermConfig`.
+ */
+export function buildTermMetaDescription(termConfig: TermConfig = CURRENT_TERM_CONFIG): string {
+  const courseList = termConfig.courses
+    .filter((c) => c.code !== 'GEN')
+    .map((c) => `${c.badge} (${c.label})`)
+    .join(', ');
+  return `Interactive BUET ${termConfig.shortCode.replace(/\s*\/\/\s*/g, '/')} EEE formula, theorem, and definition reference sheet covering ${courseList}, plus general mathematics and physical constants.`;
+}
+
+/**
+ * Synchronizes `document.title` as well as `<meta name="description">`, `og:title`,
+ * `og:description`, `twitter:title`, and `twitter:description` with the active `TermConfig`.
+ */
+export function syncDocumentMetaForTerm(
+  termConfig: TermConfig = CURRENT_TERM_CONFIG,
+  doc: Document | undefined = typeof document !== 'undefined' ? document : undefined
+): void {
+  if (!doc) return;
+  doc.title = termConfig.brandTitle;
+  const desc = buildTermMetaDescription(termConfig);
+
+  const setMeta = (selector: string, content: string) => {
+    const el = doc.querySelector<HTMLMetaElement>(selector);
+    if (el) {
+      el.setAttribute('content', content);
+    }
+  };
+
+  setMeta('meta[name="description"]', desc);
+  setMeta('meta[property="og:title"]', termConfig.brandTitle);
+  setMeta('meta[property="og:description"]', desc);
+  setMeta('meta[name="twitter:title"]', termConfig.brandTitle);
+  setMeta('meta[name="twitter:description"]', desc);
+}
+

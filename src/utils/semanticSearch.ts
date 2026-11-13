@@ -1,5 +1,5 @@
 import cardEmbeddingsData from '../data/card-embeddings.json';
-import { getExtractor, isSemanticAvailable } from './embeddingModel';
+import { getExtractor, isSemanticAvailable, markSemanticUnavailable } from './embeddingModel';
 import {
   buildFormulaSearchIndex,
   isConversationalNoiseTerm,
@@ -114,7 +114,7 @@ export async function rankBySemanticSimilarity(
     return new Map<string, number>();
   }
   if (!cardEmbeddings || !cardEmbeddings.cards || typeof cardEmbeddings.cards !== 'object') {
-    console.warn('[semanticSearch] card-embeddings.json is missing or invalid; falling back to lexical.');
+    markSemanticUnavailable('card-embeddings.json is missing or invalid');
     return new Map<string, number>();
   }
   try {
@@ -127,7 +127,7 @@ export async function rankBySemanticSimilarity(
     }
     return scores;
   } catch (err) {
-    console.warn('[semanticSearch] Semantic query embedding failed; falling back to lexical:', err);
+    markSemanticUnavailable(err);
     return new Map<string, number>();
   }
 }

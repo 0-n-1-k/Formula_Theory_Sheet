@@ -1,12 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { parseTopicSections, parseNavContent } from './contentParser.ts';
+import {
+  findOpeningTagEndIndex,
+  parseTopicSections,
+  parseNavContent,
+} from './contentParser.ts';
 
 const fmCourseHtml = fs.readFileSync('src/content-fmroot.html', 'utf8');
 const genHtml = fs.readFileSync('src/content-gen.html', 'utf8');
 const thmHtml = fs.readFileSync('src/content-thmroot.html', 'utf8');
 const navHtml = fs.readFileSync('src/content-nav.html', 'utf8');
+
+test('findOpeningTagEndIndex ignores > inside quoted attributes and prevents m157-gamma:0 data-s truncation', () => {
+  const sample = 'tex" data-k="m157-gamma:0" data-s="gamma ∫₀<sup>∞</sup> for n > 0"><div class="fmh">';
+  const endIdx = findOpeningTagEndIndex(sample, true);
+  assert.equal(sample.slice(endIdx), '><div class="fmh">');
+
+  const syntheticSection = `<details class="fmt" id="fm-test" data-c="M157"><summary><span class="fmtt">Gamma Test</span></summary><div class="fmgrid"><div class="fmi tex" data-k="m157-gamma:0" data-s="gamma function ∫₀<sup>∞</sup> for n > 0"><div class="fmh"><span class="fmn">Gamma function</span><span class="fmb"></span></div><div class="fmbody"><div class="fmm">$$\\Gamma(n)$$</div></div></div></div></details>`;
+  const parsed = parseTopicSections(syntheticSection);
+  assert.equal(parsed[0].cards[0].keywords, 'gamma function ∫₀<sup>∞</sup> for n > 0');
+});
 
 test('parseTopicSections extracts all 66 formula sections (59 course + 7 GEN = 526 cards) and 13 theorem sections (161 cards)', () => {
   const fmCourseSections = parseTopicSections(fmCourseHtml);
@@ -33,6 +47,12 @@ test('parseTopicSections extracts all 66 formula sections (59 course + 7 GEN = 5
   }
 
   const allFmCards = fmSections.flatMap((s) => s.cards);
+  const gammaCard = allFmCards.find((c) => c.id === 'm157-gamma:0');
+  assert.ok(
+    gammaCard?.keywords && gammaCard.keywords.includes('gamma function'),
+    'm157-gamma:0 must retain its full data-s search keywords'
+  );
+
   const optCard = allFmCards.find((c) => c.id === 'm157-maxmin:7');
   assert.ok(optCard?.steps?.some((s) => s.includes('Norman window')), 'm157-maxmin:7 should retain all 12 past-paper optimization steps');
   const curveCard = allFmCards.find((c) => c.id === 'm157-appl:13');
@@ -54,7 +74,19 @@ test('parseTopicSections extracts all 66 formula sections (59 course + 7 GEN = 5
   assert.ok(cseReminders?.fullTitle?.includes('Top 40 Exam Reminders (1–40)'));
 });
 
-test('parseTopicSections strips all PDF/textbook/Sec. artifacts, ensures meaningful context, and formats C/C++ code blocks', () => {
+test('parseTopicSections strips all PDF/textbook/Sec. artifacts, ensures non-empty keywords & context, and has zero double-escaped HTML entities', () => {
+  for (const [name, raw] of [
+    ['content-fmroot.html', fmCourseHtml],
+    ['content-thmroot.html', thmHtml],
+    ['content-gen.html', genHtml],
+  ] as const) {
+    assert.equal(
+      /&amp;(?:lt|gt|amp|quot|#39|#x27);/i.test(raw),
+      false,
+      `${name} should contain zero double-escaped HTML entities`
+    );
+  }
+
   const allCards = [
     ...parseTopicSections(fmCourseHtml).flatMap((s) => s.cards),
     ...parseTopicSections(thmHtml).flatMap((s) => s.cards),
@@ -62,6 +94,10 @@ test('parseTopicSections strips all PDF/textbook/Sec. artifacts, ensures meaning
   ];
 
   for (const card of allCards) {
+    assert.ok(
+      card.keywords && card.keywords.trim().length > 0,
+      `Card ${card.id} must have non-empty data-s search keywords`
+    );
     if (card.examTag) {
       assert.match(
         card.examTag,
@@ -153,6 +189,7 @@ test('parseTopicSections decodes residual HTML entities in copyText and rawLatex
     );
   }
 });
+
 
 
 

@@ -7,8 +7,9 @@
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "tsx --test src/utils/*.test.ts",
+    "lint": "tsc --noEmit && tsx --test src/utils/academicData.test.ts src/utils/contentParser.test.ts",
     "embeddings:build": "node scripts/generate-card-embeddings.mjs"
   },
   "dependencies": {
