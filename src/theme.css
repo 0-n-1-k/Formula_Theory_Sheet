@@ -1449,6 +1449,9 @@ mark.search-hl {
 }
 
 .focus-pill {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1456,7 +1459,9 @@ mark.search-hl {
   padding: 8px 11px;
   margin-bottom: 12px;
   border-radius: 10px;
-  background: rgba(41, 151, 255, 0.1);
+  background: rgba(13, 21, 35, 0.94);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border: 1px solid rgba(41, 151, 255, 0.25);
   font-size: var(--fs-sm);
   color: var(--text-primary);
@@ -1936,16 +1941,6 @@ body.self-test .fmi.revealed .fmbody .fmhtml {
 /* Hide Where/Use Details Mode */
 body.hide-details .fmdet {
   display: none !important;
-}
-
-.fmdet {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  font-size: var(--fs-sm);
-  line-height: 1.48;
-  color: var(--text-secondary);
-  padding-top: 2px;
 }
 
 .fmw b,
@@ -2983,7 +2978,31 @@ details.fmd[open] > summary::after {
 
 .sb-close-btn,
 .sidebar-close-btn {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 214, 10, 0.55);
+  background: rgba(255, 214, 10, 0.16);
+  color: #ffd60a;
+  font-family: var(--font-dot);
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+.sb-close-btn:hover,
+.sidebar-close-btn:hover {
+  background: rgba(255, 214, 10, 0.28);
+}
+
+.sb-close-btn:active,
+.sidebar-close-btn:active {
+  transform: scale(0.95);
 }
 
 @media (max-width: 1024px) {
@@ -3860,27 +3879,6 @@ details.fmt[open].is-high-yield {
   box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.65);
 }
 
-/* Tier 3: Structured Micro-Spec Pods for Where & Application (.fmdet & .fm-spec-pod) — no left-side stripe */
-.fmdet {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  gap: 8px;
-  padding: 0;
-  background: transparent;
-  border: none;
-}
-
-.fm-spec-pod {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px 11px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  min-width: 0;
-}
-
 .fm-spec-label {
   font-family: var(--font-dot);
   font-size: var(--fs-2xs);
@@ -4377,15 +4375,22 @@ details.fmt > summary::after {
   padding: 0;
   background: rgba(0, 0, 0, 0.24);
   border-top: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: var(--fs-sm);
+  line-height: 1.48;
+  color: var(--text-secondary);
 }
 
 .fm-spec-pod {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   padding: 10px 14px 12px;
   border-radius: 0;
   background: transparent;
   border: none;
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  min-width: 0;
 }
 
 .fm-spec-pod:last-child {
@@ -4393,27 +4398,135 @@ details.fmt > summary::after {
 }
 
 /* ======================== 5. C/C++ IDE SYNTAX HIGHLIGHTING TOKENS ======================== */
-.fmcode .tok-com {
+code .tok-com,
+.fmcode .tok-com,
+.tok-com {
   color: #6e7681;
   font-style: italic;
 }
 
-.fmcode .tok-pre {
+code .tok-pre,
+.fmcode .tok-pre,
+.tok-pre {
   color: #b4b2ff;
 }
 
-.fmcode .tok-kw {
+code .tok-kw,
+.fmcode .tok-kw,
+.tok-kw {
   color: #64d2ff;
   font-weight: 600;
 }
 
-.fmcode .tok-str {
+code .tok-str,
+.fmcode .tok-str,
+.tok-str {
   color: #ffd60a;
 }
 
-.fmcode .tok-num {
+code .tok-num,
+.fmcode .tok-num,
+.tok-num {
   color: #4ae072;
 }
 
+/* ======================== 6. DETACHED PULL-OUT INDEX DRAWER TRIGGER ======================== */
+.fm-index-vertical-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Fira Code', var(--font-mono), monospace, sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--theme-color-accent-cyan, #00f0ff);
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+}
 
+#nav-drawer-toggle.is-detached,
+.fm-index-trigger.is-detached {
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10005;
+  width: 32px;
+  height: 160px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(13, 27, 42, 0.95), rgba(10, 21, 35, 0.98));
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  border-left: none;
+  border-radius: 0 40px 40px 0 / 0 24px 24px 0;
+  box-shadow:
+    3px 0 15px rgba(0, 0, 0, 0.6),
+    0 0 1px rgba(0, 240, 255, 0.3) inset;
+  transition: all 0.25s cubic-bezier(0.19, 1, 0.22, 1);
+  cursor: pointer;
+}
 
+#nav-drawer-toggle.is-detached:hover,
+.fm-index-trigger.is-detached:hover {
+  width: 38px;
+  background: linear-gradient(135deg, rgba(17, 34, 51, 0.98), rgba(12, 25, 41, 0.99));
+  border-color: rgba(0, 240, 255, 0.5);
+  box-shadow:
+    5px 0 20px rgba(0, 240, 255, 0.15),
+    3px 0 12px rgba(0, 0, 0, 0.7);
+}
+
+/* Tactile ridges indicating grip/grab pattern on edge */
+#nav-drawer-toggle.is-detached::before,
+.fm-index-trigger.is-detached::before {
+  content: "";
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 18px;
+  border-left: 1px dotted rgba(0, 240, 255, 0.4);
+  border-right: 1px dotted rgba(0, 240, 255, 0.4);
+  opacity: 0.7;
+}
+
+/* Top & Bottom Seamless Slider Rails/Border */
+#nav-drawer-toggle.is-detached::after,
+.fm-index-trigger.is-detached::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.5px;
+  height: 100vh;
+  z-index: -1;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 240, 255, 0.05) 0%,
+    rgba(0, 240, 255, 0.25) 35%,
+    transparent 43%,
+    transparent 57%,
+    rgba(0, 240, 255, 0.25) 65%,
+    rgba(0, 240, 255, 0.05) 100%
+  );
+  box-shadow: 0 0 2px rgba(0, 240, 255, 0.1);
+  pointer-events: none;
+}
+
+#nav-drawer-toggle.is-detached:hover::after,
+.fm-index-trigger.is-detached:hover::after {
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 240, 255, 0.1) 0%,
+    rgba(0, 240, 255, 0.35) 35%,
+    transparent 42%,
+    transparent 58%,
+    rgba(0, 240, 255, 0.35) 65%,
+    rgba(0, 240, 255, 0.1) 100%
+  );
+}

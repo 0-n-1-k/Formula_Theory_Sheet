@@ -548,88 +548,6 @@ export const FormulaCardView = memo(function FormulaCardView({
     return 'fmhtml fmhtml-cols';
   }, [isWide, card.htmlContent]);
 
-  const splitCodeCols = useMemo(() => {
-    if (!isWide || !card.codeContent) return null;
-    const lines = card.codeContent.split('\n');
-    if (lines.length < 18) return null;
-
-    // Track brace depth after each line so we ONLY split between top-level functions/blocks
-    const depthAfterLine: number[] = [];
-    let depth = 0;
-    let inBlockComment = false;
-
-    for (const line of lines) {
-      let inStr = false;
-      let strCh = '';
-      for (let c = 0; c < line.length; c++) {
-        const ch = line[c];
-        const next = line[c + 1] || '';
-        if (inBlockComment) {
-          if (ch === '*' && next === '/') {
-            inBlockComment = false;
-            c++;
-          }
-          continue;
-        }
-        if (inStr) {
-          if (ch === '\\') {
-            c++;
-            continue;
-          }
-          if (ch === strCh) inStr = false;
-          continue;
-        }
-        if (ch === '/' && next === '/') break;
-        if (ch === '/' && next === '*') {
-          inBlockComment = true;
-          c++;
-          continue;
-        }
-        if (ch === '"' || ch === "'") {
-          inStr = true;
-          strCh = ch;
-          continue;
-        }
-        if (ch === '{') depth++;
-        else if (ch === '}') depth = Math.max(0, depth - 1);
-      }
-      depthAfterLine.push(depth);
-    }
-
-    const mid = Math.floor(lines.length / 2);
-    const minIdx = Math.max(6, Math.floor(lines.length * 0.28));
-    const maxIdx = Math.min(lines.length - 6, Math.ceil(lines.length * 0.72));
-
-    let bestSplit = -1;
-    let bestDist = Infinity;
-    for (let i = minIdx; i <= maxIdx; i++) {
-      // Never split inside a function or control block
-      if (depthAfterLine[i - 1] !== 0) continue;
-
-      const trimmed = lines[i].trim();
-      const prevTrimmed = lines[i - 1]?.trim() || '';
-      const isBlank = trimmed === '';
-      const isAfterTopCloseBrace =
-        prevTrimmed === '}' || prevTrimmed === '};' || prevTrimmed.endsWith('}');
-      if (isBlank || isAfterTopCloseBrace) {
-        const candidate = isBlank ? i + 1 : i;
-        const dist = Math.abs(candidate - mid);
-        if (dist < bestDist) {
-          bestDist = dist;
-          bestSplit = candidate;
-        }
-      }
-    }
-
-    // If no safe top-level boundary exists (e.g. a single long function), keep it in 1 column
-    if (bestSplit === -1) return null;
-
-    const leftCode = lines.slice(0, bestSplit).join('\n').replace(/\n+$/, '');
-    const rightCode = lines.slice(bestSplit).join('\n').replace(/^\n+/, '');
-    if (!leftCode || !rightCode) return null;
-    return [leftCode, rightCode] as const;
-  }, [isWide, card.codeContent]);
-
   const handleCardClick = useCallback(() => {
     if (selfTest || (typeof document !== 'undefined' && document.body.classList.contains('self-test'))) {
       setIsRevealed((prev) => !prev);
@@ -754,51 +672,13 @@ export const FormulaCardView = memo(function FormulaCardView({
           />
         ) : null}
         {card.codeContent ? (
-          splitCodeCols ? (
-            <div className="fmcode-multicol-grid">
-              {splitCodeCols.map((colText, colIdx) => (
-                <pre key={colIdx} className="fmcode">
-                  <code
-                    dangerouslySetInnerHTML={{
-                      __html: highlightCppCodeToHtml(colText, activeHighlightTokens),
-                    }}
-                  />
-                </pre>
-              ))}
-            </div>
-          ) : (
-            <pre className="fmcode">
-              <code
-                dangerouslySetInnerHTML={{
-                  __html: highlightCppCodeToHtml(card.codeContent, activeHighlightTokens),
-                }}
-              />
-            </pre>
-          )
-        ) : null}
-        {cleanBodyText || cleanUseText ? (
-          <div className="fmdet">
-            {cleanBodyText ? (
-              <div className="fm-spec-pod fmw-pod">
-                <span className="fm-spec-label">PARAMETERS // CONTEXT</span>
-                <SecondaryMathText
-                  className="fmw"
-                  content={cleanBodyText}
-                  highlightTokens={activeHighlightTokens}
-                />
-              </div>
-            ) : null}
-            {cleanUseText ? (
-              <div className="fm-spec-pod fmu-pod">
-                <span className="fm-spec-label">APPLICATION // STRATEGY</span>
-                <SecondaryMathText
-                  className="fmu"
-                  content={cleanUseText}
-                  highlightTokens={activeHighlightTokens}
-                />
-              </div>
-            ) : null}
-          </div>
+          <pre className="fmcode">
+            <code
+              dangerouslySetInnerHTML={{
+                __html: highlightCppCodeToHtml(card.codeContent, activeHighlightTokens),
+              }}
+            />
+          </pre>
         ) : null}
         {card.note ? (
           <SecondaryMathText
@@ -845,6 +725,30 @@ export const FormulaCardView = memo(function FormulaCardView({
               </ol>
             ) : null}
           </details>
+        ) : null}
+        {cleanBodyText || cleanUseText ? (
+          <div className="fmdet">
+            {cleanBodyText ? (
+              <div className="fm-spec-pod fmw-pod">
+                <span className="fm-spec-label">PARAMETERS // CONTEXT</span>
+                <SecondaryMathText
+                  className="fmw"
+                  content={cleanBodyText}
+                  highlightTokens={activeHighlightTokens}
+                />
+              </div>
+            ) : null}
+            {cleanUseText ? (
+              <div className="fm-spec-pod fmu-pod">
+                <span className="fm-spec-label">APPLICATION // STRATEGY</span>
+                <SecondaryMathText
+                  className="fmu"
+                  content={cleanUseText}
+                  highlightTokens={activeHighlightTokens}
+                />
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </div>
@@ -1086,6 +990,7 @@ export default function App() {
   const [importJsonText, setImportJsonText] = useState<string>('');
   const [toastMsg, setToastMsg] = useState<string>('');
   const [showTopBtn, setShowTopBtn] = useState<boolean>(false);
+  const [isDetached, setIsDetached] = useState<boolean>(false);
   const [selectedTopicId, setSelectedTopicId] = useState<string>('');
   const [hideDetails, setHideDetails] = useState<boolean>(false);
   const [bentoOpen, setBentoOpen] = useState<boolean>(true);
@@ -1277,11 +1182,18 @@ export default function App() {
 
   useEffect(() => {
     const handleScroll = () => {
+      const scrolledPast = window.scrollY > 260;
+      setIsDetached(scrolledPast);
       setShowTopBtn(window.scrollY > 400);
     };
     handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const toggleNavDrawer = useCallback(() => {
+    setBentoOpen(false);
+    setSidebarOpen((open) => !open);
   }, []);
 
   const retractHud = useCallback(() => {
@@ -2815,22 +2727,39 @@ export default function App() {
 
   return (
     <WorkspaceErrorBoundary fallbackLabel={CURRENT_TERM_CONFIG.brandTitle}>
+      {isDetached && !sidebarOpen ? (
+        <button
+          type="button"
+          id="nav-drawer-toggle"
+          className="fm-index-trigger is-detached"
+          onClick={toggleNavDrawer}
+          aria-label="Toggle Quick Index"
+          aria-expanded={sidebarOpen}
+        >
+          <span className="fm-index-vertical-text">
+            <span>I</span>
+            <span>N</span>
+            <span>D</span>
+            <span>E</span>
+            <span>X</span>
+          </span>
+        </button>
+      ) : null}
       <header className="top-chrome" ref={topChromeRef}>
         <div className="hd">
           <div className="hd-left">
-            <button
-              type="button"
-              className={`sb-btn${sidebarOpen ? ' active' : ''}`}
-              id="sbBtn"
-              aria-label="Toggle Topic Index Sidebar"
-              aria-expanded={sidebarOpen}
-              onClick={() => {
-                setBentoOpen(false);
-                setSidebarOpen((open) => !open);
-              }}
-            >
-              [INDEX]
-            </button>
+            {!sidebarOpen ? (
+              <button
+                type="button"
+                id={isDetached ? 'sbBtn' : 'nav-drawer-toggle'}
+                className="sb-btn fm-index-trigger"
+                aria-label="Toggle Quick Index"
+                aria-expanded={sidebarOpen}
+                onClick={toggleNavDrawer}
+              >
+                [INDEX]
+              </button>
+            ) : null}
             <div className="brand-wrap">
               <div className="term-switcher-wrap" ref={termSwitcherWrapRef}>
                 <button
@@ -4350,19 +4279,28 @@ export default function App() {
                                   <SecondaryMathText
                                     className="fmhtml"
                                     content={pCard.htmlContent}
+                                    highlightTokens={
+                                      hudTokens.length > 0 ? hudTokens : undefined
+                                    }
                                   />
                                 ) : null}
                                 {pCard.rawLatex ? (
                                   <KatexMathBlock
                                     latex={pCard.rawLatex}
                                     displayMode={pCard.fmmDisplayMode ?? true}
+                                    highlightTokens={
+                                      hudTokens.length > 0 ? hudTokens : undefined
+                                    }
                                   />
                                 ) : null}
                                 {pCard.codeContent ? (
                                   <pre className="fmcode">
                                     <code
                                       dangerouslySetInnerHTML={{
-                                        __html: highlightCppCodeToHtml(pCard.codeContent),
+                                        __html: highlightCppCodeToHtml(
+                                          pCard.codeContent,
+                                          hudTokens.length > 0 ? hudTokens : undefined
+                                        ),
                                       }}
                                     />
                                   </pre>
@@ -4374,24 +4312,36 @@ export default function App() {
                                       <SecondaryMathText
                                         className="fmw"
                                         content={pCard.bodyText}
+                                        highlightTokens={
+                                          hudTokens.length > 0 ? hudTokens : undefined
+                                        }
                                       />
                                     ) : null}
                                     {pCard.useText ? (
                                       <SecondaryMathText
                                         className="fmu"
                                         content={pCard.useText}
+                                        highlightTokens={
+                                          hudTokens.length > 0 ? hudTokens : undefined
+                                        }
                                       />
                                     ) : null}
                                     {pCard.note ? (
                                       <SecondaryMathText
                                         className="fmnote"
                                         content={pCard.note}
+                                        highlightTokens={
+                                          hudTokens.length > 0 ? hudTokens : undefined
+                                        }
                                       />
                                     ) : null}
                                     {pCard.seeAlso ? (
                                       <SecondaryMathText
                                         className="thsee"
                                         content={pCard.seeAlso}
+                                        highlightTokens={
+                                          hudTokens.length > 0 ? hudTokens : undefined
+                                        }
                                       />
                                     ) : null}
                                     {pCard.steps && pCard.steps.length > 0 ? (
@@ -4404,6 +4354,9 @@ export default function App() {
                                               pCard.stepsSummary ||
                                               'Proof & derivation steps'
                                             }
+                                            highlightTokens={
+                                              hudTokens.length > 0 ? hudTokens : undefined
+                                            }
                                           />
                                         </summary>
                                         <ol className="fmsteps">
@@ -4413,6 +4366,9 @@ export default function App() {
                                               as="li"
                                               className=""
                                               content={stepHtml}
+                                              highlightTokens={
+                                                hudTokens.length > 0 ? hudTokens : undefined
+                                              }
                                             />
                                           ))}
                                         </ol>

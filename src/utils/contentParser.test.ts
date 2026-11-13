@@ -128,6 +128,27 @@ test('parseTopicSections strips all PDF/textbook/Sec. artifacts, ensures non-emp
     strCard.codeContent.includes('int myStrlen(char *s) {\n  char *p = s;'),
     'cse-str:9 should unpack one-liner functions into 2-space K&R indented blocks'
   );
+  assert.ok(
+    strCard.codeContent.includes('// remove char\nfor (i = 0, k = 0; s[i]; i++)'),
+    'cse-str:9 should extract far-right padded comments above unpacked multi-statement lines'
+  );
+
+  // Verify duplicate data-k collision deduplication when #cse-lib or #cse-ptr reuses cse-c:6..8
+  const collisionHtml = `
+    <details class="fmt" id="fm-cse-c" data-c="CSE"><summary><span class="fmtt">C Basics</span></summary><div class="fmgrid">
+      <div class="fmi html" data-k="cse-c:6" data-s="c types"><div class="fmh"><span class="fmn">15-Level Operator Precedence</span><span class="fmb"></span></div><div class="fmbody"><div class="fmhtml"><p>Types</p></div></div></div>
+    </div></details>
+    <details class="fmt" id="fm-cse-lib" data-c="CSE"><summary><span class="fmtt">Stdlib</span></summary><div class="fmgrid">
+      <div class="fmi html" data-k="cse-c:6" data-s="headers"><div class="fmh"><span class="fmn">Common C headers</span><span class="fmb"></span></div><div class="fmbody"><div class="fmhtml"><p>Headers</p></div></div></div>
+    </div></details>
+  `;
+  const collisionParsed = parseTopicSections(collisionHtml);
+  assert.equal(collisionParsed[0].cards[0].id, 'cse-c:6');
+  assert.equal(collisionParsed[1].cards[0].id, 'cse-lib:0');
+  assert.equal(
+    collisionParsed[1].cards[0].title,
+    'Common C Headers: <stdio.h>, <stdlib.h>, <string.h>, <ctype.h>, <math.h>'
+  );
 });
 
 test('parseNavContent extracts all course navigation groups for #navF and #navT', () => {

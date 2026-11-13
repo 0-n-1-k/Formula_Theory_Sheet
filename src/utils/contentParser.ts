@@ -39,105 +39,318 @@ const CURATED_CONTEXT_FALLBACKS: Record<
 > = {
   'eee-basic:8': {
     bodyText:
-      '$R_{\\text{ammeter}} = 0\\,\\Omega$ (ideal short circuit in series); $R_{\\text{voltmeter}} = \\infty\\,\\Omega$ (ideal open circuit in parallel).',
+      '$R_{\\text{ammeter}} = 0\\,\\Omega$ (ideal short circuit in series); $R_{\\text{voltmeter}} = \\infty\\,\\Omega$ (ideal open circuit in parallel). Real DMMs use a $10\\text{ M}\\Omega$ input divider for voltage and a low-$\\text{m}\\Omega$ manganin shunt for current.',
     useText:
-      'Replace ideal ammeters with a wire and remove ideal voltmeters as open branches before writing nodal or mesh equations; read $V$ across the open terminals afterward.',
+      'Redraw the circuit first by replacing ideal ammeters with a short wire and removing ideal voltmeters as open terminals; solve node voltages, then read $V = V_+ - V_-$ across the open voltmeter nodes.',
   },
   'eee-delta:5': {
     bodyText:
-      '$R_{\\text{eq}} = V_T / I_T$ across the target terminal pair $(a, b)$ with all independent sources inside the network deactivated.',
+      '$R_{\\text{eq}} = V_T / I_T$ across terminal pair $(a, b)$ with all internal independent sources deactivated ($V_s \\to$ short, $I_s \\to$ open). Bridge balance holds when opposite arm products match ($R_1 R_4 = R_2 R_3$).',
     useText:
-      'Use series/parallel + $\\Delta\\text{--}Y$ reduction when no dependent sources exist; apply a $1\\text{ V}$ or $1\\text{ A}$ test source at $(a, b)$ whenever dependent sources are present.',
+      'Used in Wheatstone bridge strain gauges and RTD temperature sensors. In exams, always check symmetry or bridge balance before applying $\\Delta\\text{--}Y$ conversion to save 3–4 algebra steps.',
   },
   'eee-trans:8': {
     bodyText:
-      '$t_1, t_2$ = switching instants; $v_C(t_k^+) = v_C(t_k^-)$ and $i_L(t_k^+) = i_L(t_k^-)$ enforce energy continuity across each switching event.',
+      '$t_1, t_2$ = sequential switching instants; capacitor voltage $v_C(t_k^+) = v_C(t_k^-)$ (stored electric field energy $\\frac{1}{2}Cv^2$) and inductor current $i_L(t_k^+) = i_L(t_k^-)$ (magnetic energy $\\frac{1}{2}Li^2$) cannot jump instantaneously.',
     useText:
-      'Solve each time interval $(0 < t < t_1$, $t > t_1)$ as a separate first-order step response, using the final value at $t_1^-$ as the initial condition at $t_1^+$.',
+      'Models multi-stage power-converter timing and relay reclosing. Solve interval $0 \\le t \\le t_1$ first, evaluate $x(t_1^-)$ numerically, and use it as the initial condition $x(t_1^+)$ for the next topology.',
   },
   'eee-mag:6': {
     bodyText:
-      '$\\Phi = B \\cdot A$ = magnetic flux ($\\text{Wb}$); $\\mathcal{F} = N I = \\sum H_k \\ell_k = \\Phi \\mathcal{R}_{\\text{eq}}$ = magnetomotive force ($\\text{A}\\cdot\\text{turns}$).',
+      '$\\Phi = B A$ = magnetic flux ($\\text{Wb}$); $\\mathcal{F} = N I = \\sum H_k \\ell_k = \\Phi \\mathcal{R}_{\\text{eq}}$ = magnetomotive force ($\\text{A}\\cdot\\text{turns}$); $\\mathcal{R} = \\ell / (\\mu_0 \\mu_r A)$ = reluctance ($\\text{A}\\cdot\\text{turns/Wb}$).',
     useText:
-      'Given required flux $\\Phi$ or flux density $B = \\Phi/A$, compute $H_k$ in each core section and air gap ($H_g = B_g/\\mu_0$), then sum $NI = \\sum H_k \\ell_k$ to find coil current $I$.',
+      'Fun fact: Because air has $\\mu_r \\approx 1$ while silicon steel has $\\mu_r > 2000$, a tiny $1\\text{ mm}$ air gap often dominates $>80\\%$ of a transformer or motor core’s total reluctance and stores most of the magnetic energy.',
   },
   'eee-dual:2': {
     bodyText:
-      'Series $\\leftrightarrow$ Parallel, $R \\leftrightarrow G$, $L \\leftrightarrow C$, $V_s \\leftrightarrow I_s$, KVL mesh $\\leftrightarrow$ KCL node ($n$ meshes $\\to n$ principal nodes plus reference).',
+      'Topological duality swaps Series $\\leftrightarrow$ Parallel, $R \\leftrightarrow G$, $L \\leftrightarrow C$, $V_s \\leftrightarrow I_s$, and KVL mesh equations $\\leftrightarrow$ KCL nodal equations ($n$ meshes map to $n$ principal nodes plus reference).',
     useText:
-      'Place one node inside each mesh of the original planar circuit plus one outer reference node; draw dual elements across every shared boundary.',
+      'Place one dot inside each mesh of the planar circuit and one reference dot outside; draw a dual element for every shared boundary. Note: Non-planar circuits (like the $K_{3,3}$ utility graph) have no topological dual.',
+  },
+  'cse-c:5': {
+    bodyText:
+      'Covers integer division truncation (<code>7 / 2 == 3</code>), negative modulo sign matching the dividend (<code>-7 % 2 == -1</code> in C99+), short-circuit evaluation (<code>&amp;&amp;</code>, <code>||</code>), and array-to-pointer decay.',
+    useText:
+      'High-yield checklist for 1-mark output tracing and spot-the-bug questions. Fun fact: In C, <code>a[i]</code> is literally rewritten by the compiler as <code>*(a + i)</code>, which makes <code>i[a]</code> legal (though cursed) C syntax.',
   },
   'cse-c:6': {
     bodyText:
-      'Covers integer division truncation (<code>a/b</code> vs <code>(double)a/b</code>), sign of modulo (<code>-7 % 2 == -1</code>), short-circuit logic (<code>&amp;&amp;</code>, <code>||</code>), and pointer/array decay rules.',
+      '<code>sizeof(char) = 1</code>, <code>int = 4</code>, <code>double = 8</code> bytes on LP64 Linux/GCC; usual arithmetic conversions promote <code>char</code>/<code>short</code> to <code>int</code> and mixed <code>int</code>/<code>double</code> operands to <code>double</code>.',
+    useText:
+      'Crucial trap: Bitwise operators <code>&amp;</code>, <code>^</code>, <code>|</code> have LOWER precedence than relational <code>==</code> and <code>!=</code> — so <code>x &amp; 1 == 0</code> parses as <code>x &amp; (1 == 0)</code>! Always parenthesize <code>(x &amp; 1) == 0</code>.',
   },
   'cse-c:7': {
     bodyText:
-      '<code>sizeof(char) = 1</code>, <code>int = 4</code>, <code>double = 8</code> bytes; arithmetic promotion converts <code>char</code>/<code>short</code> to <code>int</code> and mixed <code>int</code>/<code>double</code> expressions to <code>double</code>.',
+      '<code>%[flags][width][.precision]specifier</code> controls I/O formatting; <code>scanf("%lf", &amp;d)</code> requires <code>%lf</code> for <code>double</code> and <code>&amp;</code> for scalars, while <code>" %c"</code> skips leading whitespace/newlines.',
+    useText:
+      'Fun fact: <code>printf</code> returns the exact count of characters printed, and <code>scanf</code> returns the number of items successfully matched (or <code>EOF = -1</code>) — a classic trick used in nested <code>if (printf(...))</code> trace puzzles.',
   },
   'cse-c:8': {
     bodyText:
-      '<code>%[flags][width][.precision]specifier</code> controls formatted I/O; <code>scanf("%lf", &amp;d)</code> requires <code>%lf</code> and address-of <code>&amp;</code> for scalar variables.',
+      'Catalogues 34 classic C/C++ pitfalls: assignment <code>=</code> inside <code>if (x = 0)</code>, unsequenced side effects (<code>i = i++</code>), dangling-else binding, missing <code>break</code> fallthrough, and off-by-one loop bounds.',
+    useText:
+      'Use when debugging segmentation faults or answering "Find and correct the errors" exam questions. Always verify: (1) local accumulators initialized to 0, (2) space reserved for <code>\'\\0\'</code>, and (3) no division by integer <code>1/2</code>.',
   },
   'cse-c:9': {
     bodyText:
-      'Focuses on sequence-point undefined behavior (<code>i++ * ++i</code>), dangling-else binding, uninitialized local garbage values, off-by-one loop bounds, and missing <code>break</code> fallthrough.',
+      'Catalogues 34 classic C/C++ pitfalls: assignment <code>=</code> inside <code>if (x = 0)</code>, unsequenced side effects (<code>i = i++</code>), dangling-else binding, missing <code>break</code> fallthrough, and off-by-one loop bounds.',
+    useText:
+      'Use when debugging segmentation faults or answering "Find and correct the errors" exam questions. Always verify: (1) local accumulators initialized to 0, (2) space reserved for <code>\'\\0\'</code>, and (3) no division by integer <code>1/2</code>.',
+  },
+  'cse-lib:0': {
+    bodyText:
+      '<code>&lt;stdio.h&gt;</code> = buffered stream I/O; <code>&lt;stdlib.h&gt;</code> = heap allocation (<code>malloc</code>/<code>free</code>), numeric conversion &amp; <code>qsort</code>; <code>&lt;string.h&gt;</code> = <code>\'\\0\'</code>-terminated &amp; raw byte ops; <code>&lt;ctype.h&gt;</code> = char classification; <code>&lt;math.h&gt;</code> = IEEE-754 floating-point math.',
+    useText:
+      'Include the exact header matching library calls in full-program exam solutions, and remember that all <code>&lt;math.h&gt;</code> trigonometric functions operate in radians ($\\pi = \\arccos(-1.0)$) rather than degrees.',
   },
   'cse-lib:1': {
     bodyText:
-      '<code>s</code>, <code>d</code>, <code>t</code> = null-terminated <code>char*</code> buffers; <code>n</code> = byte/character bound; <code>math.h</code> functions take and return <code>double</code> in radians.',
+      '<code>s</code>, <code>d</code> = null-terminated <code>char*</code> strings; <code>n</code> = byte count; <code>math.h</code> functions take/return <code>double</code>. Note: <code>strlen(s)</code> excludes <code>\'\\0\'</code>, whereas <code>sizeof("abc") == 4</code> includes it.',
+    useText:
+      'Fun fact: <code>strcmp(a, b)</code> returns the ASCII difference of the first mismatching unsigned characters (negative if <code>a &lt; b</code>, <code>0</code> if equal, positive if <code>a &gt; b</code>) — never assume it only returns <code>-1, 0, +1</code>.',
   },
   'cse-ptr:7': {
     bodyText:
-      '<code>p</code> = typed pointer (advances by <code>sizeof(*p)</code> bytes per increment); <code>B</code> = base address of contiguous row-major array <code>a[R][C]</code>; <code>m</code> = heap row-pointer array.',
+      '<code>p + k</code> advances address by <code>k * sizeof(*p)</code> bytes; in row-major 2D array <code>a[R][C]</code>, <code>*(*(a + i) + j)</code> accesses element <code>(i, j)</code> at byte offset <code>(i * C + j) * sizeof(T)</code>.',
+    useText:
+      'Exam favorite: Convert any <code>a[i][j]</code> or <code>a[i][j][k]</code> expression into pure pointer dereferences without brackets, and always free dynamically allocated 2D arrays in reverse order (rows first, then row-pointer array).',
   },
   'cse-str:8': {
     bodyText:
-      '<code>a[n]</code> = 1D array of <code>n</code> elements; <code>m[R][C]</code> = row-major 2D matrix where element <code>(i, j)</code> resides at byte offset <code>(i*C + j) * sizeof(type)</code>.',
+      '<code>a[n]</code> = contiguous 1D array of $n$ elements (indices $0 \\dots n-1$); <code>m[R][C]</code> = row-major 2D matrix where main diagonal satisfies $i = j$ and secondary (anti-)diagonal satisfies $i + j = n - 1$.',
+    useText:
+      'Covers Bubble/Selection/Insertion sort ($O(n^2)$), Binary Search ($O(\\log n)$ on sorted arrays), and in-place reversal. Fun fact: Writing <code>mid = L + (R - L) / 2</code> instead of <code>(L + R) / 2</code> prevents 32-bit signed integer overflow.',
   },
   'cse-str:9': {
     bodyText:
-      '<code>s</code>, <code>d</code>, <code>t</code> = null-terminated C strings ending at sentinel <code>\'\\0\'</code> (ASCII 0); in-place two-pointer algorithms use indices <code>L = 0</code> and <code>R = len - 1</code>.',
+      '<code>s</code>, <code>d</code>, <code>t</code> = null-terminated C strings ending at sentinel byte <code>\'\\0\'</code> (ASCII 0); two-pointer in-place algorithms scan inward from <code>i = 0</code> and <code>j = len - 1</code> in $O(n)$ time and $O(1)$ extra space.',
+    useText:
+      'BUET exams frequently forbid <code>&lt;string.h&gt;</code> and require writing <code>myStrlen</code>, <code>myStrcpy</code>, <code>myStrcat</code>, <code>myStrcmp</code>, or <code>myStrstr</code> from scratch using pointer idiomatic loops like <code>while ((*d++ = *s++));</code>.',
   },
   'cse-file:8': {
     bodyText:
-      '<code>struct</code> allocates sum of member sizes (plus alignment padding); <code>union</code> overlays all members at offset 0 (size = largest member); <code>FILE *fp</code> manages buffered stream state.',
+      '<code>struct</code> size = sum of members + alignment padding; <code>union</code> overlays all members at byte offset 0 (size = largest member); <code>FILE *fp</code> tracks stream buffer, file position indicator, and EOF/error flags.',
+    useText:
+      'Real-life &amp; exam use: Unions allow inspecting raw IEEE-754 float bits or hardware registers; in File I/O problems, always check <code>if (!fp) return 1;</code> and prefer <code>while (fscanf(fp, ...) == K)</code> over <code>!feof(fp)</code> to avoid reading the last record twice.',
   },
   'cse-bit:5': {
     bodyText:
-      '<code>x</code> = 32-bit integer operand; <code>k</code> = 0-indexed bit position from LSB ($0 \\le k < 31$); masks use <code>1U &lt;&lt; k</code> to avoid signed-overflow undefined behavior on bit 31.',
+      '<code>x</code> = integer operand; <code>k</code> = 0-indexed bit position from LSB ($0 \\le k < 31$); masks use unsigned <code>1U &lt;&lt; k</code> to avoid signed overflow undefined behavior when shifting into bit 31.',
+    useText:
+      'Used in embedded microcontroller register control, network subnet masks, and cryptography. Master the 4 core mask idioms: Set <code>x |= (1U&lt;&lt;k)</code>, Clear <code>x &amp;= ~(1U&lt;&lt;k)</code>, Toggle <code>x ^= (1U&lt;&lt;k)</code>, Test <code>(x &gt;&gt; k) &amp; 1U</code>.',
   },
   'cse-bit:6': {
     bodyText:
-      '<code>x &amp; (x - 1)</code> clears the lowest set bit; <code>x &amp; -x</code> isolates the lowest set bit; unsigned shift <code>(unsigned int)x &gt;&gt; k</code> forces zero-fill logical shift.',
+      'Brian Kernighan’s trick <code>x &amp; (x - 1)</code> clears the lowest set bit in $O(1)$; <code>x &amp; -x</code> isolates the lowest set bit; circular bit rotation combines <code>(x &lt;&lt; k) | (x &gt;&gt; (W - k))</code> on unsigned width $W$.',
+    useText:
+      'Fun fact: <code>x &gt; 0 &amp;&amp; (x &amp; (x - 1)) == 0</code> tests if $x$ is an exact power of 2 in a single CPU clock cycle without loops — a staple of BUET CSE 109 bitwise function questions.',
   },
   'cse-num:1': {
     bodyText:
-      'For an $N$-bit signed integer, range is $-2^{N-1}$ to $2^{N-1}-1$; MSB $b_{N-1}=1$ indicates a negative value with magnitude $\\sim x + 1$ ($2^N - x$).',
+      'In $N$-bit two’s complement, weights are $-2^{N-1}$ for the MSB ($b_{N-1}$) and $+2^k$ for bits $0 \\le k \\le N-2$, spanning $[-2^{N-1},\\, 2^{N-1}-1]$ with a single representation of zero.',
+    useText:
+      'Why every modern CPU uses Two’s Complement: the exact same hardware adder circuit adds positive and negative numbers without separate sign logic! Trap: Negating $T_{\\min} = -2^{N-1}$ overflows back to $T_{\\min}$ because $+2^{N-1}$ cannot be represented.',
   },
   'cse-algo:6': {
     bodyText:
-      'Every recursive function requires a terminating base case (e.g., <code>n == 0</code>) and a state transition that strictly reduces distance to the base case on each stack frame.',
+      'Each recursive call pushes a stack frame containing parameters, local variables, and return address; requires a terminating base case and a state transition strictly approaching the base case.',
+    useText:
+      'To trace recursive output in exams, draw the recursion tree (especially for dual-branch calls like Fibonacci or Towers of Hanoi) and note whether <code>printf</code> occurs pre-order (before call) or post-order (during unwinding).',
   },
   'cse-pat:5': {
     bodyText:
-      '<code>n</code> = number of rows; outer loop index <code>i</code> ($1 \\le i \\le n$) tracks the current row, while inner loops print leading spaces ($n - i$) followed by $2i - 1$ or $i$ symbols.',
+      '<code>n</code> = total rows; outer loop index <code>i</code> ($1 \\le i \\le n$) tracks the row, while inner loops control leading spaces ($n - i$) and symbol count ($2i - 1$ for centered pyramids, $i$ for triangles).',
+    useText:
+      'Universal 3-step exam method for any ASCII/number pattern: (1) count rows, (2) express leading spaces as a linear function of row <code>i</code>, and (3) express the increasing/decreasing character sequence per column <code>j</code>.',
   },
   'cse-cpp:7': {
     bodyText:
-      '<code>this</code> = implicit pointer to invoking object; <code>virtual</code> enables dynamic dispatch via per-class <code>vtable</code> and per-object <code>vptr</code> at runtime.',
+      '<code>this</code> = implicit pointer to invoking object; Rule of Three requires custom Destructor <code>~T()</code>, Copy Constructor <code>T(const T&amp;)</code>, and Copy Assignment <code>operator=</code> whenever a class manages raw heap pointers.',
+    useText:
+      'Without a deep copy constructor, passing a heap-owning object by value causes a shallow-copy double-<code>delete</code> crash when the temporary goes out of scope. Mark base destructors <code>virtual</code> whenever polymorphism is used.',
   },
   't-cse1:3': {
     bodyText:
-      '<code>auto</code> (stack, block scope, uninitialized garbage) vs. <code>static</code>/<code>extern</code> (data/BSS segment, program lifetime, zero-initialized by default).',
+      'Compares storage classes: <code>auto</code> (stack, block scope, garbage initial value), <code>static</code> (data/BSS segment, retains value across calls, zero-initialized), <code>extern</code> (global linkage), and <code>register</code>.',
+    useText:
+      'Frequent part-(a) theory question: contrast <code>struct</code> vs. <code>union</code> memory layout, call-by-value vs. call-by-reference (via pointers in C), and why macro <code>#define SQR(x) ((x)*(x))</code> needs parentheses around every argument.',
   },
   't-cse1:4': {
     bodyText:
-      'Covers short-circuit evaluation order, integer promotion before bitwise/arithmetic operators, and two’s complement single-zero representation ($-2^{n-1} \\dots 2^{n-1}-1$).',
+      'Summarizes 28 deterministic output-tracing rules: post-increment vs. pre-increment return values, short-circuit <code>&amp;&amp;</code>/<code>||</code> skipping right-hand side effects, <code>sizeof</code> unevaluated operands, and pointer stride.',
+    useText:
+      'Fun fact: Inside <code>sizeof(i++)</code>, the expression <code>i++</code> is NEVER evaluated at runtime because <code>sizeof</code> is resolved at compile time from the operand’s type — so <code>i</code> remains unchanged!',
+  },
+  't-cse2:2': {
+    bodyText:
+      'Covers the C++ Rule of Three, forward declaration for a <code>friend</code> function bridging two classes (<code>class B;</code>), and member vs. non-member <code>friend</code> operator overloading (<code>operator+</code>, <code>operator&lt;&lt;</code>).',
+    useText:
+      'Exam rule of thumb: Overload binary <code>op</code> as a member when the left operand is the class itself (<code>a + b</code>), but as a <code>friend</code> non-member when the left operand is a primitive or stream (<code>10 + a</code> or <code>cout &lt;&lt; a</code>).',
   },
   't-cse2:3': {
     bodyText:
-      'Reference <code>T &amp;r = x</code> is a non-null, non-reseatable alias; <code>new T(...)</code> allocates typed heap memory and invokes the constructor (paired with <code>delete</code> / <code>delete[]</code>).',
+      'Contrasts C++ references (<code>T &amp;r = x</code>, non-null alias bound at initialization) with pointers (<code>T *p</code>, nullable, reseatable), and <code>new</code>/<code>delete</code> (type-safe, calls ctor/dtor) with <code>malloc</code>/<code>free</code> (raw uninitialized bytes).',
+    useText:
+      'Explains function-overloading ambiguity (e.g., passing <code>0</code> or <code>float</code> when both <code>f(int)</code> and <code>f(double)</code> exist, or default arguments overlapping with a fewer-parameter overload).',
+  },
+  't-m1592:7': {
+    bodyText:
+      '$u(x,y)$ is harmonic if $\\nabla^2 u = u_{xx} + u_{yy} = 0$; $v(x,y)$ is its harmonic conjugate if $f(z) = u + iv$ is analytic, satisfying the Cauchy–Riemann equations $u_x = v_y$ and $u_y = -v_x$.',
+    useText:
+      'Real-life &amp; exam application: Level curves $u(x,y)=c_1$ and $v(x,y)=c_2$ form orthogonal families representing electrostatic equipotential lines and electric field lines! Use Milne–Thomson $f\'(z) = u_x(z,0) - i u_y(z,0)$ for fast reconstruction.',
+  },
+};
+
+function extractSymbolDescriptionsFromCard(
+  rawLatex: string,
+  codeContent: string | undefined,
+  course: CourseCode
+): string {
+  const notes: string[] = [];
+  const src = `${rawLatex || ''} ${codeContent || ''}`;
+
+  if (course === 'EEE') {
+    if (/V_\{?(?:th|TH)\}?|R_\{?(?:th|TH)\}?/.test(src)) {
+      notes.push('$V_{\\text{th}}$ = open-circuit Thévenin voltage; $R_{\\text{th}}$ = equivalent resistance seen from load terminals');
+    }
+    if (/I_N|R_N/.test(src)) {
+      notes.push('$I_N = I_{\\text{sc}}$ = short-circuit Norton current; $R_N = R_{\\text{th}}$');
+    }
+    if (/\\tau\b/.test(src)) {
+      notes.push('$\\tau$ = circuit time constant ($RC$ or $L/R$, time to decay by $e^{-1} \\approx 36.8\\%$)');
+    }
+    if (/\\omega\b/.test(src)) {
+      notes.push('$\\omega = 2\\pi f$ = angular frequency ($\\text{rad/s}$)');
+    }
+    if (/\\cos\s*\\theta|\\text\{PF\}|P\s*=|Q\s*=|S\s*=/.test(src)) {
+      notes.push('$P$ = real power ($\\text{W}$), $Q$ = reactive power ($\\text{VAR}$), $S = P + jQ$ = complex power ($\\text{VA}$)');
+    }
+    if (/\\Phi|\\mathcal\{R\}|\\mathcal\{F\}/.test(src)) {
+      notes.push('$\\Phi$ = magnetic flux ($\\text{Wb}$), $\\mathcal{F} = NI$ = MMF ($\\text{A}\\cdot\\text{turns}$), $\\mathcal{R}$ = reluctance');
+    }
+  } else if (course === 'PHY') {
+    if (/\\lambda\b/.test(src)) {
+      notes.push('$\\lambda$ = wavelength ($\\text{m}$); optical path difference $\\Delta = \\mu \\cdot \\Delta x$');
+    }
+    if (/\\omega\b|T\s*=/.test(src)) {
+      notes.push('$\\omega = 2\\pi / T$ = angular frequency ($\\text{rad/s}$); $A$ = oscillation amplitude');
+    }
+    if (/\\eta\b|T_H|T_C|T_1|T_2/.test(src)) {
+      notes.push('$\\eta$ = thermal efficiency; $T_H, T_C$ = absolute reservoir temperatures in Kelvin ($\\text{K}$)');
+    }
+    if (/dS|\\Delta S|k_B/.test(src)) {
+      notes.push('$S$ = entropy ($\\text{J/K}$); $R = 8.314\\,\\text{J/(mol}\\cdot\\text{K)}$ = universal gas constant');
+    }
+  } else if (course === 'M157' || course === 'M159') {
+    if (/\\Gamma\b|B\s*\(/.test(src)) {
+      notes.push('$\\Gamma(n) = \\int_0^\\infty x^{n-1}e^{-x}dx$ = Euler Gamma function; $B(m,n)$ = Beta integral');
+    }
+    if (/\\rho\b|\\kappa\b/.test(src)) {
+      notes.push('$\\rho$ = radius of curvature; $\\kappa = 1/\\rho$ = curvature of the plane curve');
+    }
+    if (/y_n|D\^n/.test(src)) {
+      notes.push('$y_n = d^n y / dx^n$ = $n$-th successive derivative; $(y_n)_0$ = value evaluated at $x = 0$');
+    }
+    if (/\\oint|\\operatorname\{Res\}|z_0/.test(src)) {
+      notes.push('$z = x + iy \\in \\mathbb{C}$; $z_0$ = isolated pole/singularity inside contour $C$');
+    }
+    if (/\\frac\{\\partial|J\s*=/.test(src)) {
+      notes.push('$\\partial f / \\partial x$ = partial derivative holding other variables constant; $J$ = Jacobian determinant');
+    }
+  } else if (course === 'CSE') {
+    if (/malloc|calloc|realloc|free/.test(src)) {
+      notes.push('<code>malloc</code>/<code>calloc</code> allocate heap bytes (returns <code>NULL</code> on failure); <code>free</code> releases heap memory');
+    }
+    if (/FILE\s*\*|fopen|fscanf|fprintf|fread|fwrite/.test(src)) {
+      notes.push('<code>FILE *fp</code> = buffered file stream pointer; always close with <code>fclose(fp)</code> to flush buffers');
+    }
+    if (/<<|>>|\^|~|&/.test(src)) {
+      notes.push('Bitwise operators act on binary representation; shift masks use unsigned <code>1U &lt;&lt; k</code>');
+    }
+    if (/class\s+\w+|virtual|operator/.test(src)) {
+      notes.push('<code>this</code> points to the invoking instance; member methods enforce encapsulation &amp; RAII invariants');
+    }
+  }
+
+  return notes.slice(0, 2).join('; ');
+}
+
+const TOPIC_STRATEGY_AND_FUN_FACTS: Record<string, { bodyFallback: string; useFallback: string }> = {
+  'eee-basic': {
+    bodyFallback: '$V$ = potential difference ($\\text{V}$), $I$ = branch current ($\\text{A}$), $P = VI$ = instantaneous power ($\\text{W}$) under passive sign convention ($I$ enters $+$ terminal).',
+    useFallback: 'Real-world & exam use: Passive sign convention ($P > 0$ absorbs, $P < 0$ supplies) guarantees $\\sum P_{\\text{absorbed}} = \\sum P_{\\text{supplied}}$ across any closed power grid or PCB.',
+  },
+  'eee-delta': {
+    bodyFallback: '$R_a, R_b, R_c$ = $\\Delta$-network branch resistances; $R_1, R_2, R_3$ = equivalent $Y$-network arm resistances connected to terminals $1, 2, 3$.',
+    useFallback: 'Used in 3-phase power distribution and Wheatstone bridge sensors. Exam tip: If all three resistors are equal, $R_Y = R_\\Delta / 3$ (and $R_\\Delta = 3 R_Y$) instantaneously.',
+  },
+  'eee-nodal': {
+    bodyFallback: '$v_k$ = node voltage with respect to reference ground ($0\\text{ V}$); $i_m$ = clockwise mesh current circulating around planar window $m$.',
+    useFallback: 'Real-world SPICE circuit simulators (like PSpice and LTspice) use Modified Nodal Analysis (MNA) matrices because nodal equations scale automatically to non-planar IC layouts.',
+  },
+  'eee-thev': {
+    bodyFallback: '$V_{\\text{th}} = V_{\\text{oc}}$ = open-circuit terminal voltage; $R_{\\text{th}} = V_{\\text{oc}} / I_{\\text{sc}}$ = equivalent resistance looking back into the linear bilateral network.',
+    useFallback: 'Fun fact: Léon Charles Thévenin, a French telegraph engineer, published this theorem in 1883 (rediscovering Helmholtz’s 1853 result) to simplify long-distance telegraph line analysis.',
+  },
+  'eee-maxp': {
+    bodyFallback: '$R_L$ (or $Z_L = R_L + jX_L$) = adjustable load impedance; maximum real power $P_{\\max} = V_{\\text{th}}^2 / (4R_{\\text{th}})$ occurs at $R_L = R_{\\text{th}}$ (or $Z_L = Z_{\\text{th}}^*$).',
+    useFallback: 'Real-life distinction: RF antennas and audio amplifiers match $R_L = R_{\\text{th}}$ (50% efficiency) to maximize signal power, whereas utility power grids keep $R_{\\text{th}} \\ll R_L$ for $>95\\%$ efficiency!',
+  },
+  'eee-trans': {
+    bodyFallback: '$x(t) = x(\\infty) + [x(0^+) - x(\\infty)]e^{-t/\\tau}$ for $t \\ge 0$, where $x(0^+)$ is enforced by continuity of $v_C$ and $i_L$ across switching.',
+    useFallback: 'Governs RC/RL clock edges, camera flash discharge, and inductive flyback. In 5 time constants ($5\\tau$), a first-order transient reaches $1 - e^{-5} = 99.33\\%$ of its final steady state.',
+  },
+  'eee-ac': {
+    bodyFallback: 'Phasor $\\mathbf{V} = V_m \\angle \\phi$ transforms linear differential equations into complex algebra with $\\frac{d}{dt} \\leftrightarrow j\\omega$, $Z_L = j\\omega L$, and $Z_C = -j/(\\omega C)$.',
+    useFallback: 'Industrial plants add parallel capacitor banks for power-factor correction ($\\cos\\theta \\to 0.95+$) to eliminate reactive current penalties without changing real mechanical load power $P$.',
+  },
+  'eee-mag': {
+    bodyFallback: 'Hopkinson’s Law $\\mathcal{F} = N I = \\Phi \\mathcal{R}$ mirrors Ohm’s Law $V = I R$, mapping flux $\\Phi \\leftrightarrow I$, MMF $NI \\leftrightarrow V$, and reluctance $\\mathcal{R} \\leftrightarrow R$.',
+    useFallback: 'Used to design transformer cores, EV traction motors, and solenoid actuators. Always convert core lengths to meters ($\\text{m}$) and cross-sections to $\\text{m}^2$ before computing $\\mathcal{R} = \\ell/(\\mu A)$.',
+  },
+  'cse-c': {
+    bodyFallback: 'Defines C99/C11 operator precedence, integer promotion, and deterministic control-flow execution on 64-bit GCC targets.',
+    useFallback: 'When tracing exam code, track exact variable types (<code>int</code> vs. <code>double</code>), short-circuit boolean evaluation, and post-increment side-effect timing.',
+  },
+  'cse-lib': {
+    bodyFallback: 'Standard C library functions operate on null-terminated <code>char*</code> buffers, <code>double</code> radians (<code>&lt;math.h&gt;</code>), and <code>void*</code> heap blocks (<code>&lt;stdlib.h&gt;</code>).',
+    useFallback: 'Saves writing boilerplate in timed exams when <code>&lt;string.h&gt;</code>, <code>&lt;ctype.h&gt;</code>, or <code>&lt;stdlib.h&gt;</code> (<code>qsort</code>, <code>strtol</code>) is permitted by the question prompt.',
+  },
+  'cse-ptr': {
+    bodyFallback: 'Pointer <code>T *p</code> stores a memory address; <code>p + i</code> scales by <code>i * sizeof(T)</code> bytes, and <code>*p</code> dereferences the target lvalue.',
+    useFallback: 'Real-world systems use pointers for zero-copy buffer passing, dynamic matrices, and callback tables. Always pair every <code>malloc</code>/<code>calloc</code> with <code>free</code> and set freed pointers to <code>NULL</code>.',
+  },
+  'cse-str': {
+    bodyFallback: 'C strings are contiguous <code>char</code> arrays terminated by sentinel <code>\'\\0\'</code> (ASCII 0); array size must be at least <code>strlen(s) + 1</code>.',
+    useFallback: 'In BUET CSE 109 exams, check whether <code>&lt;string.h&gt;</code> is forbidden before calling <code>strlen</code>/<code>strcpy</code>, and always terminate manually constructed strings with <code>dst[k] = \'\\0\'</code>.',
+  },
+  'cse-file': {
+    bodyFallback: '<code>struct</code> packs heterogeneous fields at aligned offsets; <code>FILE *fp</code> abstracts OS file descriptors with user-space read/write buffering.',
+    useFallback: 'Used in binary database records, network packet headers, and configuration parsers. In binary file updates, <code>fseek(fp, idx * sizeof(Rec), SEEK_SET)</code> gives $O(1)$ random access.',
+  },
+  'cse-bit': {
+    bodyFallback: 'Bitwise operators execute in 1 CPU cycle on 32/64-bit registers; bit positions are 0-indexed from the Least Significant Bit (LSB).',
+    useFallback: 'Essential for hardware device drivers, pixel color packing (<code>0xAARRGGBB</code>), and cryptography. Always cast to <code>unsigned</code> before right-shifting bitmasks to guarantee zero-fill logical shift.',
+  },
+  'cse-num': {
+    bodyFallback: 'Positional base-$b$ representation $\\sum d_k b^k$ and $N$-bit two’s complement encoding where MSB weight is $-2^{N-1}$.',
+    useFallback: 'Fun fact: Two’s complement eliminated the $-0$ vs. $+0$ hardware bug of 1960s one’s-complement mainframes and unified addition and subtraction into a single ALU circuit.',
+  },
+  'cse-ds': {
+    bodyFallback: 'Self-referential <code>struct Node { int data; struct Node *next; }</code> links heap-allocated nodes dynamically without contiguous memory reallocation.',
+    useFallback: 'Allows $O(1)$ head/pointer insertion and deletion without shifting elements. In exam pointer-manipulation code, always update <code>newNode-&gt;next</code> BEFORE overwriting <code>head</code> or <code>prev-&gt;next</code>!',
+  },
+  'cse-algo': {
+    bodyFallback: 'Characterizes time complexity $T(n)$ and call-stack space depth $S(n)$ across divide-and-conquer, dynamic, and recursive algorithms.',
+    useFallback: 'Verify the base case (<code>n &lt;= 1</code> or <code>L &gt; R</code>) first when writing recursive exam functions, and watch out for exponential $O(2^n)$ overlap when recursion branches twice without memoization.',
+  },
+  'cse-pat': {
+    bodyFallback: 'Row index <code>i</code> ($1 \\le i \\le n$) and column index <code>j</code> ($1 \\le j \\le 2n-1$) govern 2D coordinate symmetry in console pattern loops.',
+    useFallback: 'Tip: Any diamond or hourglass pattern can be written concisely using Manhattan distance $|i - c| + |j - c| \\le r$ from the center coordinate $(c, c)$.',
+  },
+  'cse-cpp': {
+    bodyFallback: 'Encapsulates state with <code>private</code> members, RAII constructors/destructors, operator overloading, and <code>virtual</code> table dynamic dispatch.',
+    useFallback: 'In C++ exam questions, check whether a class allocates memory with <code>new[]</code> — if so, it MUST define a destructor <code>delete[]</code>, copy constructor, and <code>operator=</code> (Rule of Three).',
   },
 };
 
@@ -169,7 +382,12 @@ export function sanitizeContextText(
   let text = stripContextPrefix(rawHtml);
   if (!text) return '';
 
-  // 1. Remove full clauses or sentences referencing revision guides, class/lecture notes, or handouts (do not stop at decimal dots like 2.8)
+  // Immediately clear pure CSE 109 Complete Revision Guide citations so rich curated fallbacks take over
+  if (/CSE\s*109\s*Complete\s*Revision\s*Guide/i.test(text)) {
+    return '';
+  }
+
+  // 1. Remove full clauses or sentences referencing revision guides, class/lecture notes, or handouts
   text = text.replace(
     /(?:^|(?<!\d)\.\s+|;\s*)(?:Directly\s+(?:covered|tested|asked)\s+in\s+|From\s+|In\s+|See\s+|Source\s*:\s*|Covered\s+in\s+)?(?:BUET\s+)?(?:CSE\s*10[19]|EEE\s*101|MATH\s*15[79]|PHY\s*121|PHY\s*165)?\s*(?:[A-Za-z\s&]+?\s+)?(?:Complete\s+)?(?:Revision\s+Guide|Lecture\s+Notes|Class\s+Notes|Study\s+Guide|Handout|Cheatsheet|Formula\s+Sheet)(?:[^.;]|\.\d)*(?:\.(?!\d)|;|$)/gi,
     ' '
@@ -181,11 +399,8 @@ export function sanitizeContextText(
     ''
   );
 
-  // 3. Remove "Textbook Ref: ..." sentences or clauses
-  text = text.replace(
-    /Textbook\s+Ref\s*:\s*(?:[^.;]|\.\d)+(?:\.(?!\d)|;|$)/gi,
-    ' '
-  );
+  // 3. Remove "Textbook Ref: ..." completely even when containing .h or &amp;
+  text = text.replace(/Textbook\s+Ref\s*:\s*[\s\S]*$/gi, '');
 
   // 4. Remove parenthetical textbook / section / page / problem citations e.g. "(Sadiku Prob. 6.57)", "(pp. 7–9)", "(Sec. 4.1)"
   text = text.replace(
@@ -205,13 +420,13 @@ export function sanitizeContextText(
     ''
   );
 
-  // 7. Clean leftover empty parens, dangling connectors, and duplicate spaces
+  // 7. Clean leftover empty parens, dangling connectors, and duplicate spaces without corrupting C++ :: or ...
   text = text
     .replace(/\(\s*\)/g, '')
-    .replace(/\s+([,.;:])/g, '$1')
-    .replace(/([,.;:])\s*[,.;:]+/g, '$1')
+    .replace(/\s+([,.;])/g, '$1')
+    .replace(/([,;])\s*[,;]+/g, '$1')
     .replace(/^\s*(?:[,;:.–—-]|and|&|&amp;)\s*/i, '')
-    .replace(/\s*(?:[,;:–—-]|and|&|&amp;)\s*$/i, '')
+    .replace(/\s*(?:[,;:–—-]|\band\b)\s*$/i, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 
@@ -270,6 +485,7 @@ export function sanitizeHtmlContentArtifacts(html?: string): string | undefined 
  */
 function ensureMeaningfulCardContext(
   cardId: string,
+  topicId: string,
   course: CourseCode,
   cardTitle: string,
   topicTitle: string,
@@ -279,12 +495,37 @@ function ensureMeaningfulCardContext(
   cleanedBodyText: string,
   cleanedUseText: string | undefined
 ): { bodyText: string; useText?: string } {
-  const curated = CURATED_CONTEXT_FALLBACKS[cardId];
+  // Resolve curated entry accurately across both 5..8 and 6..9 CSE-C indexing
+  let curated: { bodyText?: string; useText?: string } | undefined =
+    CURATED_CONTEXT_FALLBACKS[cardId];
+  if (cardTitle === 'Top 40 C Exam Reminders & Core Mnemonics') {
+    curated = CURATED_CONTEXT_FALLBACKS['cse-c:5'];
+  } else if (cardTitle === 'C Data Types, 15-Level Precedence & Type Promotion') {
+    curated = CURATED_CONTEXT_FALLBACKS['cse-c:6'];
+  } else if (cardTitle === 'printf/scanf Formatting & Loop Conversions') {
+    curated = CURATED_CONTEXT_FALLBACKS['cse-c:7'];
+  } else if (cardTitle === '34 Common C/C++ Exam Traps & Fixes') {
+    curated = CURATED_CONTEXT_FALLBACKS['cse-c:8'];
+  } else if (cardId === 'cse-c:5' && cleanedBodyText) {
+    curated = undefined;
+  }
+
+  const canonicalTopicId = topicId.replace(/^fm-/, '');
+  const topicFallback =
+    TOPIC_STRATEGY_AND_FUN_FACTS[topicId] || TOPIC_STRATEGY_AND_FUN_FACTS[canonicalTopicId];
+  const symbolNotes = extractSymbolDescriptionsFromCard(rawLatex, codeContent, course);
+
   let bodyText = curated?.bodyText || cleanedBodyText || '';
-  let useText = cleanedUseText || curated?.useText;
+  let useText = curated?.useText || cleanedUseText;
 
   if (!bodyText) {
-    if (course === 'CSE' || codeContent) {
+    if (symbolNotes && topicFallback?.bodyFallback) {
+      bodyText = `${symbolNotes}. ${topicFallback.bodyFallback}`;
+    } else if (symbolNotes) {
+      bodyText = symbolNotes;
+    } else if (topicFallback?.bodyFallback) {
+      bodyText = topicFallback.bodyFallback;
+    } else if (course === 'CSE' || codeContent) {
       bodyText = `Defines core syntax, pointer/index invariants, and boundary conditions for ${cardTitle.toLowerCase()} in ${topicTitle}.`;
     } else if (rawLatex) {
       bodyText = `Relates the primary circuit/mathematical quantities in ${cardTitle} under standard ${topicTitle.toLowerCase()} assumptions.`;
@@ -296,7 +537,9 @@ function ensureMeaningfulCardContext(
   }
 
   if (!useText) {
-    if (course === 'EEE') {
+    if (topicFallback?.useFallback) {
+      useText = topicFallback.useFallback;
+    } else if (course === 'EEE') {
       useText = `Apply directly when setting up KCL/KVL, equivalent network reductions, or transient/phasor equations in ${topicTitle.toLowerCase()} problems.`;
     } else if (course === 'M157' || course === 'M159') {
       useText = `Verify continuity, differentiability, or domain bounds first, then substitute directly to evaluate ${topicTitle.toLowerCase()} exam problems.`;
@@ -316,9 +559,25 @@ function ensureMeaningfulCardContext(
  * comments, `for (...)` headers, and `= { ... }` array/struct initializers.
  */
 function unpackCrammedCseLine(line: string): string[] {
-  // Collapse excessive padding spaces before trailing `//` comments
-  const trimmed = line.trim().replace(/(\S)\s{3,}(\/\/.*)$/, '$1  $2');
-  if (!trimmed) return [''];
+  const rawTrimmed = line.trim();
+  if (!rawTrimmed) return [''];
+
+  // Check if a long multi-statement line has a far-right padded trailing comment (3+ spaces before //)
+  let extractedHeaderComment: string | null = null;
+  let workingLine = rawTrimmed;
+  const paddedCommentMatch = rawTrimmed.match(/^([\s\S]+?\S)\s{3,}(\/\/.*)$/);
+  if (paddedCommentMatch && rawTrimmed.length > 68) {
+    const codeBeforeComment = paddedCommentMatch[1].trim();
+    const semiCountBefore = (codeBeforeComment.match(/;/g) || []).length;
+    if (semiCountBefore >= 2 || codeBeforeComment.includes('{') || codeBeforeComment.includes('}')) {
+      extractedHeaderComment = paddedCommentMatch[2].trim();
+      workingLine = codeBeforeComment;
+    }
+  }
+
+  // Collapse excessive padding spaces before trailing `//` comments on remaining lines
+  const trimmed = workingLine.replace(/(\S)\s{3,}(\/\/.*)$/, '$1  $2');
+  if (!trimmed) return extractedHeaderComment ? [extractedHeaderComment] : [''];
 
   // Keep preprocessor directives, pure comments, and short single statements intact
   if (
@@ -326,28 +585,34 @@ function unpackCrammedCseLine(line: string): string[] {
     trimmed.startsWith('//') ||
     (trimmed.startsWith('/*') && trimmed.endsWith('*/'))
   ) {
-    return [trimmed];
+    return extractedHeaderComment ? [extractedHeaderComment, trimmed] : [trimmed];
   }
 
   // Keep compact switch case table rows (e.g., "case 'I': return 1; case 'V': return 5;") intact
   if (/^case\s+[^:]+:.*case\s+[^:]+:/.test(trimmed)) {
-    return [trimmed];
+    return extractedHeaderComment ? [extractedHeaderComment, trimmed] : [trimmed];
   }
 
   const hasBraces = trimmed.includes('{') || trimmed.includes('}');
   const semicolonCount = (trimmed.match(/;/g) || []).length;
 
+  // Keep short single-statement lines (<= 68 chars with at most one `;` inside a function body) on one clean line
+  if (!hasBraces && trimmed.length <= 68 && semicolonCount <= 1) {
+    return extractedHeaderComment ? [extractedHeaderComment, trimmed] : [trimmed];
+  }
+
   // Decide whether this line needs unpacking:
   // 1. Multiple closing braces `} }` or statement followed by closing brace `; }`
   // 2. Opening brace `{` followed by statements on the same line (not an `= { ... }` initializer)
-  // 3. Long line (> 72 chars) with multiple statements or braces
+  // 3. Long line (> 68 chars) with multiple statements or braces
   const hasMultipleCloseBraces = /\}\s*\}/.test(trimmed) && !/=\s*\{/.test(trimmed);
   const hasTrailingCloseBraceAfterStmt = /;\s*\}\s*$/.test(trimmed) && !trimmed.includes('{');
   const hasOpenBraceWithCode =
     /\{\s*[^}\s]/.test(trimmed) &&
     !/=\s*\{/.test(trimmed) &&
     (trimmed.length > 62 || !trimmed.endsWith('}') || semicolonCount >= 2);
-  const hasMultipleTopStatements = trimmed.length > 74 && semicolonCount >= 2;
+  const hasMultipleTopStatements =
+    (trimmed.length > 68 || Boolean(extractedHeaderComment)) && semicolonCount >= 2;
 
   if (
     !hasMultipleCloseBraces &&
@@ -356,18 +621,22 @@ function unpackCrammedCseLine(line: string): string[] {
     !hasMultipleTopStatements &&
     !hasBraces
   ) {
-    return [trimmed];
+    return extractedHeaderComment ? [extractedHeaderComment, trimmed] : [trimmed];
   }
   if (
     !hasMultipleCloseBraces &&
     !hasTrailingCloseBraceAfterStmt &&
     !hasOpenBraceWithCode &&
-    trimmed.length <= 72
+    !hasMultipleTopStatements &&
+    trimmed.length <= 68
   ) {
-    return [trimmed];
+    return extractedHeaderComment ? [extractedHeaderComment, trimmed] : [trimmed];
   }
 
   const out: string[] = [];
+  if (extractedHeaderComment) {
+    out.push(extractedHeaderComment);
+  }
   let buf = '';
   let parenDepth = 0;
   let initBraceDepth = 0;
@@ -473,7 +742,8 @@ function unpackCrammedCseLine(line: string): string[] {
     if (ch === ';' && parenDepth === 0 && initBraceDepth === 0) {
       buf += ';';
       if (
-        trimmed.length > 72 ||
+        trimmed.length > 68 ||
+        hasMultipleTopStatements ||
         hasOpenBraceWithCode ||
         hasTrailingCloseBraceAfterStmt ||
         hasMultipleCloseBraces
@@ -679,12 +949,14 @@ export function parseTopicSections(html: string): TopicSectionRecord[] {
   if (!html) return [];
   const rawSections = html.split('<details class="fmt"').slice(1);
   const sections: TopicSectionRecord[] = [];
+  const seenCardIds = new Set<string>();
 
   for (const rawSec of rawSections) {
     const openTagEnd = findOpeningTagEndIndex(rawSec, false);
     if (openTagEnd === -1) continue;
     const openTagAttrs = rawSec.slice(0, openTagEnd);
     const id = (openTagAttrs.match(/id="([^"]+)"/) || [])[1] || '';
+    const canonicalSecId = id.replace(/^fm-/, '');
     const course = ((openTagAttrs.match(/data-c="([^"]+)"/) || [])[1] || 'ALL') as CourseCode;
     const isOpenByDefault = /\bopen\b/.test(openTagAttrs);
 
@@ -698,12 +970,18 @@ export function parseTopicSections(html: string): TopicSectionRecord[] {
     const rawCards = rawSec.split('<div class="fmi ').slice(1);
     const cards: FormulaCardRecord[] = [];
 
-    for (const rawCard of rawCards) {
+    for (let cardIdx = 0; cardIdx < rawCards.length; cardIdx++) {
+      const rawCard = rawCards[cardIdx];
       const cardTagEnd = findOpeningTagEndIndex(rawCard, true);
       if (cardTagEnd === -1) continue;
       const cardAttrs = rawCard.slice(0, cardTagEnd);
       const cardTypeClass = (cardAttrs.match(/^([a-zA-Z0-9_-]+)/) || [])[1] || 'tex';
-      const cardId = (cardAttrs.match(/data-k="([^"]+)"/) || [])[1] || '';
+      let cardId = (cardAttrs.match(/data-k="([^"]+)"/) || [])[1] || `${canonicalSecId}:${cardIdx}`;
+      // Fix duplicate data-k collisions where #cse-lib or #cse-ptr reused cse-c:6..8
+      if (seenCardIds.has(cardId) || (canonicalSecId !== 'cse-c' && /^cse-c:[678]$/.test(cardId))) {
+        cardId = `${canonicalSecId}:${cardIdx}`;
+      }
+      seenCardIds.add(cardId);
       const keywordsRaw = (cardAttrs.match(/data-s="([^"]*)"/) || [])[1] || '';
       const keywords = decodeHtmlEntities(keywordsRaw);
 
@@ -762,6 +1040,7 @@ export function parseTopicSections(html: string): TopicSectionRecord[] {
 
       const { bodyText, useText } = ensureMeaningfulCardContext(
         cardId,
+        id,
         course,
         cleanedTitle.title,
         title,

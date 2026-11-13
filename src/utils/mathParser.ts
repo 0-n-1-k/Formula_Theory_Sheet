@@ -39,6 +39,43 @@ const DIACRITIC_CHAR_CLASSES: Record<string, string> = {
  * vague concept associations, and compact variable subscript suffixes so matching
  * terms highlight accurately while filtering conversational filler words.
  */
+function isEditDistanceAtMostOne(a: string, b: string): boolean {
+  if (a === b) return true;
+  const la = a.length;
+  const lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < la && j < lb) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+    } else {
+      edits++;
+      if (edits > 1) return false;
+      if (la > lb) i++;
+      else if (lb > la) j++;
+      else {
+        i++;
+        j++;
+      }
+    }
+  }
+  if (i < la || j < lb) edits++;
+  return edits === 1;
+}
+
+const KNOWN_CONCEPT_KEYS = Array.from(
+  new Set([...Object.keys(DOMAIN_SYNONYM_MAP), ...Object.keys(VAGUE_CONCEPT_MAP)])
+).filter((k) => k.length >= 5);
+
+/**
+ * Expands active search tokens with stemmed roots, domain synonym expansions,
+ * vague concept associations, typo-corrected concept roots, and compact variable
+ * subscript suffixes so matching terms highlight accurately while filtering
+ * conversational filler words.
+ */
 export function expandHighlightTerms(tokens: readonly string[]): string[] {
   if (!tokens || tokens.length === 0) return [];
   const set = new Set<string>();
@@ -59,7 +96,20 @@ export function expandHighlightTerms(tokens: readonly string[]): string[] {
       set.add(stemmed);
     }
 
-    const syn = DOMAIN_SYNONYM_MAP[t];
+    // If token has a 1-char typo against a known concept key (e.g. "reverese" -> "reverse"), include the corrected key and its stem
+    let fuzzyMatchedKey: string | undefined;
+    if (t.length >= 5 && !DOMAIN_SYNONYM_MAP[t] && !VAGUE_CONCEPT_MAP[t]) {
+      fuzzyMatchedKey = KNOWN_CONCEPT_KEYS.find((k) => isEditDistanceAtMostOne(t, k));
+      if (fuzzyMatchedKey) {
+        set.add(fuzzyMatchedKey);
+        const fuzzyStem = stemSearchToken(fuzzyMatchedKey);
+        if (fuzzyStem && fuzzyStem.length >= 3) {
+          set.add(fuzzyStem);
+        }
+      }
+    }
+
+    const syn = DOMAIN_SYNONYM_MAP[t] || (fuzzyMatchedKey ? DOMAIN_SYNONYM_MAP[fuzzyMatchedKey] : undefined);
     if (syn) {
       for (const word of syn.split(/\s+/)) {
         if (word.length >= 2) {
@@ -68,7 +118,10 @@ export function expandHighlightTerms(tokens: readonly string[]): string[] {
       }
     }
 
-    const vague = VAGUE_CONCEPT_MAP[t] || (stemmed !== t ? VAGUE_CONCEPT_MAP[stemmed] : undefined);
+    const vague =
+      VAGUE_CONCEPT_MAP[t] ||
+      (stemmed !== t ? VAGUE_CONCEPT_MAP[stemmed] : undefined) ||
+      (fuzzyMatchedKey ? VAGUE_CONCEPT_MAP[fuzzyMatchedKey] : undefined);
     if (vague) {
       for (const concept of vague) {
         if (concept.length >= 3) {
@@ -137,8 +190,8 @@ const HPROT_RESTORE_RE = /\u0000HPROT_(\d+)\u0000/g;
 
 /**
  * Highlights matching search keywords inside HTML strings (including prose, notes,
- * tables, inline code, and visible KaTeX math spans) without altering HTML tags,
- * attributes, entities, SVG paths, or hidden MathML annotations.
+ * tables, inline code, syntax-tokenized code blocks, and visible KaTeX math spans)
+ * without altering HTML tags, attributes, entities, SVG paths, or hidden MathML annotations.
  */
 export function highlightHtmlContent(
   html: string,
@@ -236,8 +289,7 @@ export function highlightHtmlContent(
 }
 
 /**
- * Escapes plain text (such as C/C++ code blocks) into safe HTML and wraps
- * matching search keywords in `<mark class="fm-hl">`.
+ * Escapes plain text into safe HTML and wraps matching search keywords in `<mark class="fm-hl">`.
  */
 export function highlightPlainTextToHtml(
   text: string,
@@ -256,25 +308,25 @@ export function highlightPlainTextToHtml(
 }
 
 const CPP_SYNTAX_TOKEN_RE =
-  /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|(^[ \t]*#[ \t]*[a-zA-Z_][^\n]*)|\b(int|long|short|char|void|float|double|unsigned|signed|const|static|struct|union|enum|typedef|sizeof|return|if|else|for|while|do|switch|case|break|continue|default|goto|NULL|FILE|size_t|bool|true|false|class|public|private|protected|virtual|friend|inline|template|typename|namespace|using|new|delete|this|operator|try|catch|throw)\b|\b(0x[0-9a-fA-F]+|\d+(?:\.\d+)?[uUlLfF]*)\b/gm;
+  /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|((?:^[ \t]*|(?<=\s))#[ \t]*[a-zA-Z_][^\n]*|&lt;[a-zA-Z0-9_./+-]+\.h(?:pp)?&gt;)|\b(auto|bool|break|calloc|case|catch|char|cin|class|const|constexpr|continue|cout|default|delete|do|double|dynamic_cast|else|endl|enum|EOF|exception|explicit|extern|false|FILE|final|float|for|free|friend|goto|if|inline|int|INT_MAX|INT_MIN|iostream|istream|long|make_unique|malloc|map|mutable|namespace|new|noexcept|NULL|nullptr|operator|ostream|override|pair|private|protected|public|realloc|register|reinterpret_cast|return|runtime_error|SEEK_CUR|SEEK_END|SEEK_SET|set|shared_ptr|short|signed|sizeof|size_t|static|static_cast|std|string|struct|switch|template|this|throw|true|try|typedef|typename|union|unique_ptr|unsigned|using|vector|virtual|void|volatile|while)\b|\b(0x[0-9a-fA-F]+[uUlL]*|0b[01]+[uUlL]*|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[uUlLfF]*)\b/gm;
+
+export const cppSyntaxCache = new Map<string, string>();
 
 /**
- * Fast, zero-dependency, single-pass C/C++ syntax highlighter for `.fmcode` blocks.
- * Falls back to `highlightPlainTextToHtml` when search keyword tokens are active.
+ * Memoized C/C++ syntax tokenizer producing `<span class="tok-...">` spans.
  */
-export function highlightCppCodeToHtml(
-  rawCode: string,
-  highlightTokens?: readonly string[]
-): string {
+export function tokenizeCppCodeBase(rawCode: string): string {
   if (!rawCode) return '';
-  if (highlightTokens && highlightTokens.length > 0) {
-    return highlightPlainTextToHtml(rawCode, highlightTokens);
+  const cached = cppSyntaxCache.get(rawCode);
+  if (cached !== undefined) {
+    return cached;
   }
-  const escaped = String(rawCode)
-    .replace(/&/g, '&amp;')
+  const decoded = decodeHtmlEntities(String(rawCode));
+  const escaped = decoded
+    .replace(/&(?!(?:#\d+|#x[0-9a-fA-F]+);)/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
-  return escaped.replace(
+  const tokenized = escaped.replace(
     CPP_SYNTAX_TOKEN_RE,
     (match, com, str, pre, kw, num) => {
       if (com !== undefined) return `<span class="tok-com">${match}</span>`;
@@ -285,6 +337,27 @@ export function highlightCppCodeToHtml(
       return match;
     }
   );
+  if (cppSyntaxCache.size < 4000) {
+    cppSyntaxCache.set(rawCode, tokenized);
+  }
+  return tokenized;
+}
+
+/**
+ * Fast, zero-dependency, single-pass C/C++ syntax highlighter for `.fmcode` and `<code>` blocks.
+ * Always preserves full C/C++ syntax highlighting (`tok-com`, `tok-str`, `tok-pre`, `tok-kw`, `tok-num`)
+ * and layers `<mark class="fm-hl">` search keyword highlights on top when `highlightTokens` are active.
+ */
+export function highlightCppCodeToHtml(
+  rawCode: string,
+  highlightTokens?: readonly string[]
+): string {
+  if (!rawCode) return '';
+  const tokenized = tokenizeCppCodeBase(rawCode);
+  if (!highlightTokens || highlightTokens.length === 0) {
+    return tokenized;
+  }
+  return highlightHtmlContent(tokenized, highlightTokens);
 }
 
 export function decodeHtmlEntities(str: string): string {
@@ -322,7 +395,8 @@ export function renderLatexCached(latex: string, displayMode = false): string {
   return rendered;
 }
 
-const PRE_CODE_BLOCK_RE = /<(pre|code)(?:\s[^<>]*)?>[\s\S]*?<\/\1>/gi;
+const PRE_CODE_BLOCK_RE = /<(pre|code)(\s[^<>]*)?>([\s\S]*?)<\/\1>/gi;
+const INLINE_CODE_TAG_RE = /<code(\s[^<>]*)?>([\s\S]*?)<\/code>/gi;
 const HTML5_TAG_NAMES =
   'a|abbr|address|article|aside|b|bdi|bdo|blockquote|br|button|caption|cite|code|col|colgroup|data|dd|del|details|dfn|div|dl|dt|em|figcaption|figure|footer|h[1-6]|header|hr|i|img|input|ins|kbd|label|li|main|mark|nav|ol|option|p|pre|q|rp|rt|ruby|s|samp|section|select|small|span|strong|sub|summary|sup|table|tbody|td|textarea|tfoot|th|thead|time|tr|u|ul|var|wbr';
 const MATHML_SVG_TAG_NAMES =
@@ -342,11 +416,23 @@ const INLINE_DOLLAR_RE = /\$([^$\n\u0000]+?)\$/g;
 const BOLD_MARKDOWN_RE = /\*\*([^*\n\u0000]+?)\*\*/g;
 const PROT_RESTORE_RE = /\u0000PROT_(\d+)\u0000/g;
 
+function tokenizeCodeBlocksInHtmlFragment(fragment: string): string {
+  if (fragment.indexOf('<code') === -1) {
+    return fragment;
+  }
+  return fragment.replace(
+    INLINE_CODE_TAG_RE,
+    (_, attrs: string | undefined, inner: string) => {
+      return `<code${attrs || ''}>${tokenizeCppCodeBase(inner)}</code>`;
+    }
+  );
+}
+
 /**
  * Universal math-text parser that parses mixed HTML (such as <b>, <code>, <i>, <sub>, <sup>)
- * alongside $$...$$, \[...\], \(...\), and $...$ delimiters and converts all math segments
- * using memoized katex.renderToString(math, { throwOnError: false }).
- * Optionally highlights active search tokens in the resulting HTML.
+ * alongside $$...$$, \[...\], \(...\), and $...$ delimiters, syntax-tokenizes inline <code>
+ * blocks, and converts all math segments using memoized katex.renderToString(math, { throwOnError: false }).
+ * Optionally highlights active search tokens in the resulting HTML while preserving syntax tokens.
  */
 export function renderTextWithMath(
   input: string,
@@ -368,21 +454,49 @@ export function renderTextWithMath(
       input.indexOf('\\[') === -1 &&
       input.indexOf('**') === -1
     ) {
-      result =
-        input.indexOf('<') !== -1
-          ? input.replace(NON_HTML_TAG_OPEN_RE, '&lt;')
-          : input;
+      if (input.indexOf('<code') !== -1) {
+        const codeProt: string[] = [];
+        const maskedCode = String(input).replace(
+          INLINE_CODE_TAG_RE,
+          (_, attrs: string | undefined, inner: string) => {
+            const idx = codeProt.length;
+            codeProt.push(`<code${attrs || ''}>${tokenizeCppCodeBase(inner)}</code>`);
+            return `\u0000PROT_${idx}\u0000`;
+          }
+        );
+        const escapedRest =
+          maskedCode.indexOf('<') !== -1
+            ? maskedCode.replace(NON_HTML_TAG_OPEN_RE, '&lt;')
+            : maskedCode;
+        result = escapedRest.replace(PROT_RESTORE_RE, (_, idxStr: string) => {
+          return codeProt[Number(idxStr)] ?? '';
+        });
+      } else {
+        result =
+          input.indexOf('<') !== -1
+            ? input.replace(NON_HTML_TAG_OPEN_RE, '&lt;')
+            : input;
+      }
     } else {
       const protectedBlocks: string[] = [];
 
-      // 1. Protect <pre>...</pre> and <code>...</code> blocks so C/C++ code is never altered by KaTeX
+      // 1. Protect <pre>...</pre> and <code>...</code> blocks and syntax-tokenize their C/C++ content
       let masked =
         input.indexOf('<pre') !== -1 || input.indexOf('<code') !== -1
-          ? String(input).replace(PRE_CODE_BLOCK_RE, (match) => {
-              const idx = protectedBlocks.length;
-              protectedBlocks.push(match);
-              return `\u0000PROT_${idx}\u0000`;
-            })
+          ? String(input).replace(
+              PRE_CODE_BLOCK_RE,
+              (match, tag: string, attrs: string | undefined, inner: string) => {
+                const idx = protectedBlocks.length;
+                if (tag.toLowerCase() === 'code') {
+                  protectedBlocks.push(
+                    `<code${attrs || ''}>${tokenizeCppCodeBase(inner)}</code>`
+                  );
+                } else {
+                  protectedBlocks.push(tokenizeCodeBlocksInHtmlFragment(match));
+                }
+                return `\u0000PROT_${idx}\u0000`;
+              }
+            )
           : String(input);
 
       // 2. Protect known HTML tags (e.g. <b>, <i>, <sub>, <sup>, <br>) so inline $...$ never spans across tags
@@ -420,17 +534,17 @@ export function renderTextWithMath(
         processed = processed.replace(BOLD_MARKDOWN_RE, '<b>$1</b>');
       }
 
-      // 4. Restore protected HTML tags and code blocks, then escape any non-HTML angle brackets (e.g. <stdio.h>)
-      const restored =
-        protectedBlocks.length > 0
-          ? processed.replace(PROT_RESTORE_RE, (_, idxStr: string) => {
-              return protectedBlocks[Number(idxStr)] ?? '';
-            })
+      // 4. Escape any non-HTML angle brackets (e.g. <stdio.h>) before restoring protected HTML/code blocks
+      const escapedProcessed =
+        processed.indexOf('<') !== -1
+          ? processed.replace(NON_HTML_TAG_OPEN_RE, '&lt;')
           : processed;
       result =
-        restored.indexOf('<') !== -1
-          ? restored.replace(NON_HTML_TAG_OPEN_RE, '&lt;')
-          : restored;
+        protectedBlocks.length > 0
+          ? escapedProcessed.replace(PROT_RESTORE_RE, (_, idxStr: string) => {
+              return protectedBlocks[Number(idxStr)] ?? '';
+            })
+          : escapedProcessed;
     }
     parsedMathTextCache.set(input, result);
   }

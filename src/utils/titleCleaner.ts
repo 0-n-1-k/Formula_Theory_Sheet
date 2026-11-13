@@ -79,32 +79,53 @@ export const CARD_TITLE_OVERRIDES: Record<string, CleanedTitleResult> = {
   },
 
   // CSE 109 Formulas & Reference Cards (verified exact IDs, no Sec. tags)
-  'cse-c:6': {
+  'cse-c:5': {
     title: 'Top 40 C Exam Reminders & Core Mnemonics',
   },
-  'cse-c:7': {
+  'cse-c:6': {
     title: 'C Data Types, 15-Level Precedence & Type Promotion',
   },
-  'cse-c:8': {
+  'cse-c:7': {
     title: 'printf/scanf Formatting & Loop Conversions',
+  },
+  'cse-c:8': {
+    title: '34 Common C/C++ Exam Traps & Fixes',
   },
   'cse-c:9': {
     title: '34 Common C/C++ Exam Traps & Fixes',
   },
   'cse-lib:0': {
-    title: 'Common C Headers: stdio.h, stdlib.h, string.h, ctype.h, math.h',
+    title: 'Common C Headers: <stdio.h>, <stdlib.h>, <string.h>, <ctype.h>, <math.h>',
   },
   'cse-lib:1': {
     title: 'math.h Exact Results & string.h / ctype.h / stdlib.h Quick Table',
   },
+  'cse-c:10': {
+    title: 'Score Frequency, Duplicate Removal & Caesar Cipher',
+  },
+  'cse-c:11': {
+    title: 'Dynamic 2D Matrix Allocate, Read, Free & 3x3 Multiply',
+  },
   'cse-ptr:4': {
     title: 'Dynamic 2D Matrix Allocate, Read, Free & 3x3 Multiply',
+  },
+  'cse-c:12': {
+    title: 'Magic Square Verification, Diagonal Sums & Row-Major 2D Sort',
   },
   'cse-ptr:5': {
     title: 'Magic Square Verification, Diagonal Sums & Row-Major 2D Sort',
   },
+  'cse-c:13': {
+    title: '2D Spatial Grids, Saddle Point & 8-Neighbor Checks',
+  },
   'cse-ptr:7': {
     title: 'Pointer Expressions, 2D/3D Star Indexing & Dynamic Memory Idioms',
+  },
+  'cse-c:14': {
+    title: 'Manual strlen, strcpy, strcat, strcmp & In-Place Reverse (No <string.h>)',
+  },
+  'cse-str:0': {
+    title: 'Manual strlen, strcpy, strcat, strcmp & In-Place Reverse (No <string.h>)',
   },
   'cse-str:8': {
     title: 'Array Syntax, 1D Array One-Liners, Sorting/Searching & Matrix Templates',
@@ -184,13 +205,33 @@ export const CARD_TITLE_OVERRIDES: Record<string, CleanedTitleResult> = {
 
 /**
  * Cleans any card title:
- * 1. Checks `CARD_TITLE_OVERRIDES[cardId]` first (validating `examTag` so no `Sec.` tag slips through).
+ * 1. Checks content-matched CSE revision guide titles and `CARD_TITLE_OVERRIDES[cardId]`.
  * 2. Extracts genuine exam-year citations into `examTag`.
  * 3. Strips textbook/PDF section/chapter/lecture/page/Sadiku/Rev. Guide tags and stray trailing digits.
  * 4. Strips redundant inline formulas `($...$)` inside parentheticals when the title is already descriptive.
  */
 export function cleanCardTitle(rawTitle: string, cardId?: string): CleanedTitleResult {
-  if (cardId && CARD_TITLE_OVERRIDES[cardId]) {
+  const rawTrimmed = String(rawTitle || '').trim();
+
+  // Match the 4 CSE-109 Revision Guide cards accurately whether indexed at cse-c:5..8 or cse-c:6..9
+  if (/Top\s+40\s+Exam\s+Reminders/i.test(rawTrimmed)) {
+    return { title: 'Top 40 C Exam Reminders & Core Mnemonics' };
+  }
+  if (/15-Level\s+Operator\s+Precedence/i.test(rawTrimmed)) {
+    return { title: 'C Data Types, 15-Level Precedence & Type Promotion' };
+  }
+  if (/printf\s*\/\s*scanf\s+Quick\s+Sheet/i.test(rawTrimmed)) {
+    return { title: 'printf/scanf Formatting & Loop Conversions' };
+  }
+  if (/28\s+Output-Tracing\s+Rules/i.test(rawTrimmed)) {
+    return { title: '34 Common C/C++ Exam Traps & Fixes' };
+  }
+
+  if (
+    cardId &&
+    CARD_TITLE_OVERRIDES[cardId] &&
+    !(cardId === 'cse-c:5' && /Restricted\s+Conditionals/i.test(rawTrimmed))
+  ) {
     const ov = CARD_TITLE_OVERRIDES[cardId];
     return {
       title: ov.title,
@@ -198,8 +239,16 @@ export function cleanCardTitle(rawTitle: string, cardId?: string): CleanedTitleR
     };
   }
 
-  let working = String(rawTitle || '').trim();
+  let working = rawTrimmed;
   let examTag: string | undefined;
+
+  // Strip leading section-number prefixes or roman-numeral part prefixes at the start of titles
+  working = working
+    .replace(/^\d+\.\d+(?:\.\d+)?(?:\s*[–-]\s*\d+\.\d+(?:\.\d+)?)?\s+/g, '')
+    .replace(
+      /^(?:1D\s+Arrays|File\s+I\/O|Recursion(?:\s*&\s*Backtracking)?|Restricted\s+Conditionals)\s+[IVX]+\s*:\s*/i,
+      ''
+    );
 
   // 1. Extract any genuine exam year from trailing parentheticals before stripping reference noise
   const trailingParens = working.match(/\(([^()]*)\)\s*$/);

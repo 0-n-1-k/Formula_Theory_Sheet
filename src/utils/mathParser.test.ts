@@ -17,8 +17,10 @@ test('renderTextWithMath parses mixed HTML tags alongside inline $...$ and displ
 
   assert.ok(html.includes('<b>Conditions:</b>'), 'Preserves <b> HTML tag');
   assert.ok(
-    html.includes('<code>std::vector&lt;int&gt;</code>'),
-    'Preserves <code> block untouched'
+    html.includes('<code>') &&
+      html.includes('<span class="tok-kw">vector</span>') &&
+      html.includes('<span class="tok-kw">int</span>'),
+    'Syntax-tokenizes C/C++ keywords inside inline <code> block'
   );
   assert.ok(html.includes('class="katex"'), 'Renders inline LaTeX with KaTeX');
   assert.equal(
@@ -116,7 +118,7 @@ test('renderTextWithMath memoizes full prose-with-math strings in parsedMathText
   assert.equal(parsedMathTextCache.get(sample), first, 'Base math cache remains intact after highlighting');
 });
 
-test('highlightCppCodeToHtml tokenizes C/C++ comments, preprocessor directives, keywords, strings, and numbers in a single pass', () => {
+test('highlightCppCodeToHtml tokenizes C/C++ comments, preprocessor directives, keywords, strings, and numbers AND preserves syntax tokens during search', () => {
   const snippet = [
     '#include <stdio.h>',
     '/* Multi-line comment with int and 42 */',
@@ -139,9 +141,16 @@ test('highlightCppCodeToHtml tokenizes C/C++ comments, preprocessor directives, 
   assert.ok(html.includes('<span class="tok-num">0x0</span>'));
   assert.ok(html.includes('<span class="tok-num">100</span>'));
 
-  const searchMode = highlightCppCodeToHtml(snippet, ['mystrlen']);
+  const searchMode = highlightCppCodeToHtml(snippet, ['mystrlen', 'int']);
   assert.ok(searchMode.includes('<mark class="fm-hl">myStrlen</mark>'));
-  assert.equal(searchMode.includes('tok-kw'), false, 'Falls back to search highlight when highlightTokens are present');
+  assert.ok(
+    searchMode.includes('tok-kw') && searchMode.includes('tok-com') && searchMode.includes('tok-str'),
+    'Preserves full C/C++ syntax tokenization alongside search highlights when highlightTokens are present'
+  );
+  assert.ok(
+    searchMode.includes('<span class="tok-kw"><mark class="fm-hl">int</mark></span>'),
+    'Layers <mark class="fm-hl"> cleanly inside <span class="tok-kw"> when a C/C++ keyword matches the search query'
+  );
 });
 
 test('renderTextWithMath preserves standard HTML5 tags like <a>, <kbd>, and <abbr> while escaping C/C++ <stdio.h> headers', () => {
