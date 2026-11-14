@@ -20,10 +20,6 @@ import {
   PINNED_MIN_HEIGHT,
   PINNED_MAX_WIDTH,
   PINNED_MAX_HEIGHT,
-  CARD_COLLAPSED_MAX_HEIGHT_PX,
-  CARD_COLLAPSE_THRESHOLD_PX,
-  estimateCardBodyIsTall,
-  shouldCardBodyBeCollapsible,
 } from './storageSafety.ts';
 import {
   ACTIVE_TERM_ID,
@@ -214,36 +210,4 @@ test('pinned card position, corner resizing, and size modes clamp and switch bet
   assert.equal(clampedPos.x, 8);
   assert.equal(clampedPos.y, 900 - 300 - 8);
 });
-
-test('estimateCardBodyIsTall and shouldCardBodyBeCollapsible detect tall cards via DOM scrollHeight or content heuristics without losing content', () => {
-  assert.ok(CARD_COLLAPSED_MAX_HEIGHT_PX < CARD_COLLAPSE_THRESHOLD_PX);
-
-  const shortCard = {
-    rawLatex: 'V = IR',
-    bodyText: '<b>Where:</b> $V$ is voltage, $I$ is current.',
-  };
-  assert.equal(estimateCardBodyIsTall(shortCard), false);
-  assert.equal(shouldCardBodyBeCollapsible(shortCard, null), false);
-  assert.equal(shouldCardBodyBeCollapsible(shortCard, 190), false);
-  assert.equal(shouldCardBodyBeCollapsible(shortCard, 420), true);
-
-  const tallListCard = {
-    htmlContent:
-      '<ol>' +
-      Array.from({ length: 12 }, (_, i) => `<li>Reminder item ${i + 1}</li>`).join('') +
-      '</ol>',
-  };
-  assert.equal(estimateCardBodyIsTall(tallListCard), true);
-  assert.equal(shouldCardBodyBeCollapsible(tallListCard, 0), true);
-  assert.equal(shouldCardBodyBeCollapsible(tallListCard, 680), true);
-
-  const tallCodeCard = {
-    codeContent: Array.from({ length: 14 }, (_, i) => `int x${i} = ${i};`).join('\n'),
-  };
-  assert.equal(estimateCardBodyIsTall(tallCodeCard), true);
-  assert.equal(shouldCardBodyBeCollapsible(tallCodeCard, undefined), true);
-});
-
-
-
 

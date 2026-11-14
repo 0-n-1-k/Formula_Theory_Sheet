@@ -49,7 +49,6 @@ import {
 import {
   highlightCppCodeToHtml,
   highlightHtmlContent,
-  highlightPlainTextToHtml,
   prewarmCardsMathCache,
   renderLatexCached,
   renderTextWithMath,
@@ -272,20 +271,50 @@ export const DoomsdayToggleButton = memo(function DoomsdayToggleButton({
   }, []);
 
   const parts = formatDoomsdayParts(examDate, nowMs);
-  const label = parts
-    ? `DOOMSDAY // ${parts.days}D : ${parts.hrs}H : ${parts.mins}M : ${parts.secs}S`
-    : 'GOAL // TIMER';
 
   return (
     <button
       type="button"
-      className={`goal-toggle-btn${goalOpen ? ' active' : ''}`}
+      className={`goal-toggle-btn${goalOpen ? ' active' : ' is-closed-live'}`}
       id="goalToggleBtn"
       aria-label="Toggle Study Progress and Exam Countdown Drawer"
       aria-expanded={goalOpen}
       onClick={onToggle}
     >
-      <span className="ntype-badge">{label}</span>
+      {!goalOpen && parts ? (
+        <span className="doomsday-btn-live">
+          <span className="doomsday-tag">T-MINUS</span>
+          <span className="doomsday-segments">
+            <span className="dd-seg">
+              <span className="dd-val">{parts.days}</span>
+              <span className="dd-unit">D</span>
+            </span>
+            <span className="dd-sep">:</span>
+            <span className="dd-seg">
+              <span className="dd-val">{parts.hrs}</span>
+              <span className="dd-unit">H</span>
+            </span>
+            <span className="dd-sep">:</span>
+            <span className="dd-seg">
+              <span className="dd-val">{parts.mins}</span>
+              <span className="dd-unit">M</span>
+            </span>
+            <span className="dd-sep">:</span>
+            <span className="dd-seg">
+              <span className="dd-val">{parts.secs}</span>
+              <span className="dd-unit">S</span>
+            </span>
+          </span>
+        </span>
+      ) : (
+        <span className="ntype-badge">
+          {goalOpen
+            ? 'Adjust exam date'
+            : parts
+            ? `DOOMSDAY // ${parts.days}D ${parts.hrs}H`
+            : 'Adjust exam date'}
+        </span>
+      )}
     </button>
   );
 });
@@ -309,7 +338,7 @@ export const DoomsdayDrawerClock = memo(function DoomsdayDrawerClock({
   const parts = formatDoomsdayParts(examDate, nowMs);
   if (!parts) {
     return (
-      <span id="cdt">
+      <span id="cdt" className="is-static">
         <span className="doomsday-tag">STANDBY</span>
         <span>SET EXAM DATE TO ARM DOOMSDAY CLOCK</span>
       </span>
@@ -317,28 +346,10 @@ export const DoomsdayDrawerClock = memo(function DoomsdayDrawerClock({
   }
 
   return (
-    <span id="cdt">
+    <span id="cdt" className="is-static">
       <span className="doomsday-tag">{parts.prefix}</span>
-      <span className="doomsday-segments">
-        <span className="dd-seg">
-          <span className="dd-val">{parts.days}</span>
-          <span className="dd-unit">D</span>
-        </span>
-        <span className="dd-sep">:</span>
-        <span className="dd-seg">
-          <span className="dd-val">{parts.hrs}</span>
-          <span className="dd-unit">H</span>
-        </span>
-        <span className="dd-sep">:</span>
-        <span className="dd-seg">
-          <span className="dd-val">{parts.mins}</span>
-          <span className="dd-unit">M</span>
-        </span>
-        <span className="dd-sep">:</span>
-        <span className="dd-seg">
-          <span className="dd-val">{parts.secs}</span>
-          <span className="dd-unit">S</span>
-        </span>
+      <span className="ntype-badge">
+        {parts.days}D : {parts.hrs}H : {parts.mins}M : {parts.secs}S
       </span>
     </span>
   );
@@ -443,6 +454,7 @@ function parseFreqScore(freqBadge?: string): number {
 export interface FormulaCardViewProps {
   card: FormulaCardRecord;
   cardIndex?: number;
+  staggerIndex?: number;
   isWide?: boolean;
   isLearned: boolean;
   isStarred: boolean;
@@ -465,6 +477,7 @@ export interface FormulaCardViewProps {
 export const FormulaCardView = memo(function FormulaCardView({
   card,
   cardIndex,
+  staggerIndex,
   isWide = false,
   isLearned,
   isStarred,
@@ -492,28 +505,6 @@ export const FormulaCardView = memo(function FormulaCardView({
     }
     return splitCardTitleAndMeta(card.title);
   }, [card.title, card.examTag]);
-
-  const cleanBodyText = useMemo(
-    () =>
-      card.bodyText
-        ? card.bodyText.replace(
-            /^\s*(?:<(?:b|strong)>\s*)?(?:Where|Conditions)\s*:?\s*(?:<\/(?:b|strong)>\s*)?:?\s*/i,
-            ''
-          )
-        : '',
-    [card.bodyText]
-  );
-
-  const cleanUseText = useMemo(
-    () =>
-      card.useText
-        ? card.useText.replace(
-            /^\s*(?:<(?:b|strong)>\s*)?(?:Use|Exam Application)\s*:?\s*(?:<\/(?:b|strong)>\s*)?:?\s*/i,
-            ''
-          )
-        : '',
-    [card.useText]
-  );
 
   useEffect(() => {
     if (!selfTest) {
@@ -560,6 +551,11 @@ export const FormulaCardView = memo(function FormulaCardView({
       data-k={card.id}
       data-s={card.keywords}
       hidden={isHidden}
+      style={
+        staggerIndex !== undefined
+          ? ({ '--card-stagger': staggerIndex } as React.CSSProperties)
+          : undefined
+      }
       onClick={handleCardClick}
     >
       <div className="fmh">
@@ -695,15 +691,15 @@ export const FormulaCardView = memo(function FormulaCardView({
           />
         ) : null}
         {card.steps && card.steps.length > 0 ? (
-          <details
-            className="fmd"
-            open={stepsOpen}
-            onToggle={(e) => {
-              const isOpenNow = (e.currentTarget as HTMLDetailsElement).open;
-              setStepsOpen(isOpenNow);
-            }}
-          >
-            <summary>
+          <details className={`fmd${stepsOpen ? ' is-open' : ''}`} open>
+            <summary
+              aria-expanded={stepsOpen}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setStepsOpen((prev) => !prev);
+              }}
+            >
               <SecondaryMathText
                 as="span"
                 className=""
@@ -711,39 +707,41 @@ export const FormulaCardView = memo(function FormulaCardView({
                 highlightTokens={activeHighlightTokens}
               />
             </summary>
-            {stepsOpen ? (
-              <ol className="fmsteps">
-                {card.steps.map((step, idx) => (
-                  <SecondaryMathText
-                    key={idx}
-                    as="li"
-                    className=""
-                    content={step}
-                    highlightTokens={activeHighlightTokens}
-                  />
-                ))}
-              </ol>
-            ) : null}
+            <div className={`fmd-collapse${stepsOpen ? ' is-open' : ''}`} aria-hidden={!stepsOpen}>
+              <div className="fmd-collapse-inner">
+                <ol className="fmsteps">
+                  {card.steps.map((step, idx) => (
+                    <SecondaryMathText
+                      key={idx}
+                      as="li"
+                      className=""
+                      content={step}
+                      highlightTokens={activeHighlightTokens}
+                    />
+                  ))}
+                </ol>
+              </div>
+            </div>
           </details>
         ) : null}
-        {cleanBodyText || cleanUseText ? (
+        {card.bodyText || card.useText ? (
           <div className="fmdet">
-            {cleanBodyText ? (
+            {card.bodyText ? (
               <div className="fm-spec-pod fmw-pod">
                 <span className="fm-spec-label">PARAMETERS // CONTEXT</span>
                 <SecondaryMathText
                   className="fmw"
-                  content={cleanBodyText}
+                  content={card.bodyText}
                   highlightTokens={activeHighlightTokens}
                 />
               </div>
             ) : null}
-            {cleanUseText ? (
+            {card.useText ? (
               <div className="fm-spec-pod fmu-pod">
                 <span className="fm-spec-label">APPLICATION // STRATEGY</span>
                 <SecondaryMathText
                   className="fmu"
-                  content={cleanUseText}
+                  content={card.useText}
                   highlightTokens={activeHighlightTokens}
                 />
               </div>
@@ -758,10 +756,8 @@ export const FormulaCardView = memo(function FormulaCardView({
 export function computeGridRowLayout(
   items: ReadonlyArray<{ card: FormulaCardRecord; isWide: boolean }>
 ): {
-  partnerById: Map<string, string>;
   promotedWideIds: Set<string>;
 } {
-  const partnerById = new Map<string, string>();
   const promotedWideIds = new Set<string>();
 
   let pendingLeftId: string | null = null;
@@ -775,8 +771,6 @@ export function computeGridRowLayout(
       if (pendingLeftId === null) {
         pendingLeftId = item.card.id;
       } else {
-        partnerById.set(pendingLeftId, item.card.id);
-        partnerById.set(item.card.id, pendingLeftId);
         pendingLeftId = null;
       }
     }
@@ -785,7 +779,7 @@ export function computeGridRowLayout(
     promotedWideIds.add(pendingLeftId);
   }
 
-  return { partnerById, promotedWideIds };
+  return { promotedWideIds };
 }
 
 export interface VisibleSectionCardItem {
@@ -900,6 +894,7 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
                 key={`${keyPrefix}${card.id}`}
                 card={card}
                 cardIndex={idx + 1}
+                staggerIndex={idx < 8 ? idx : undefined}
                 isWide={effectiveIsWide}
                 isLearned={isLearned}
                 isStarred={isStarred}
@@ -990,9 +985,8 @@ export default function App() {
   const [importJsonText, setImportJsonText] = useState<string>('');
   const [toastMsg, setToastMsg] = useState<string>('');
   const [showTopBtn, setShowTopBtn] = useState<boolean>(false);
-  const [isDetached, setIsDetached] = useState<boolean>(false);
+  const [indexDetached, setIndexDetached] = useState<boolean>(false);
   const [selectedTopicId, setSelectedTopicId] = useState<string>('');
-  const [hideDetails, setHideDetails] = useState<boolean>(false);
   const [bentoOpen, setBentoOpen] = useState<boolean>(true);
   const [highYieldOnly, setHighYieldOnly] = useState<boolean>(false);
 
@@ -1042,6 +1036,9 @@ export default function App() {
   const fmbarRef = useRef<HTMLElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const fsSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const fsSearchHudRef = useRef<HTMLDivElement | null>(null);
+  const hudHeightRef = useRef<number | null>(null);
+  const pinnedCardDomRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const fsTopicStripRef = useRef<HTMLDivElement | null>(null);
   const fsHudResultsRef = useRef<HTMLDivElement | null>(null);
   const fullscreenWrapperRef = useRef<HTMLDivElement | null>(null);
@@ -1134,8 +1131,8 @@ export default function App() {
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    document.body.classList.toggle('hide-details', hideDetails);
-  }, [hideDetails]);
+    document.body.classList.toggle('hide-details', Boolean(persisted.hideDetails));
+  }, [persisted.hideDetails]);
 
   useEffect(() => {
     syncDocumentMetaForTerm(CURRENT_TERM_CONFIG);
@@ -1182,9 +1179,9 @@ export default function App() {
 
   useEffect(() => {
     const handleScroll = () => {
-      const scrolledPast = window.scrollY > 260;
-      setIsDetached(scrolledPast);
-      setShowTopBtn(window.scrollY > 400);
+      const y = window.scrollY;
+      setShowTopBtn(y > 400);
+      setIndexDetached(y > 200);
     };
     handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -1228,7 +1225,7 @@ export default function App() {
     }
   }, []);
 
-  // Handle dragging the bottom vertical edge of the Fullscreen HUD to increase or decrease HUD height
+  // Handle dragging the bottom vertical edge of the Fullscreen HUD with rAF batching and single mouseup state commit
   useEffect(() => {
     if (!isResizingHud || typeof window === 'undefined') return;
     const prevCursor = document.body.style.cursor;
@@ -1236,30 +1233,59 @@ export default function App() {
     document.body.style.cursor = 'ns-resize';
     document.body.style.userSelect = 'none';
 
+    let rafId: number | null = null;
+    let latestClientY: number | null = null;
+
+    const applyHudHeightFrame = () => {
+      rafId = null;
+      if (latestClientY === null) return;
+      const nextHeight = clampHudHeightPx(latestClientY, window.innerHeight);
+      hudHeightRef.current = nextHeight;
+      const hudEl = fsSearchHudRef.current;
+      if (hudEl) {
+        hudEl.style.height = `${nextHeight}px`;
+        hudEl.style.maxHeight = `${nextHeight}px`;
+      }
+    };
+
     const handleMouseMove = (e: MouseEvent) => {
-      const nextHeight = clampHudHeightPx(e.clientY, window.innerHeight);
-      setHudHeightPx(nextHeight);
-      const neededCards = Math.max(12, Math.ceil(nextHeight / 95) * 3);
-      setHudRenderLimit((prev) => (prev < neededCards ? neededCards : prev));
+      latestClientY = e.clientY;
+      if (rafId === null) {
+        rafId = window.requestAnimationFrame(applyHudHeightFrame);
+      }
     };
 
     const handleMouseUp = (e: MouseEvent) => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      const finalHeight =
+        latestClientY !== null
+          ? clampHudHeightPx(latestClientY, window.innerHeight)
+          : hudHeightRef.current ?? Math.round(window.innerHeight * 0.5);
+      hudHeightRef.current = finalHeight;
+      setHudHeightPx(finalHeight);
+      const neededCards = Math.max(12, Math.ceil(finalHeight / 95) * 3);
+      setHudRenderLimit((prev) => (prev < neededCards ? neededCards : prev));
       setIsResizingHud(false);
-      const currentLimit = hudHeightPx ?? Math.round(window.innerHeight * 0.5);
-      const withinHud = e.clientY <= currentLimit + 16;
+      const withinHud = e.clientY <= finalHeight + 16;
       setFsHudHovered(withinHud);
       setFsHudPointerTop(withinHud);
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
     window.addEventListener('mouseup', handleMouseUp);
     return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
       document.body.style.cursor = prevCursor;
       document.body.style.userSelect = prevUserSelect;
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isResizingHud, hudHeightPx]);
+  }, [isResizingHud]);
 
   // Sync native OS fullscreen exit (Escape key in native fullscreen) with isPdfFullscreen
   useEffect(() => {
@@ -1468,12 +1494,8 @@ export default function App() {
         const cards = allCourseCards.filter((card) => card.course === c.code);
         const total = cards.length;
         let learned = 0;
-        let starred = 0;
-        let highYield = 0;
         for (const card of cards) {
           if (persisted.learned[card.id]) learned++;
-          if (persisted.starred[card.id]) starred++;
-          if (highYieldTopicIds.has(card.topicId)) highYield++;
         }
         const pct = total > 0 ? Math.round((learned / total) * 100) : 0;
         return {
@@ -1481,12 +1503,10 @@ export default function App() {
           badge: c.badge,
           total,
           learned,
-          starred,
-          highYield,
           pct,
         };
       });
-  }, [courseOptions, fmCardsWithIndex, thmCardsWithIndex, persisted.learned, persisted.starred, highYieldTopicIds]);
+  }, [courseOptions, fmCardsWithIndex, thmCardsWithIndex, persisted.learned]);
 
   const deferredTokens = useMemo(
     () => tokenizeSearchQuery(deferredQuery),
@@ -1658,17 +1678,15 @@ export default function App() {
       const queryMatch =
         deferredTokens.length === 0
           ? true
-          : useTabSemantic
-          ? computeHybridCardScore(
+          : computeHybridCardScore(
               card.id,
               scoreFormulaCardSearch(card, deferredTokens, deferredQuery, searchIndex),
               semanticScores,
-              true,
+              useTabSemantic,
               MIN_SEMANTIC_SIMILARITY,
               searchIndex,
               deferredTokens
-            ) > 0
-          : matchesSearchTokens(searchIndex, deferredTokens, card.title);
+            ) > 0;
 
       if (statusMatch && queryMatch) {
         visibleCards++;
@@ -1720,17 +1738,15 @@ export default function App() {
       const queryMatch =
         deferredTokens.length === 0
           ? true
-          : useTabSemantic
-          ? computeHybridCardScore(
+          : computeHybridCardScore(
               card.id,
               scoreFormulaCardSearch(card, deferredTokens, deferredQuery, searchIndex),
               semanticScores,
-              true,
+              useTabSemantic,
               MIN_SEMANTIC_SIMILARITY,
               searchIndex,
               deferredTokens
-            ) > 0
-          : matchesSearchTokens(searchIndex, deferredTokens, card.title);
+            ) > 0;
       if (statusMatch && queryMatch) {
         count++;
       }
@@ -1886,7 +1902,6 @@ export default function App() {
     setTermMenuOpen(false);
     setModalOpen(false);
     exitPdfFullscreen();
-    setHideDetails(false);
     setOpenTopics(() => {
       const collapsed: Record<string, boolean> = {};
       for (const sec of [...fmSections, ...thmSections, ...genSections]) {
@@ -1946,13 +1961,13 @@ export default function App() {
   }, [showToast]);
 
   const handleToggleHideDetails = useCallback(() => {
-    setHideDetails((prev) => {
-      const next = !prev;
+    setPersisted((prev) => {
+      const next = !prev.hideDetails;
       if (typeof document !== 'undefined') {
         document.body.classList.toggle('hide-details', next);
       }
       showToast(next ? 'DETAILS HIDDEN' : 'DETAILS VISIBLE');
-      return next;
+      return { ...prev, hideDetails: next };
     });
   }, [showToast]);
 
@@ -2402,6 +2417,11 @@ export default function App() {
         ? thmCardsWithIndex
         : [...fmCardsWithIndex, ...thmCardsWithIndex, ...genCardsWithIndex];
 
+    // If the user explicitly clicked [PEEK TOPIC] on a search result card or selected a topic pill, show that topic
+    if (peekedSection) {
+      return sortCardsShortToLong(peekedSection.cards);
+    }
+
     // When a search query is entered, always search across all cards in the pool
     if (hudTokens.length > 0) {
       const targetCourse = activePracticeModule?.course || 'M159';
@@ -2462,10 +2482,6 @@ export default function App() {
           a.order - b.order
       );
       return scoredMatches.map((item) => item.card);
-    }
-
-    if (peekedSection) {
-      return sortCardsShortToLong(peekedSection.cards);
     }
 
     return hudCourseSections.flatMap((sec) => sortCardsShortToLong(sec.cards));
@@ -2669,51 +2685,93 @@ export default function App() {
     []
   );
 
+  // Compositor-only rAF drag (translate3d) & corner resize (translate3d + scale) with single state commit on mouseup
   useEffect(() => {
-    if (!pinInteraction) return;
-    const handleMouseMove = (e: MouseEvent) => {
-      const dx = e.clientX - pinInteraction.startX;
-      const dy = e.clientY - pinInteraction.startY;
-      setPinnedLayouts((prev) => {
-        const cur = prev[pinInteraction.cardId] ?? pinInteraction.startLayout;
-        if (pinInteraction.type === 'drag') {
-          const clamped = clampPinnedCardPosition(
-            pinInteraction.startLayout.x + dx,
-            pinInteraction.startLayout.y + dy,
-            cur.width,
-            cur.height,
-            window.innerWidth,
-            window.innerHeight
-          );
-          return {
-            ...prev,
-            [pinInteraction.cardId]: {
-              ...cur,
-              x: clamped.x,
-              y: clamped.y,
-            },
-          };
-        }
-        const resized = computeCornerResizedLayout(
-          pinInteraction.startLayout,
-          pinInteraction.corner ?? 'se',
-          dx,
-          dy,
+    if (!pinInteraction || typeof window === 'undefined') return;
+    const cardEl = pinnedCardDomRefs.current[pinInteraction.cardId] ?? null;
+    let rafId: number | null = null;
+    let latestClientX = pinInteraction.startX;
+    let latestClientY = pinInteraction.startY;
+    let latestLayout: PinnedCardLayout = pinInteraction.startLayout;
+
+    const applyPinFrame = () => {
+      rafId = null;
+      const dx = latestClientX - pinInteraction.startX;
+      const dy = latestClientY - pinInteraction.startY;
+
+      if (pinInteraction.type === 'drag') {
+        const clamped = clampPinnedCardPosition(
+          pinInteraction.startLayout.x + dx,
+          pinInteraction.startLayout.y + dy,
+          pinInteraction.startLayout.width,
+          pinInteraction.startLayout.height,
           window.innerWidth,
           window.innerHeight
         );
-        return {
-          ...prev,
-          [pinInteraction.cardId]: resized,
+        latestLayout = {
+          ...pinInteraction.startLayout,
+          x: clamped.x,
+          y: clamped.y,
         };
-      });
+        if (cardEl) {
+          cardEl.style.transform = `translate3d(${clamped.x}px, ${clamped.y}px, 0)`;
+        }
+        return;
+      }
+
+      const resized = computeCornerResizedLayout(
+        pinInteraction.startLayout,
+        pinInteraction.corner ?? 'se',
+        dx,
+        dy,
+        window.innerWidth,
+        window.innerHeight
+      );
+      latestLayout = resized;
+      if (cardEl) {
+        const scaleX =
+          pinInteraction.startLayout.width > 0
+            ? resized.width / pinInteraction.startLayout.width
+            : 1;
+        const scaleY =
+          pinInteraction.startLayout.height > 0
+            ? resized.height / pinInteraction.startLayout.height
+            : 1;
+        cardEl.style.transform = `translate3d(${resized.x}px, ${resized.y}px, 0) scale(${scaleX}, ${scaleY})`;
+      }
     };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      latestClientX = e.clientX;
+      latestClientY = e.clientY;
+      if (rafId === null) {
+        rafId = window.requestAnimationFrame(applyPinFrame);
+      }
+    };
+
     const handleMouseUp = () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+        rafId = null;
+        applyPinFrame();
+      }
+      if (cardEl) {
+        cardEl.style.transform = `translate3d(${latestLayout.x}px, ${latestLayout.y}px, 0)`;
+      }
+      const committedLayout = latestLayout;
+      setPinnedLayouts((prev) => ({
+        ...prev,
+        [pinInteraction.cardId]: committedLayout,
+      }));
       setPinInteraction(null);
     };
-    window.addEventListener('mousemove', handleMouseMove);
+
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
     window.addEventListener('mouseup', handleMouseUp);
     return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
@@ -2727,39 +2785,21 @@ export default function App() {
 
   return (
     <WorkspaceErrorBoundary fallbackLabel={CURRENT_TERM_CONFIG.brandTitle}>
-      {isDetached && !sidebarOpen ? (
-        <button
-          type="button"
-          id="nav-drawer-toggle"
-          className="fm-index-trigger is-detached"
-          onClick={toggleNavDrawer}
-          aria-label="Toggle Quick Index"
-          aria-expanded={sidebarOpen}
-        >
-          <span className="fm-index-vertical-text">
-            <span>I</span>
-            <span>N</span>
-            <span>D</span>
-            <span>E</span>
-            <span>X</span>
-          </span>
-        </button>
-      ) : null}
       <header className="top-chrome" ref={topChromeRef}>
         <div className="hd">
           <div className="hd-left">
-            {!sidebarOpen ? (
-              <button
-                type="button"
-                id={isDetached ? 'sbBtn' : 'nav-drawer-toggle'}
-                className="sb-btn fm-index-trigger"
-                aria-label="Toggle Quick Index"
-                aria-expanded={sidebarOpen}
-                onClick={toggleNavDrawer}
-              >
-                [INDEX]
-              </button>
-            ) : null}
+            <button
+              type="button"
+              id="sbBtn"
+              className={`sb-btn fm-index-trigger${sidebarOpen ? ' is-hidden' : ''}`}
+              aria-label="Toggle Quick Index"
+              aria-expanded={sidebarOpen}
+              aria-hidden={sidebarOpen}
+              tabIndex={sidebarOpen ? -1 : 0}
+              onClick={toggleNavDrawer}
+            >
+              [INDEX]
+            </button>
             <div className="brand-wrap">
               <div className="term-switcher-wrap" ref={termSwitcherWrapRef}>
                 <button
@@ -2774,65 +2814,64 @@ export default function App() {
                 >
                   {CURRENT_TERM_CONFIG.emblemText}
                 </button>
-                {termMenuOpen ? (
-                  <div
-                    className="term-archive-dropdown"
-                    id="termArchiveDropdown"
-                    role="menu"
-                    aria-label="BUET EEE Term Archive"
-                  >
-                    <div className="term-archive-header">
-                      <span className="sh-label">BUET EEE TERM ARCHIVE</span>
-                      <span className="ntype-badge" style={{ color: 'var(--accent)', fontSize: 'var(--fs-2xs)' }}>
-                        {CURRENT_TERM_CONFIG.shortCode}
-                      </span>
-                    </div>
-                    {Object.values(TERM_REGISTRY).map((termItem) => {
-                      const isCurrentTerm = termItem.termId === CURRENT_TERM_CONFIG.termId;
-                      const hasDeployedUrl = Boolean(termItem.deployedUrl);
-                      const statusLabel = isCurrentTerm
-                        ? '[ACTIVE]'
-                        : hasDeployedUrl
-                        ? '[OPEN ->]'
-                        : '[SOON]';
-                      const statusCls = isCurrentTerm
-                        ? 'active'
-                        : hasDeployedUrl
-                        ? 'open'
-                        : 'soon';
-
-                      return (
-                        <button
-                          key={termItem.termId}
-                          type="button"
-                          role="menuitem"
-                          data-term-id={termItem.termId}
-                          className={`term-archive-item${isCurrentTerm ? ' active' : ''}`}
-                          onClick={() => {
-                            setTermMenuOpen(false);
-                            if (isCurrentTerm) {
-                              showToast(`${termItem.shortCode} // ACTIVE WORKSPACE`);
-                            } else if (termItem.deployedUrl) {
-                              window.location.href = termItem.deployedUrl;
-                            } else {
-                              showToast(
-                                `${termItem.shortCode} CONFIG PRE-LOADED IN termConfig.ts`
-                              );
-                            }
-                          }}
-                        >
-                          <div className="term-archive-meta">
-                            <span className="term-archive-code">{termItem.shortCode}</span>
-                            <span className="term-archive-desc">{termItem.archiveLabel}</span>
-                          </div>
-                          <span className={`term-status-badge ${statusCls}`}>
-                            {statusLabel}
-                          </span>
-                        </button>
-                      );
-                    })}
+                <div
+                  className={`term-archive-dropdown${termMenuOpen ? ' open' : ''}`}
+                  id="termArchiveDropdown"
+                  role="menu"
+                  aria-label="BUET EEE Term Archive"
+                  aria-hidden={!termMenuOpen}
+                >
+                  <div className="term-archive-header">
+                    <span className="sh-label">BUET EEE TERM ARCHIVE</span>
+                    <span className="ntype-badge" style={{ color: 'var(--accent)', fontSize: 'var(--fs-2xs)' }}>
+                      {CURRENT_TERM_CONFIG.shortCode}
+                    </span>
                   </div>
-                ) : null}
+                  {Object.values(TERM_REGISTRY).map((termItem) => {
+                    const isCurrentTerm = termItem.termId === CURRENT_TERM_CONFIG.termId;
+                    const hasDeployedUrl = Boolean(termItem.deployedUrl);
+                    const statusLabel = isCurrentTerm
+                      ? '[ACTIVE]'
+                      : hasDeployedUrl
+                      ? '[OPEN ->]'
+                      : '[SOON]';
+                    const statusCls = isCurrentTerm
+                      ? 'active'
+                      : hasDeployedUrl
+                      ? 'open'
+                      : 'soon';
+
+                    return (
+                      <button
+                        key={termItem.termId}
+                        type="button"
+                        role="menuitem"
+                        data-term-id={termItem.termId}
+                        className={`term-archive-item${isCurrentTerm ? ' active' : ''}`}
+                        onClick={() => {
+                          setTermMenuOpen(false);
+                          if (isCurrentTerm) {
+                            showToast(`${termItem.shortCode} // ACTIVE WORKSPACE`);
+                          } else if (termItem.deployedUrl) {
+                            window.location.href = termItem.deployedUrl;
+                          } else {
+                            showToast(
+                              `${termItem.shortCode} CONFIG PRE-LOADED IN termConfig.ts`
+                            );
+                          }
+                        }}
+                      >
+                        <div className="term-archive-meta">
+                          <span className="term-archive-code">{termItem.shortCode}</span>
+                          <span className="term-archive-desc">{termItem.archiveLabel}</span>
+                        </div>
+                        <span className={`term-status-badge ${statusCls}`}>
+                          {statusLabel}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <a
                 href="https://www.buet.ac.bd/web/#/"
@@ -2921,40 +2960,206 @@ export default function App() {
               goalOpen={persisted.goalOpen}
               onToggle={handleToggleGoal}
             />
+            <div
+              ref={toolsWrapRef}
+              className={`tools-menu-wrap${toolsOpen ? ' open' : ''}`}
+            >
+              <button
+                type="button"
+                id="settingsBtn"
+                className={`settings-icon-btn${toolsOpen ? ' active' : ''}`}
+                aria-label="Open Settings Menu"
+                aria-expanded={toolsOpen}
+                title="Workspace Settings & Data"
+                onClick={() => setToolsOpen((o) => !o)}
+              >
+                <svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.85"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="3.2" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              </button>
+              <div className={`tools-dropdown${toolsOpen ? ' open' : ''}`} role="menu">
+                <div className="dropdown-sec-label">TOPIC ACCORDIONS</div>
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  role="menuitem"
+                  onClick={() => handleExpandCollapseAll(true)}
+                >
+                  <span>Expand All Topics</span>
+                  <span className="ntype-badge">[+]</span>
+                </button>
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  role="menuitem"
+                  onClick={() => handleExpandCollapseAll(false)}
+                >
+                  <span>Collapse All Topics</span>
+                  <span className="ntype-badge">[-]</span>
+                </button>
+                <div className="dropdown-divider" />
+                <div className="dropdown-sec-label">DISPLAY &amp; WORKSPACE</div>
+                <button
+                  type="button"
+                  className={`dropdown-item${persisted.singleCol ? ' active' : ''}`}
+                  role="menuitem"
+                  onClick={handleToggleSingleCol}
+                >
+                  <span>Single-Column Wide Cards</span>
+                  <span className="ntype-badge">{persisted.singleCol ? '1-COL' : '2-COL'}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`dropdown-item${persisted.hideDetails ? ' active' : ''}`}
+                  role="menuitem"
+                  onClick={handleToggleHideDetails}
+                >
+                  <span>Hide Context &amp; Strategy Pods</span>
+                  <span className="ntype-badge">{persisted.hideDetails ? 'ON' : 'OFF'}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`dropdown-item${persisted.selfTest ? ' active' : ''}`}
+                  role="menuitem"
+                  onClick={handleToggleSelfTest}
+                >
+                  <span>Self-Test Blur Mode</span>
+                  <span className="ntype-badge">{persisted.selfTest ? 'ON' : 'OFF'}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`dropdown-item${persisted.courseBarCollapsed ? ' active' : ''}`}
+                  role="menuitem"
+                  onClick={handleToggleCourseBar}
+                >
+                  <span>Compact Course Header</span>
+                  <span className="ntype-badge">{persisted.courseBarCollapsed ? 'ON' : 'OFF'}</span>
+                </button>
+                <div className="dropdown-divider" />
+                <div className="dropdown-sec-label">DATA &amp; BACKUP</div>
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  role="menuitem"
+                  aria-label="Export or Import Progress JSON"
+                  onClick={() => {
+                    setActiveFlashcard(null);
+                    setModalMode('io');
+                    setImportJsonText(
+                      JSON.stringify(
+                        {
+                          learned: persisted.learned,
+                          starred: persisted.starred,
+                          examDate: persisted.examDate,
+                        },
+                        null,
+                        2
+                      )
+                    );
+                    setToolsOpen(false);
+                    setModalOpen(true);
+                  }}
+                >
+                  <span>Export / Import JSON</span>
+                  <span className="ntype-badge">IO</span>
+                </button>
+                <button
+                  type="button"
+                  className="dropdown-item danger"
+                  role="menuitem"
+                  onClick={handleResetProgress}
+                >
+                  <span>Reset All Progress</span>
+                  <span className="ntype-badge">CLR</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-        <div className="goal" hidden={!persisted.goalOpen}>
-          <div className="goal-progress-wrap">
-            <span className="ntype-badge">MASTERY</span>
-            <div
-              id="pb"
-              role="progressbar"
-              aria-label="Overall Mastery Progress"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={masteryStats.pct}
-            >
-              <div id="pf" style={{ width: `${masteryStats.pct}%` }} />
+        <div
+          className={`goal-collapse-shell${persisted.goalOpen ? ' is-open' : ''}`}
+          aria-hidden={!persisted.goalOpen}
+        >
+          <div className="goal-collapse-inner">
+            <div className="goal">
+              <div className="goal-progress-wrap">
+                <span className="ntype-badge">MASTERY</span>
+                <div
+                  id="pb"
+                  role="progressbar"
+                  aria-label="Overall Mastery Progress"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={masteryStats.pct}
+                >
+                  <div id="pf" style={{ width: `${masteryStats.pct}%` }} />
+                </div>
+                <span id="ptxt">
+                  {masteryStats.learnedCount} / {masteryStats.totalCount} ({masteryStats.pct}%)
+                </span>
+              </div>
+              <div className="cdrow">
+                <label htmlFor="examDateInput">EXAM DATE</label>
+                <input
+                  id="examDateInput"
+                  type="date"
+                  value={persisted.examDate || ''}
+                  aria-label="Term final exam date"
+                  onChange={(e) =>
+                    setPersisted((prev) => ({ ...prev, examDate: e.target.value }))
+                  }
+                />
+                <DoomsdayDrawerClock examDate={persisted.examDate} />
+              </div>
             </div>
-            <span id="ptxt">
-              {masteryStats.learnedCount} / {masteryStats.totalCount} ({masteryStats.pct}%)
-            </span>
-          </div>
-          <div className="cdrow">
-            <label htmlFor="examDateInput">EXAM DATE</label>
-            <input
-              id="examDateInput"
-              type="date"
-              value={persisted.examDate || ''}
-              aria-label="Term final exam date"
-              onChange={(e) =>
-                setPersisted((prev) => ({ ...prev, examDate: e.target.value }))
-              }
-            />
-            <DoomsdayDrawerClock examDate={persisted.examDate} />
           </div>
         </div>
       </header>
+
+      <button
+        type="button"
+        id="sbDetachedTab"
+        className={`sb-detached-tab${indexDetached && !isPdfFullscreen && !sidebarOpen ? ' visible' : ''}${sidebarOpen ? ' active' : ''}`}
+        aria-label="Toggle Topic Index Sidebar"
+        aria-expanded={sidebarOpen}
+        title={sidebarOpen ? 'Hide Topic Index' : 'Pull out Topic Index'}
+        onClick={() => {
+          setBentoOpen(false);
+          setSidebarOpen((open) => !open);
+        }}
+      >
+        <span className="sb-detached-shape" aria-hidden="true">
+          <svg viewBox="0 0 30 148" preserveAspectRatio="none" className="sb-detached-svg">
+            <path
+              d="M 0,0 L 24,18 Q 29,22 29,29 L 29,119 Q 29,126 24,130 L 0,148 Z"
+              className="sb-detached-fill"
+            />
+            <path
+              d="M 0.5,0 L 24,18 Q 28.5,22 28.5,29 L 28.5,119 Q 28.5,126 24,130 L 0.5,148"
+              className="sb-detached-stroke"
+            />
+          </svg>
+        </span>
+        <span className="sb-detached-letters" aria-hidden="true">
+          <span>I</span>
+          <span>N</span>
+          <span>D</span>
+          <span>E</span>
+          <span>X</span>
+        </span>
+        <span className="sb-detached-grip" aria-hidden="true" />
+      </button>
 
       <section id="fmbar" ref={fmbarRef} aria-label="Course Selector and Study Controls">
         <div className={`fmbar-inner${persisted.courseBarCollapsed ? ' merged-single-row' : ''}`}>
@@ -2978,10 +3183,10 @@ export default function App() {
             </button>
             <div
               id="fmchips"
-              className="chip-group"
+              className={`chip-group${persisted.courseBarCollapsed ? ' is-collapsed' : ''}`}
               role="toolbar"
               aria-label="Filter by Course"
-              hidden={Boolean(persisted.courseBarCollapsed)}
+              aria-hidden={Boolean(persisted.courseBarCollapsed)}
             >
               {courseOptions.map((c) => (
                 <button
@@ -3057,97 +3262,80 @@ export default function App() {
                   : `${filterSummary.visibleCards} / ${filterSummary.totalCardsInScope}`}
               </span>
 
-              {showSearchDropdown ? (
-                <div
-                  className="search-history-dropdown"
-                  role="listbox"
-                  aria-label="Recent searches and quick shortcuts"
-                  onMouseDown={(e) => e.preventDefault()}
-                >
-                  {(persisted.searchHistory?.length ?? 0) > 0 ? (
-                    <>
-                      <div className="sh-header">
-                        <span className="sh-label">RECENT SEARCHES</span>
-                        <button
-                          type="button"
-                          className="sh-clear-all"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={handleClearAllHistory}
-                        >
-                          [CLEAR ALL]
-                        </button>
-                      </div>
-                      <div className="sh-list">
-                        {(persisted.searchHistory || []).map((histItem) => (
-                          <div key={histItem} className="sh-item">
-                            <button
-                              type="button"
-                              className="sh-item-query"
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => {
-                                setSearchInput(histItem);
-                                recordSearchHistory(histItem);
-                                setSearchFocused(false);
-                                setBentoOpen(false);
-                              }}
-                            >
-                              {histItem}
-                            </button>
-                            <button
-                              type="button"
-                              className="sh-item-del"
-                              aria-label={`Remove ${histItem} from search history`}
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => handleDeleteHistoryItem(histItem)}
-                            >
-                              [×]
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : null}
-
-                  <div className="sh-shortcuts">
-                    <span className="sh-label">QUICK SHORTCUTS:</span>
-                    {QUICK_SHORTCUTS.map((sc) => (
+              <div
+                className={`search-history-dropdown${showSearchDropdown ? ' open' : ''}`}
+                role="listbox"
+                aria-label="Recent searches and quick shortcuts"
+                aria-hidden={!showSearchDropdown}
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                {(persisted.searchHistory?.length ?? 0) > 0 ? (
+                  <>
+                    <div className="sh-header">
+                      <span className="sh-label">RECENT SEARCHES</span>
                       <button
-                        key={sc}
                         type="button"
-                        className="sh-shortcut-pill"
+                        className="sh-clear-all"
                         onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => {
-                          setSearchInput(sc);
-                          recordSearchHistory(sc);
-                          setSearchFocused(false);
-                          setBentoOpen(false);
-                        }}
+                        onClick={handleClearAllHistory}
                       >
-                        {sc}
+                        [CLEAR ALL]
                       </button>
-                    ))}
-                  </div>
+                    </div>
+                    <div className="sh-list">
+                      {(persisted.searchHistory || []).map((histItem) => (
+                        <div key={histItem} className="sh-item">
+                          <button
+                            type="button"
+                            className="sh-item-query"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setSearchInput(histItem);
+                              recordSearchHistory(histItem);
+                              setSearchFocused(false);
+                              setBentoOpen(false);
+                            }}
+                          >
+                            {histItem}
+                          </button>
+                          <button
+                            type="button"
+                            className="sh-item-del"
+                            aria-label={`Remove ${histItem} from search history`}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleDeleteHistoryItem(histItem)}
+                          >
+                            [×]
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+
+                <div className="sh-shortcuts">
+                  <span className="sh-label">QUICK SHORTCUTS:</span>
+                  {QUICK_SHORTCUTS.map((sc) => (
+                    <button
+                      key={sc}
+                      type="button"
+                      className="sh-shortcut-pill"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setSearchInput(sc);
+                        recordSearchHistory(sc);
+                        setSearchFocused(false);
+                        setBentoOpen(false);
+                      }}
+                    >
+                      {sc}
+                    </button>
+                  ))}
                 </div>
-              ) : null}
+              </div>
             </div>
 
             <div className="utility-pods">
-              <div className="chip-group" role="group" aria-label="Filter by learning status">
-                {(['all', 'starred', 'unlearned'] as const).map((st) => (
-                  <button
-                    key={st}
-                    type="button"
-                    className={`chip-btn${persisted.status === st ? ' active' : ''}`}
-                    data-status={st}
-                    aria-pressed={persisted.status === st}
-                    aria-label={`Filter status: ${st}`}
-                    onClick={() => handleStatusChange(st)}
-                  >
-                    {st.charAt(0).toUpperCase() + st.slice(1)}
-                  </button>
-                ))}
-              </div>
-
               <div
                 className="chip-group"
                 id="thmTypeGroup"
@@ -3181,118 +3369,6 @@ export default function App() {
                 >
                   Definitions
                 </button>
-              </div>
-
-              <div
-                ref={toolsWrapRef}
-                className={`tools-menu-wrap${toolsOpen ? ' open' : ''}`}
-              >
-                <button
-                  type="button"
-                  className="tools-trigger"
-                  aria-label="Open Study Tools and View Options Menu"
-                  aria-expanded={toolsOpen}
-                  onClick={() => setToolsOpen((o) => !o)}
-                >
-                  <span>Study Tools &amp; View Options</span>
-                  <span className="tools-trigger-ind">[+]</span>
-                </button>
-                <div className={`tools-dropdown${toolsOpen ? ' open' : ''}`} role="menu">
-                  <div className="dropdown-sec-label">VIEW &amp; STUDY MODES</div>
-                  <button
-                    type="button"
-                    className={`dropdown-item${persisted.selfTest ? ' active' : ''}`}
-                    role="menuitem"
-                    onClick={handleToggleSelfTest}
-                  >
-                    <span>Self-Test Blur Mode</span>
-                    <span className="ntype-badge">{persisted.selfTest ? 'ON' : 'OFF'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`dropdown-item${hideDetails ? ' active' : ''}`}
-                    role="menuitem"
-                    onClick={handleToggleHideDetails}
-                  >
-                    <span>Hide Where/Use Details</span>
-                    <span className="ntype-badge">{hideDetails ? 'ON' : 'OFF'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`dropdown-item${persisted.singleCol ? ' active' : ''}`}
-                    role="menuitem"
-                    onClick={handleToggleSingleCol}
-                  >
-                    <span>Single-Column Layout</span>
-                    <span className="ntype-badge">{persisted.singleCol ? '1-COL' : 'GRID'}</span>
-                  </button>
-                  <div className="dropdown-divider" />
-                  <div className="dropdown-sec-label">ACTIVE RECALL &amp; ACCORDIONS</div>
-                  <button
-                    type="button"
-                    className="dropdown-item"
-                    role="menuitem"
-                    onClick={pickRandomFlashcard}
-                  >
-                    <span>Random Flashcard</span>
-                    <span className="ntype-badge">DECK</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="dropdown-item"
-                    role="menuitem"
-                    onClick={() => handleExpandCollapseAll(true)}
-                  >
-                    <span>Expand All Topics</span>
-                    <span className="ntype-badge">[+]</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="dropdown-item"
-                    role="menuitem"
-                    onClick={() => handleExpandCollapseAll(false)}
-                  >
-                    <span>Collapse All Topics</span>
-                    <span className="ntype-badge">[-]</span>
-                  </button>
-                  <div className="dropdown-divider" />
-                  <div className="dropdown-sec-label">DATA &amp; PROGRESS</div>
-                  <button
-                    type="button"
-                    className="dropdown-item"
-                    role="menuitem"
-                    aria-label="Export or Import Progress JSON"
-                    onClick={() => {
-                      setActiveFlashcard(null);
-                      setModalMode('io');
-                      setImportJsonText(
-                        JSON.stringify(
-                          {
-                            learned: persisted.learned,
-                            starred: persisted.starred,
-                            examDate: persisted.examDate,
-                          },
-                          null,
-                          2
-                        )
-                      );
-                      setToolsOpen(false);
-                      setModalOpen(true);
-                    }}
-                  >
-                    <span>Export / Import JSON</span>
-                    <span className="ntype-badge">IO</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="dropdown-item danger"
-                    role="menuitem"
-                    onClick={handleResetProgress}
-                  >
-                    <span>Reset Progress</span>
-                    <span className="ntype-badge">CLR</span>
-                  </button>
-                </div>
               </div>
             </div>
           </div>
@@ -3553,195 +3629,235 @@ export default function App() {
         <div className="content-col">
           {persisted.tab !== 'prac' ? (
             <section
-              className={`bento-deck-wrap${bentoOpen ? '' : ' is-collapsed'}`}
+              id="commandDeck"
+              className={`command-deck${bentoOpen ? ' is-open' : ' is-collapsed'}`}
+              data-course={persisted.course}
               aria-label="Study Overview Command Deck"
             >
-              <div className="bento-deck-bar">
-                <div className="bento-deck-title">
-                  <span className="ntype-badge">[DASHBOARD]</span>
+              <div
+                className="command-deck-header"
+                role="button"
+                tabIndex={0}
+                aria-expanded={bentoOpen}
+                onClick={() => setBentoOpen((prev) => !prev)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setBentoOpen((prev) => !prev);
+                  }
+                }}
+              >
+                <div className="command-deck-title-group">
+                  <span className="command-deck-led" aria-hidden="true" />
+                  <span className="command-deck-eyebrow">DASHBOARD</span>
+                  <span className="command-deck-scope">
+                    {persisted.course === 'ALL' ? 'ALL COURSES' : activeCourseBadge}
+                  </span>
                 </div>
-                <div className="bento-deck-actions">
+
+                <div className="command-deck-Telemetry-right">
                   {highYieldOnly ? (
                     <button
                       type="button"
-                      className="bento-active-pill"
-                      onClick={() => setHighYieldOnly(false)}
+                      className="deck-active-pill high-yield"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setHighYieldOnly(false);
+                      }}
+                      title="Clear 5/5 High-Yield filter"
                     >
-                      <span>● 5/5 HIGH-YIELD FILTER ACTIVE [CLEAR]</span>
+                      5/5 HIGH-YIELD ×
                     </button>
                   ) : null}
-                  <button
-                    type="button"
-                    className="bento-collapse-btn"
-                    onClick={() => setBentoOpen((prev) => !prev)}
-                    aria-expanded={bentoOpen}
-                  >
-                    {bentoOpen ? '[HIDE OVERVIEW ▴]' : '[SHOW OVERVIEW ▾]'}
-                  </button>
+                  {persisted.status !== 'all' ? (
+                    <button
+                      type="button"
+                      className="deck-active-pill status-pill"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStatusChange('all');
+                      }}
+                      title="Reset status filter to All"
+                    >
+                      {persisted.status.toUpperCase()} ×
+                    </button>
+                  ) : null}
+
+                  <div className="command-deck-inline-progress" aria-hidden="true">
+                    <div className="command-deck-inline-bar">
+                      <div
+                        className="command-deck-inline-fill"
+                        style={{ width: `${masteryStats.pct}%` }}
+                      />
+                    </div>
+                    <span className="command-deck-inline-Label">
+                      {masteryStats.learnedCount}/{masteryStats.totalCount} ({masteryStats.pct}%)
+                    </span>
+                  </div>
+
+                  <span className="command-deck-chevron" aria-hidden="true" />
                 </div>
               </div>
 
-              {bentoOpen ? (
-                <div className="bento-overview-grid">
-                  {/* Pod 1: Mastery KPI & Interactive Course Breakdown */}
-                  <div className="bento-card bento-mastery-pod">
-                    <div className="bento-card-head">
-                      <span className="bento-eyebrow">MASTERY TELEMETRY</span>
-                      <span className="bento-scope-chip">
-                        {persisted.course === 'ALL' ? 'ALL 5 COURSES' : activeCourseBadge}
-                      </span>
-                    </div>
-                    <div className="bento-kpi-row">
-                      <div className="bento-kpi-main">
-                        <span className="bento-kpi-num">{masteryStats.pct}%</span>
-                        <span className="bento-kpi-sub">
-                          {masteryStats.learnedCount} / {masteryStats.totalCount} learned
+              <div
+                className={`command-deck-collapse${bentoOpen ? ' is-open' : ''}`}
+                aria-hidden={!bentoOpen}
+              >
+                <div className="command-deck-collapse-inner">
+                  <div className="command-deck-grid">
+                    {/* Tile 1: Mastery Telemetry & Tactile Course Matrix */}
+                    <div className="deck-tile bento-mastery-pod">
+                      <div className="bento-kpi-row">
+                        <div className="bento-kpi-main">
+                          <span className="bento-kpi-num">{masteryStats.pct}%</span>
+                          <span className="bento-kpi-sub">
+                            {masteryStats.learnedCount} of {masteryStats.totalCount} mastered
+                          </span>
+                        </div>
+                        <div className="bento-kpi-meter" aria-hidden="true">
+                          <div
+                            className="bento-kpi-fill"
+                            style={{ width: `${masteryStats.pct}%` }}
+                          />
+                        </div>
+                        <span className="bento-scope-chip">
+                          {filterSummary.visibleCards} CARDS IN VIEW
                         </span>
                       </div>
-                      <div className="bento-kpi-meter" aria-hidden="true">
-                        <div
-                          className="bento-kpi-fill"
-                          style={{ width: `${masteryStats.pct}%` }}
-                        />
+                      <div
+                        className="bento-course-matrix"
+                        role="group"
+                        aria-label="Quick Course Filter Matrix"
+                      >
+                        {courseMasteryBreakdown.map((item) => {
+                          const isSelected = persisted.course === item.code;
+                          return (
+                            <button
+                              key={item.code}
+                              type="button"
+                              data-c={item.code}
+                              className={`bento-course-cell${isSelected ? ' active' : ''}`}
+                              title={`Filter by ${item.badge} (${item.learned}/${item.total} learned)`}
+                              onClick={() =>
+                                handleCourseChange(
+                                  isSelected ? 'ALL' : (item.code as CourseCode)
+                                )
+                              }
+                            >
+                              <div className="bento-course-top">
+                                <span className="bento-course-code">{item.code}</span>
+                                <span className="bento-course-pct">{item.pct}%</span>
+                              </div>
+                              <div className="bento-course-bar">
+                                <div
+                                  className="bento-course-bar-fill"
+                                  style={{ width: `${item.pct}%` }}
+                                />
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
-                    <div
-                      className="bento-course-matrix"
-                      role="group"
-                      aria-label="Quick Course Filter Matrix"
-                    >
-                      {courseMasteryBreakdown.map((item) => {
-                        const isSelected = persisted.course === item.code;
-                        return (
+
+                    {/* Tile 2: Status Filter (All / Starred / Unlearned) & 5/5 High-Yield Radar */}
+                    <div className="deck-tile bento-radar-pod">
+                      <div
+                        className="bento-status-strip"
+                        role="group"
+                        aria-label="Filter by learning status"
+                      >
+                        {(['all', 'starred', 'unlearned'] as const).map((st) => (
                           <button
-                            key={item.code}
+                            key={st}
                             type="button"
-                            className={`bento-course-cell${isSelected ? ' active' : ''}`}
-                            title={`Filter by ${item.badge} (${item.learned}/${item.total} learned)`}
-                            onClick={() =>
-                              handleCourseChange(
-                                isSelected ? 'ALL' : (item.code as CourseCode)
-                              )
-                            }
+                            className={`bento-status-btn${persisted.status === st ? ' active' : ''}`}
+                            data-status={st}
+                            aria-pressed={persisted.status === st}
+                            aria-label={`Filter status: ${st}`}
+                            onClick={() => handleStatusChange(st)}
                           >
-                            <div className="bento-course-top">
-                              <span className="bento-course-code">{item.code}</span>
-                              <span className="bento-course-pct">{item.pct}%</span>
-                            </div>
-                            <div className="bento-course-bar">
-                              <div
-                                className="bento-course-bar-fill"
-                                style={{ width: `${item.pct}%` }}
-                              />
-                            </div>
+                            <span>{st.charAt(0).toUpperCase() + st.slice(1)}</span>
+                            {st === 'starred' ? (
+                              <span className="bento-chip-count">
+                                {filterSummary.starredCountInScope}
+                              </span>
+                            ) : null}
                           </button>
-                        );
-                      })}
+                        ))}
+                      </div>
+                      <div className="bento-radar-actions">
+                        <button
+                          type="button"
+                          className={`bento-action-chip high-yield${highYieldOnly ? ' active' : ''}`}
+                          onClick={() => {
+                            setHighYieldOnly((prev) => {
+                              const next = !prev;
+                              showToast(
+                                next
+                                  ? 'SHOWING 5/5 HIGH-YIELD EXAM TOPICS ONLY'
+                                  : 'SHOWING ALL SYLLABUS TOPICS'
+                              );
+                              return next;
+                            });
+                          }}
+                        >
+                          <span className="bento-chip-label">
+                            {highYieldOnly
+                              ? '● 5/5 HIGH-YIELD TOPICS ACTIVE'
+                              : '○ ISOLATE 5/5 HIGH-YIELD TOPICS'}
+                          </span>
+                          <span className="bento-chip-count">
+                            {filterSummary.highYieldCountInScope}
+                          </span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Pod 2: Important High-Yield Topics */}
-                  <div className="bento-card bento-radar-pod">
-                    <div className="bento-card-head">
-                      <span className="bento-eyebrow">IMPORTANT</span>
-                      <span className="bento-signal-dots" aria-hidden="true">
-                        ●●●●● 5/5
-                      </span>
-                    </div>
-                    <p className="bento-radar-desc">
-                      New here? Start with <strong>Freq: 5/5</strong> topics that appeared in almost every 2010–2025 exam paper.
-                    </p>
-                    <div className="bento-radar-actions">
-                      <button
-                        type="button"
-                        className={`bento-action-chip high-yield${highYieldOnly ? ' active' : ''}`}
-                        onClick={() => {
-                          setHighYieldOnly((prev) => {
-                            const next = !prev;
-                            showToast(
-                              next
-                                ? 'SHOWING 5/5 HIGH-YIELD EXAM TOPICS ONLY'
-                                : 'SHOWING ALL SYLLABUS TOPICS'
-                            );
-                            return next;
-                          });
-                        }}
-                      >
-                        <span className="bento-chip-label">
-                          {highYieldOnly ? '● 5/5 HIGH-YIELD' : '○ 5/5 HIGH-YIELD'}
-                        </span>
-                        <span className="bento-chip-count">
-                          {filterSummary.highYieldCountInScope}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`bento-action-chip starred${persisted.status === 'starred' ? ' active' : ''}`}
-                        onClick={() =>
-                          handleStatusChange(
-                            persisted.status === 'starred' ? 'all' : 'starred'
-                          )
-                        }
-                      >
-                        <span className="bento-chip-label">
-                          {persisted.status === 'starred' ? '◆ STARRED ONLY' : '◇ STARRED'}
-                        </span>
-                        <span className="bento-chip-count">
-                          {filterSummary.starredCountInScope}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Pod 3: Quick Study Mode Launchpad */}
-                  <div className="bento-card bento-launchpad-pod">
-                    <div className="bento-card-head">
-                      <span className="bento-eyebrow">QUICK WORKFLOWS</span>
-                      <span className="bento-scope-chip">
-                        {filterSummary.visibleCards} VISIBLE
-                      </span>
-                    </div>
-                    <div className="bento-launch-grid">
-                      <button
-                        type="button"
-                        className={`bento-launch-btn${persisted.selfTest ? ' active' : ''}`}
-                        onClick={handleToggleSelfTest}
-                      >
-                        <span className="bento-launch-title">Self-Test Blur</span>
-                        <span className="bento-launch-meta">
-                          {persisted.selfTest ? 'ON // CLICK CARD' : 'OFF // RECALL'}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className="bento-launch-btn"
-                        onClick={pickRandomFlashcard}
-                      >
-                        <span className="bento-launch-title">Random Flashcard</span>
-                        <span className="bento-launch-meta">ACTIVE DECK</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`bento-launch-btn${hideDetails ? ' active' : ''}`}
-                        onClick={handleToggleHideDetails}
-                      >
-                        <span className="bento-launch-title">Formula-Only Mode</span>
-                        <span className="bento-launch-meta">
-                          {hideDetails ? 'NOTES HIDDEN' : 'HIDE NOTES'}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className="bento-launch-btn"
-                        onClick={() => handleExpandCollapseAll(false)}
-                      >
-                        <span className="bento-launch-title">Collapse Topics</span>
-                        <span className="bento-launch-meta">CLEAN OVERVIEW</span>
-                      </button>
+                    {/* Tile 3: Tactile Quick Workflows */}
+                    <div className="deck-tile bento-launchpad-pod">
+                      <div className="bento-launch-grid">
+                        <button
+                          type="button"
+                          className={`bento-launch-btn${persisted.selfTest ? ' active' : ''}`}
+                          onClick={handleToggleSelfTest}
+                        >
+                          <span className="bento-launch-title">Self-Test Blur</span>
+                          <span className="bento-launch-meta">
+                            {persisted.selfTest ? 'CLICK CARD TO REVEAL' : 'BLUR FORMULAS'}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="bento-launch-btn"
+                          onClick={pickRandomFlashcard}
+                        >
+                          <span className="bento-launch-title">Random Flashcard</span>
+                          <span className="bento-launch-meta">TEST RECALL</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`bento-launch-btn${persisted.hideDetails ? ' active' : ''}`}
+                          onClick={handleToggleHideDetails}
+                        >
+                          <span className="bento-launch-title">Formula-Only View</span>
+                          <span className="bento-launch-meta">
+                            {persisted.hideDetails ? 'CONTEXT HIDDEN' : 'COMPACT CARDS'}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="bento-launch-btn"
+                          onClick={() => handleExpandCollapseAll(false)}
+                        >
+                          <span className="bento-launch-title">Fold All Topics</span>
+                          <span className="bento-launch-meta">CLEAN OVERVIEW</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              ) : null}
+              </div>
             </section>
           ) : null}
 
@@ -3855,6 +3971,7 @@ export default function App() {
                     ) : null}
 
                     <div
+                      ref={fsSearchHudRef}
                       className={`fs-search-hud${fsHudOpen ? ' open' : ''}${isResizingHud ? ' is-resizing' : ''}`}
                       id="fsSearchHud"
                       role="region"
@@ -4157,6 +4274,11 @@ export default function App() {
                         onDoubleClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
+                          hudHeightRef.current = null;
+                          if (fsSearchHudRef.current) {
+                            fsSearchHudRef.current.style.height = '';
+                            fsSearchHudRef.current.style.maxHeight = '';
+                          }
                           setHudHeightPx(null);
                         }}
                       >
@@ -4189,15 +4311,20 @@ export default function App() {
                           return (
                             <div
                               key={`pin-${pCard.id}`}
+                              ref={(el) => {
+                                pinnedCardDomRefs.current[pCard.id] = el;
+                              }}
                               className={`fs-pinned-card mode-${sizeMode}${isInteractingThis ? ' is-interacting' : ''}`}
                               data-pinned-id={pCard.id}
                               data-size-mode={sizeMode}
                               onMouseDown={() => bringPinnedCardToFront(pCard.id)}
                               style={{
-                                left: `${layout.x}px`,
-                                top: `${layout.y}px`,
+                                left: 0,
+                                top: 0,
                                 width: `${layout.width}px`,
                                 height: `${layout.height}px`,
+                                transform: `translate3d(${layout.x}px, ${layout.y}px, 0)`,
+                                transformOrigin: '0 0',
                                 zIndex: layout.zIndex,
                               }}
                             >
@@ -4218,6 +4345,9 @@ export default function App() {
                                       className=""
                                       as="span"
                                       content={pCard.title}
+                                      highlightTokens={
+                                        hudTokens.length > 0 ? hudTokens : undefined
+                                      }
                                     />
                                   </div>
                                   <div className="fs-pinned-actions">
@@ -4477,7 +4607,7 @@ export default function App() {
         role="dialog"
         aria-modal="true"
         aria-label="Study Tool Modal"
-        hidden={!modalOpen}
+        aria-hidden={!modalOpen}
         onClick={(e) => {
           if (e.target === e.currentTarget) {
             setModalOpen(false);

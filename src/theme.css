@@ -2311,6 +2311,11 @@ details.fmd[open] > summary::after {
 .fs-search-hud.is-resizing {
   transition: none;
   border-bottom-color: var(--accent);
+  will-change: height;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(10, 11, 17, 0.98);
+  contain: layout paint;
 }
 
 .fs-hud-results {
@@ -2416,33 +2421,6 @@ details.fmd[open] > summary::after {
   color: #ffffff;
 }
 
-.fs-hud-topic-group {
-  margin-bottom: 14px;
-}
-
-.fs-hud-topic-group:last-child {
-  margin-bottom: 0;
-}
-
-.fs-hud-topic-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 6px 12px;
-  margin-bottom: 8px;
-  border-radius: 9px;
-  background: rgba(41, 151, 255, 0.1);
-  border: 1px solid rgba(41, 151, 255, 0.3);
-}
-
-.fs-hud-topic-title {
-  font-size: var(--fs-base);
-  font-weight: 600;
-  color: var(--text-primary);
-  flex: 1 1 auto;
-}
-
 .fm-card-topic-tag {
   display: inline-flex;
   align-items: center;
@@ -2502,6 +2480,9 @@ details.fmd[open] > summary::after {
 
 .fs-pinned-card {
   position: fixed;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
   pointer-events: auto;
   border-radius: 12px;
   border: 1px solid rgba(41, 151, 255, 0.45);
@@ -2513,11 +2494,17 @@ details.fmd[open] > summary::after {
   flex-direction: column;
   overflow: hidden;
   user-select: none;
+  contain: layout paint;
 }
 
 .fs-pinned-card.is-interacting {
+  will-change: transform;
+  transition: none !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(16, 17, 26, 0.98);
   border-color: var(--accent);
-  box-shadow: 0 22px 56px rgba(0, 0, 0, 0.92), 0 0 0 1px rgba(41, 151, 255, 0.4);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.78);
 }
 
 .fs-pinned-header {
@@ -3373,12 +3360,6 @@ details.fmd[open] > summary::after {
   flex-wrap: wrap;
 }
 
-.bento-deck-sub {
-  font-size: var(--fs-xs);
-  color: var(--text-secondary);
-  letter-spacing: 0.01em;
-}
-
 .bento-deck-actions {
   display: inline-flex;
   align-items: center;
@@ -3852,17 +3833,6 @@ details.fmt[open].is-high-yield {
   line-height: 1.3;
 }
 
-.fm-year-tag {
-  font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
 /* Tier 2: Hero Formula / Code Stage (.fmm & .fmcode) — clean uniform border with no left-side stripe */
 .fmm {
   margin: 0;
@@ -4068,9 +4038,6 @@ details.fmt[open].is-high-yield {
   .bento-deck-bar {
     padding: 8px 10px;
   }
-  .bento-deck-sub {
-    display: none;
-  }
   .bento-overview-grid {
     padding: 10px;
     gap: 8px;
@@ -4183,21 +4150,7 @@ details.fmt[open].is-high-yield {
 }
 
 /* 6. Horizontal Multi-Column Expansion for Very Long Wide Cards on Larger Screens */
-.fmcode-multicol-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
-  width: 100%;
-  min-width: 0;
-}
-
 @media (min-width: 960px) {
-  .fmcode-multicol-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    align-items: start;
-  }
-
   .fmi.is-wide .fmhtml.fmhtml-cols {
     column-count: 2;
     column-gap: 32px;
@@ -4430,103 +4383,1214 @@ code .tok-num,
   color: #4ae072;
 }
 
-/* ======================== 6. DETACHED PULL-OUT INDEX DRAWER TRIGGER ======================== */
-.fm-index-vertical-text {
+/* ======================== 6. FLUSH ARCHITECTURAL TOP BAR (NO BOX-IN-BOX CLUTTER) ======================== */
+.top-chrome {
+  background: rgba(8, 8, 12, 0.92);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+
+.hd {
+  padding: 0 20px;
+  min-height: 54px;
+  gap: 0;
+}
+
+.hd-left {
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.hd-right {
+  gap: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: stretch;
+}
+
+/* Flush architectural mode tabs in top header */
+.tabs {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+  gap: 0;
+  align-self: stretch;
+}
+
+.tab {
+  height: 100%;
+  min-height: 54px;
+  padding: 0 16px;
+  border-radius: 0;
+  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative;
+  background: transparent;
+}
+
+.tab:last-child {
+  border-right: none;
+}
+
+.tab:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tab.active,
+.tab[aria-selected="true"] {
+  background: rgba(41, 151, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* Reversed Doomsday Clock Button in Header (Animated When Closed, Static When Open) */
+.goal-toggle-btn {
+  height: auto;
+  min-height: 54px;
+  padding: 0 14px;
+  border-radius: 0;
+  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  box-shadow: none;
+}
+
+.goal-toggle-btn:hover {
+  background: rgba(255, 69, 58, 0.08);
+}
+
+.doomsday-btn-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-dot);
+}
+
+#cdt.is-static {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+  color: var(--text-primary);
+}
+
+/* Top-Right Settings Gear Icon Button */
+.settings-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  min-height: 54px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+.settings-icon-btn svg {
+  transition: transform 0.35s var(--ease-out);
+}
+
+.settings-icon-btn:hover,
+.settings-icon-btn.active {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.settings-icon-btn:hover svg,
+.settings-icon-btn.active svg {
+  transform: rotate(45deg);
+  color: var(--accent);
+}
+
+.hd-right .tools-menu-wrap {
+  display: flex;
+  align-items: stretch;
+}
+
+/* Flush Architectural Control Bar (#fmbar) */
+#fmbar {
+  background: rgba(6, 6, 10, 0.94);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.fmbar-inner {
+  padding: 0 20px;
+  gap: 0;
+}
+
+/* ======================== GHOST-TO-CAPSULE COURSE BAR (ZERO BOX-IN-BOX CLUTTER) ======================== */
+.course-selector-row.course-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+#fmchips.chip-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  flex: 1;
+}
+
+/* At rest: borderless ghost pill with a tiny course-colored status LED dot */
+.course-pill,
+#fmchips.chip-group button[data-c] {
+  position: relative;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  transition:
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.22s ease;
+}
+
+/* Course LED indicator dot on every pill */
+.course-pill[data-c]:not([data-c="ALL"])::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--course-signal, var(--accent));
+  opacity: 0.65;
+  transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Hover state: soft floating capsule */
+.course-pill:hover,
+#fmchips.chip-group button[data-c]:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.055);
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.course-pill[data-c]:not([data-c="ALL"]):hover::before {
+  opacity: 1;
+  transform: scale(1.2);
+  box-shadow: 0 0 8px var(--course-signal);
+}
+
+/* Active state: Full backlit Apple-style capsule */
+.course-pill.active,
+.course-pill[aria-pressed="true"],
+#fmchips.chip-group button[data-c].active {
+  color: #ffffff;
+  background: rgba(41, 151, 255, 0.16);
+  border-color: rgba(41, 151, 255, 0.55);
+  box-shadow:
+    0 4px 16px -3px rgba(41, 151, 255, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transform: translateY(-1px);
+}
+
+.course-pill[data-c]:not([data-c="ALL"]).active {
+  background: var(--course-signal-soft);
+  border-color: var(--course-signal);
+  box-shadow:
+    0 4px 18px -4px var(--course-signal-soft),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.course-pill[data-c]:not([data-c="ALL"]).active::before {
+  opacity: 1;
+  background: #ffffff;
+  box-shadow: 0 0 8px #ffffff;
+}
+
+.course-pill:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* Subtle collapse icon button at the left of the course track */
+.course-selector-toggle {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  font-size: 11px;
+  transition: all 0.2s ease;
+}
+
+.course-selector-toggle:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.course-selector-toggle.collapsed {
+  height: 34px;
+  border-radius: 999px;
+  background: rgba(41, 151, 255, 0.12);
+  border-color: rgba(41, 151, 255, 0.35);
+  color: var(--text-primary);
+}
+
+/* Laser-Gradient Rim Search Bar in #fmbar */
+.controls-utility-row {
+  gap: 10px;
+  min-height: 46px;
+  padding: 6px 0 8px;
+}
+
+.search-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  border-radius: 12px;
+}
+
+/* Top laser-etched specular gradient rim on the search bar */
+.search-wrap::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 5%;
+  right: 5%;
+  height: 1.5px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(41, 151, 255, 0.55) 22%,
+    rgba(140, 210, 255, 0.98) 50%,
+    rgba(41, 151, 255, 0.55) 78%,
+    transparent 100%
+  );
+  box-shadow: 0 0 12px rgba(41, 151, 255, 0.65);
+  pointer-events: none;
+  z-index: 3;
+  border-radius: 999px;
+}
+
+/* Bottom laser-etched counterweight rim on the search bar */
+.search-wrap::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(41, 151, 255, 0.65) 50%,
+    transparent 100%
+  );
+  box-shadow: 0 0 10px rgba(41, 151, 255, 0.45);
+  pointer-events: none;
+  z-index: 3;
+  border-radius: 999px;
+}
+
+#fmq {
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(41, 151, 255, 0.34);
+  background:
+    radial-gradient(85% 140% at 50% 0%, rgba(41, 151, 255, 0.13) 0%, transparent 72%),
+    rgba(10, 12, 18, 0.92);
+  box-shadow:
+    0 8px 22px -6px rgba(0, 0, 0, 0.78),
+    0 0 18px -4px rgba(41, 151, 255, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  padding-left: 42px;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.22s ease;
+}
+
+.search-wrap:hover #fmq {
+  border-color: rgba(41, 151, 255, 0.52);
+  box-shadow:
+    0 10px 26px -6px rgba(0, 0, 0, 0.82),
+    0 0 22px -3px rgba(41, 151, 255, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+#fmq:focus,
+.search-wrap.has-query #fmq {
+  border-color: rgba(88, 178, 255, 0.78);
+  background:
+    radial-gradient(90% 150% at 50% 0%, rgba(41, 151, 255, 0.18) 0%, transparent 75%),
+    rgba(12, 14, 22, 0.96);
+  box-shadow:
+    0 12px 28px -6px rgba(0, 0, 0, 0.85),
+    0 0 26px -2px rgba(41, 151, 255, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+#thmTypeGroup {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(12, 14, 20, 0.85);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  padding: 0 6px;
+  height: 40px;
+}
+
+/* ======================== 7. HERO COMMAND DECK (STANDS OUT + POP-OUT TILES) ======================== */
+.command-deck {
+  position: relative;
+  margin: 14px 0 22px;
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 140% at 12% 0%, rgba(41, 151, 255, 0.11) 0%, transparent 55%),
+    radial-gradient(100% 120% at 88% 100%, rgba(48, 209, 88, 0.06) 0%, transparent 50%),
+    rgba(11, 12, 18, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  box-shadow:
+    0 18px 42px -12px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  /* Allow hovered tiles to pop out past the grid plane */
+  overflow: visible;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* Top laser-etched specular accent line */
+.command-deck::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(41, 151, 255, 0.75) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* Click-anywhere Telemetry Header Strip (No extra button box) */
+.command-deck-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 18px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 16px 16px 0 0;
+  transition: background 0.2s ease;
+}
+
+.command-deck.is-collapsed .command-deck-header {
+  border-radius: 16px;
+}
+
+.command-deck-header:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.command-deck-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.command-deck-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+}
+
+.command-deck-eyebrow {
+  font-family: var(--font-dot);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-primary);
+}
+
+.command-deck-scope {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(41, 151, 255, 0.12);
+  color: var(--accent-hover);
+}
+
+.command-deck-Telemetry-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.deck-active-pill {
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: none;
+  font-family: var(--font-dot);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  background: rgba(255, 214, 10, 0.16);
+  color: var(--warning);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.deck-active-pill:hover {
+  transform: scale(1.04);
+  background: rgba(255, 214, 10, 0.26);
+}
+
+.command-deck-inline-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.command-deck-inline-bar {
+  width: 76px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.command-deck-inline-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--success));
+  transition: width 0.35s var(--ease-out);
+}
+
+.command-deck-inline-Label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* Minimal chevron indicator that rotates smoothly when deck opens/closes */
+.command-deck-chevron {
+  width: 7px;
+  height: 7px;
+  border-right: 1.75px solid var(--text-secondary);
+  border-bottom: 1.75px solid var(--text-secondary);
+  transform: rotate(45deg);
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease;
+  margin-right: 2px;
+}
+
+.command-deck.is-open .command-deck-chevron {
+  transform: rotate(-135deg);
+  border-color: var(--accent-hover);
+}
+
+/* Flush 1px Hairline Grid at Rest -> Magnetic Pop-Out Tiles on Hover */
+.command-deck-grid {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr 1.15fr;
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.07);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0 0 16px 16px;
+}
+
+.deck-tile {
+  position: relative;
+  z-index: 1;
+  background: rgba(12, 13, 19, 0.94);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  transition:
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.24s ease,
+    box-shadow 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 0.24s ease;
+}
+
+.deck-tile:first-child {
+  border-bottom-left-radius: 15px;
+}
+
+.deck-tile:last-child {
+  border-bottom-right-radius: 15px;
+}
+
+/* Pop-out 3D elevation when hovering any of the 3 tiles */
+.deck-tile:hover {
+  z-index: 6;
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 100% at 50% 0%, rgba(41, 151, 255, 0.09) 0%, transparent 70%),
+    rgba(18, 20, 30, 0.98);
+  transform: translateY(-5px) scale(1.014);
+  box-shadow:
+    0 22px 44px -10px rgba(0, 0, 0, 0.88),
+    0 0 0 1px rgba(41, 151, 255, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+/* Tactile borderless sub-cells inside the tiles (No Box-in-Box Borders at Rest) */
+.bento-course-cell,
+.bento-launch-btn,
+.bento-action-chip {
+  border: none !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-radius: 10px !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition:
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.2s ease,
+    box-shadow 0.2s ease !important;
+}
+
+.bento-course-cell:hover,
+.bento-launch-btn:hover,
+.bento-action-chip:hover {
+  background: rgba(255, 255, 255, 0.075) !important;
+  transform: translateY(-2.5px) scale(1.02);
+  box-shadow:
+    0 10px 20px -6px rgba(0, 0, 0, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+.bento-course-cell:active,
+.bento-launch-btn:active,
+.bento-action-chip:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.bento-course-cell.active,
+.bento-launch-btn.active,
+.bento-action-chip.active {
+  background: rgba(41, 151, 255, 0.16) !important;
+  box-shadow:
+    0 8px 18px -6px rgba(41, 151, 255, 0.35),
+    inset 0 0 0 1px rgba(41, 151, 255, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Borderless recessed status track (All / Starred / Unlearned) with floating active pill */
+.bento-status-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(0, 0, 0, 0.42);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.bento-status-btn {
+  height: 30px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  cursor: pointer;
+  transition:
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.bento-status-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.bento-status-btn.active {
+  color: #ffffff;
+  background: rgba(41, 151, 255, 0.24);
+  box-shadow:
+    0 2px 10px rgba(41, 151, 255, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+@media (max-width: 960px) {
+  .command-deck-grid {
+    grid-template-columns: 1fr;
+  }
+  .deck-tile:first-child {
+    border-bottom-left-radius: 0;
+  }
+  .deck-tile:last-child {
+    border-bottom-left-radius: 15px;
+    border-bottom-right-radius: 15px;
+  }
+}
+
+/* ======================== 8. DETACHED SLOPED-EDGE VERTICAL INDEX PULL-TAB ======================== */
+.sb-detached-tab {
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translate3d(-110%, -50%, 0);
+  z-index: 185;
+  width: 30px;
+  height: 148px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.28s var(--ease-out), opacity 0.22s var(--ease-out), width 0.2s var(--ease-out);
+}
+
+.sb-detached-tab.visible {
+  transform: translate3d(0, -50%, 0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Continuous 1.5px vertical rail line extending to the top and bottom of the screen */
+.sb-detached-tab::before,
+.sb-detached-tab::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  width: 1.5px;
+  height: 50vh;
+  pointer-events: none;
+  transition: background 0.22s ease, box-shadow 0.22s ease;
+}
+
+.sb-detached-tab::before {
+  bottom: 100%;
+  background: linear-gradient(
+    to top,
+    rgba(41, 151, 255, 0.55) 0%,
+    rgba(41, 151, 255, 0.18) 65%,
+    rgba(41, 151, 255, 0.04) 100%
+  );
+}
+
+.sb-detached-tab::after {
+  top: 100%;
+  background: linear-gradient(
+    to bottom,
+    rgba(41, 151, 255, 0.55) 0%,
+    rgba(41, 151, 255, 0.18) 65%,
+    rgba(41, 151, 255, 0.04) 100%
+  );
+}
+
+.sb-detached-shape {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  filter: drop-shadow(4px 0 16px rgba(0, 0, 0, 0.75));
+}
+
+.sb-detached-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.sb-detached-fill {
+  fill: rgba(14, 15, 22, 0.95);
+  transition: fill 0.2s ease;
+}
+
+.sb-detached-stroke {
+  fill: none;
+  stroke: rgba(41, 151, 255, 0.48);
+  stroke-width: 1.25;
+  transition: stroke 0.2s ease;
+}
+
+.sb-detached-tab:hover {
+  width: 34px;
+}
+
+.sb-detached-tab:hover .sb-detached-fill {
+  fill: rgba(20, 24, 36, 0.98);
+}
+
+.sb-detached-tab:hover .sb-detached-stroke {
+  stroke: var(--accent-hover);
+}
+
+.sb-detached-tab.active .sb-detached-stroke {
+  stroke: rgba(255, 214, 10, 0.78);
+}
+
+.sb-detached-tab.active::before {
+  background: linear-gradient(
+    to top,
+    rgba(255, 214, 10, 0.65) 0%,
+    rgba(255, 214, 10, 0.18) 65%,
+    transparent 100%
+  );
+}
+
+.sb-detached-tab.active::after {
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 214, 10, 0.65) 0%,
+    rgba(255, 214, 10, 0.18) 65%,
+    transparent 100%
+  );
+}
+
+.sb-detached-letters {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-family: 'Fira Code', var(--font-mono), monospace, sans-serif;
+  gap: 3px;
+  font-family: var(--font-dot);
+  font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.15em;
-  font-size: 0.85rem;
-  line-height: 1.4;
-  color: var(--theme-color-accent-cyan, #00f0ff);
-  text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+  line-height: 1.05;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin-right: 3px;
+  user-select: none;
 }
 
-#nav-drawer-toggle.is-detached,
-.fm-index-trigger.is-detached {
-  position: fixed;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 10005;
-  width: 32px;
-  height: 160px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, rgba(13, 27, 42, 0.95), rgba(10, 21, 35, 0.98));
-  border: 1px solid rgba(0, 240, 255, 0.25);
-  border-left: none;
-  border-radius: 0 40px 40px 0 / 0 24px 24px 0;
-  box-shadow:
-    3px 0 15px rgba(0, 0, 0, 0.6),
-    0 0 1px rgba(0, 240, 255, 0.3) inset;
-  transition: all 0.25s cubic-bezier(0.19, 1, 0.22, 1);
-  cursor: pointer;
+.sb-detached-tab.active .sb-detached-letters {
+  color: var(--warning);
 }
 
-#nav-drawer-toggle.is-detached:hover,
-.fm-index-trigger.is-detached:hover {
-  width: 38px;
-  background: linear-gradient(135deg, rgba(17, 34, 51, 0.98), rgba(12, 25, 41, 0.99));
-  border-color: rgba(0, 240, 255, 0.5);
-  box-shadow:
-    5px 0 20px rgba(0, 240, 255, 0.15),
-    3px 0 12px rgba(0, 0, 0, 0.7);
-}
-
-/* Tactile ridges indicating grip/grab pattern on edge */
-#nav-drawer-toggle.is-detached::before,
-.fm-index-trigger.is-detached::before {
-  content: "";
+.sb-detached-grip {
   position: absolute;
   right: 4px;
   top: 50%;
   transform: translateY(-50%);
   width: 2px;
-  height: 18px;
-  border-left: 1px dotted rgba(0, 240, 255, 0.4);
-  border-right: 1px dotted rgba(0, 240, 255, 0.4);
-  opacity: 0.7;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  z-index: 2;
 }
 
-/* Top & Bottom Seamless Slider Rails/Border */
-#nav-drawer-toggle.is-detached::after,
-.fm-index-trigger.is-detached::after {
-  content: "";
-  position: fixed;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 1.5px;
-  height: 100vh;
-  z-index: -1;
-  background: linear-gradient(
-    to bottom,
-    rgba(0, 240, 255, 0.05) 0%,
-    rgba(0, 240, 255, 0.25) 35%,
-    transparent 43%,
-    transparent 57%,
-    rgba(0, 240, 255, 0.25) 65%,
-    rgba(0, 240, 255, 0.05) 100%
-  );
-  box-shadow: 0 0 2px rgba(0, 240, 255, 0.1);
+.sb-detached-tab:hover .sb-detached-grip {
+  background: var(--accent-hover);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+/* ======================== QUIET CONTEXT OPACITY THEME (.fmdet) ======================== */
+.fmi .fmdet {
+  opacity: 0.44;
+  filter: saturate(0.65);
+  transition:
+    opacity 0.38s var(--ease-glide),
+    filter 0.38s var(--ease-glide),
+    background-color 0.38s var(--ease-glide),
+    border-color 0.38s var(--ease-glide);
+}
+
+.fmi:hover .fmdet,
+.fmi:focus-within .fmdet,
+.fmi.revealed .fmdet,
+.fmi .fmdet:has(mark.fm-hl),
+.fmi .fmdet:has(mark.search-hl) {
+  opacity: 1;
+  filter: saturate(1);
+  background: rgba(0, 0, 0, 0.34);
+  border-top-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Also keep .fmnote and .thsee calm at rest and crisp on card hover */
+.fmi .fmnote,
+.fmi .thsee {
+  opacity: 0.68;
+  transition: opacity 0.34s var(--ease-glide), border-color 0.34s var(--ease-glide);
+}
+
+.fmi:hover .fmnote,
+.fmi:hover .thsee,
+.fmi:focus-within .fmnote,
+.fmi:focus-within .thsee {
+  opacity: 1;
+}
+
+/* ======================== 9. BIRD-LANDING CURVED ANIMATION SYSTEM (60FPS LOW-TIER SAFE) ======================== */
+:root {
+  /* Fast dive (0-15% time) -> long graceful landing deceleration (15-100% time) */
+  --ease-glide: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.22, 1.12, 0.36, 1);
+  --dur-glide: 0.42s;
+  --dur-ui: 0.32s;
+}
+
+/* 1. Reusable GPU-friendly Grid Collapse Shell (Doomsday Drawer, Command Deck, Derivation Steps) */
+.goal-collapse-shell,
+.command-deck-collapse,
+.fmd-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    grid-template-rows var(--dur-glide) var(--ease-glide),
+    opacity 0.28s var(--ease-glide);
+}
+
+.goal-collapse-shell.is-open,
+.command-deck-collapse.is-open,
+.fmd-collapse.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.goal-collapse-inner,
+.command-deck-collapse-inner,
+.fmd-collapse-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Allow hovered dashboard tiles to pop out vertically once the Command Deck is open */
+.command-deck.is-open .command-deck-collapse.is-open,
+.command-deck.is-open .command-deck-collapse.is-open > .command-deck-collapse-inner {
+  overflow: visible;
+}
+
+.goal-collapse-inner > .goal {
+  transform: translate3d(0, -8px, 0);
+  transition: transform var(--dur-glide) var(--ease-glide);
+}
+
+.goal-collapse-shell.is-open .goal-collapse-inner > .goal {
+  transform: translate3d(0, 0, 0);
+}
+
+/* 2. Search History Dropdown & Term Switcher Dropdown Landing Curve */
+.search-history-dropdown,
+.term-archive-dropdown,
+.tools-dropdown {
+  opacity: 0;
+  transform: translate3d(0, -10px, 0) scale(0.98);
+  transform-origin: top center;
+  pointer-events: none;
+  visibility: hidden;
+  transition:
+    opacity 0.28s var(--ease-glide),
+    transform 0.38s var(--ease-glide),
+    visibility 0.38s var(--ease-glide);
+}
+
+.tools-dropdown {
+  transform-origin: top right;
+}
+
+.term-archive-dropdown {
+  transform-origin: top left;
+}
+
+.search-history-dropdown.open,
+.term-archive-dropdown.open,
+.tools-menu-wrap.open .tools-dropdown,
+.tools-dropdown.open {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  pointer-events: auto;
+  visibility: visible;
+}
+
+/* Staggered landing for search history items & quick shortcuts */
+.search-history-dropdown .sh-item,
+.search-history-dropdown .sh-shortcut-pill {
+  transition:
+    transform 0.24s var(--ease-glide),
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.search-history-dropdown .sh-item:hover {
+  transform: translate3d(4px, 0, 0);
+}
+
+.search-history-dropdown .sh-shortcut-pill:hover {
+  transform: translate3d(0, -2px, 0);
+}
+
+/* 3. Smooth Desktop & Mobile Index Sidebar Open/Close + Header [INDEX] Button Glide */
+#sbBtn.fm-index-trigger {
+  max-width: 96px;
+  overflow: hidden;
+  transition:
+    max-width 0.36s var(--ease-glide),
+    padding 0.36s var(--ease-glide),
+    margin 0.36s var(--ease-glide),
+    opacity 0.24s var(--ease-glide),
+    transform 0.32s var(--ease-glide),
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+#sbBtn.fm-index-trigger.is-hidden {
+  max-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  margin-right: -12px;
+  border-width: 0;
+  opacity: 0;
+  transform: translate3d(-12px, 0, 0);
   pointer-events: none;
 }
 
-#nav-drawer-toggle.is-detached:hover::after,
-.fm-index-trigger.is-detached:hover::after {
-  background: linear-gradient(
-    to bottom,
-    rgba(0, 240, 255, 0.1) 0%,
-    rgba(0, 240, 255, 0.35) 35%,
-    transparent 42%,
-    transparent 58%,
-    rgba(0, 240, 255, 0.35) 65%,
-    rgba(0, 240, 255, 0.1) 100%
-  );
+@media (min-width: 1025px) {
+  .app-layout {
+    grid-template-columns: 290px minmax(0, 1fr);
+    transition:
+      grid-template-columns 0.42s var(--ease-glide),
+      gap 0.42s var(--ease-glide);
+  }
+
+  .app-layout.sidebar-collapsed {
+    grid-template-columns: 0px minmax(0, 1fr);
+    gap: 0px;
+  }
+
+  .app-layout .sidebar {
+    display: block !important;
+    width: 290px;
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    transition:
+      transform 0.42s var(--ease-glide),
+      opacity 0.28s var(--ease-glide);
+  }
+
+  .app-layout.sidebar-collapsed .sidebar {
+    opacity: 0;
+    transform: translate3d(-36px, 0, 0);
+    pointer-events: none;
+    overflow: hidden;
+  }
 }
+
+@media (max-width: 1024px) {
+  .sidebar-backdrop {
+    display: block !important;
+    position: fixed;
+    inset: 0;
+    z-index: 195;
+    background: rgba(3, 3, 5, 0.72);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity 0.36s var(--ease-glide),
+      visibility 0.36s var(--ease-glide);
+  }
+
+  .sidebar-backdrop.open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .sidebar {
+    transition:
+      transform 0.44s var(--ease-glide),
+      visibility 0.44s var(--ease-glide) !important;
+  }
+}
+
+/* 4. Course Selector Bar Smooth Collapse & Pill Glide */
+#fmchips.chip-group {
+  max-height: 56px;
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    max-height 0.36s var(--ease-glide),
+    opacity 0.26s var(--ease-glide),
+    transform 0.36s var(--ease-glide);
+}
+
+#fmchips.chip-group.is-collapsed {
+  max-height: 0;
+  opacity: 0;
+  transform: translate3d(0, -6px, 0);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* 5. Workspace Tab Switching (Formulas / Theorems / Practice) & Practice Module Landing */
+@keyframes workspaceLand {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0) scale(0.994);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+#fmroot:not([hidden]),
+#thmroot:not([hidden]),
+#pracroot:not([hidden]),
+.practice-slot-card {
+  animation: workspaceLand 0.42s var(--ease-glide) both;
+}
+
+/* Mode Tab Bottom Indicator Glide */
+.tab {
+  transition:
+    background-color 0.28s var(--ease-glide),
+    color 0.28s var(--ease-glide),
+    box-shadow 0.34s var(--ease-glide),
+    transform 0.24s var(--ease-glide);
+}
+
+.tab .tn {
+  transition:
+    transform 0.3s var(--ease-spring),
+    background-color 0.25s var(--ease-glide),
+    color 0.25s var(--ease-glide);
+}
+
+.tab.active .tn {
+  transform: scale(1.06);
+}
+
+/* 6. Topic Accordion Open/Close & Staggered Card Landing */
+@keyframes cardGlideIn {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0) scale(0.988);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+details.fmt[open] > .fmgrid > .fmi {
+  animation: cardGlideIn 0.44s var(--ease-glide) both;
+  animation-delay: calc(var(--card-stagger, 0) * 28ms);
+}
+
+/* Card Hover & Self-Test Tap-to-Reveal Landing Curve */
+.fmi {
+  transition:
+    transform 0.36s var(--ease-glide),
+    border-color 0.32s var(--ease-glide),
+    box-shadow 0.38s var(--ease-glide),
+    background-color 0.32s var(--ease-glide);
+}
+
+.fmi:hover {
+  transform: translate3d(0, -3px, 0);
+}
+
+body.self-test .fmbody .fmm,
+body.self-test .fmbody .fmcode,
+body.self-test .fmbody .fmhtml {
+  filter: blur(8px);
+  transform: scale(0.992);
+  transition:
+    filter 0.42s var(--ease-glide),
+    transform 0.42s var(--ease-glide);
+}
+
+body.self-test .fmi:hover .fmbody .fmm,
+body.self-test .fmi:hover .fmbody .fmcode,
+body.self-test .fmi:hover .fmbody .fmhtml,
+body.self-test .fmi.revealed .fmbody .fmm,
+body.self-test .fmi.revealed .fmbody .fmcode,
+body.self-test .fmi.revealed .fmbody .fmhtml {
+  filter: blur(0);
+  transform: scale(1);
+}
+
+/* Proof & Derivation Steps (.fmd) Smooth Chevron & Reveal */
+details.fmd:not([open]) {
+  /* Keep native details open so .fmd-collapse controls height smoothly */
+}
+
+details.fmd > summary::after {
+  content: "[STEPS +]";
+  transition: transform 0.32s var(--ease-glide), color 0.25s ease;
+}
+
+details.fmd.is-open > summary::after {
+  content: "[STEPS -]";
+  color: var(--text-primary);
+}
+
+/* 7. Modal (#appModal) & Detached Vertical Index Tab Glide */
+.fcm {
+  visibility: hidden;
+  transition:
+    opacity 0.34s var(--ease-glide),
+    visibility 0.34s var(--ease-glide);
+}
+
+.fcm.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.fcb {
+  transform: translate3d(0, 16px, 0) scale(0.95);
+  transition: transform 0.42s var(--ease-glide);
+}
+
+.fcm.open .fcb {
+  transform: translate3d(0, 0, 0) scale(1);
+}
+
+.sb-detached-tab {
+  transition:
+    transform 0.46s var(--ease-glide),
+    opacity 0.32s var(--ease-glide),
+    width 0.28s var(--ease-glide);
+}
+

@@ -12,28 +12,11 @@ export interface TopicSectionRecord {
   cards: FormulaCardRecord[];
 }
 
-export interface NavLinkRecord {
-  href: string;
-  targetId: string;
-  label: string;
-}
-
-export interface NavCourseGroupRecord {
-  course: CourseCode;
-  badgeText: string;
-  links: NavLinkRecord[];
-}
-
-export interface ParsedNavContent {
-  navF: NavCourseGroupRecord[];
-  navT: NavCourseGroupRecord[];
-}
-
 /**
  * Curated variable/parameter explanations and practical/exam applications for cards
  * whose original HTML either had no `.fmw`/`.fmu` or only cited a PDF/revision-guide section number.
  */
-const CURATED_CONTEXT_FALLBACKS: Record<
+export const CURATED_CONTEXT_FALLBACKS: Record<
   string,
   { bodyText?: string; useText?: string }
 > = {
@@ -67,33 +50,27 @@ const CURATED_CONTEXT_FALLBACKS: Record<
     useText:
       'Place one dot inside each mesh of the planar circuit and one reference dot outside; draw a dual element for every shared boundary. Note: Non-planar circuits (like the $K_{3,3}$ utility graph) have no topological dual.',
   },
-  'cse-c:5': {
+  'cse-c:6': {
     bodyText:
       'Covers integer division truncation (<code>7 / 2 == 3</code>), negative modulo sign matching the dividend (<code>-7 % 2 == -1</code> in C99+), short-circuit evaluation (<code>&amp;&amp;</code>, <code>||</code>), and array-to-pointer decay.',
     useText:
       'High-yield checklist for 1-mark output tracing and spot-the-bug questions. Fun fact: In C, <code>a[i]</code> is literally rewritten by the compiler as <code>*(a + i)</code>, which makes <code>i[a]</code> legal (though cursed) C syntax.',
   },
-  'cse-c:6': {
+  'cse-c:7': {
     bodyText:
       '<code>sizeof(char) = 1</code>, <code>int = 4</code>, <code>double = 8</code> bytes on LP64 Linux/GCC; usual arithmetic conversions promote <code>char</code>/<code>short</code> to <code>int</code> and mixed <code>int</code>/<code>double</code> operands to <code>double</code>.',
     useText:
       'Crucial trap: Bitwise operators <code>&amp;</code>, <code>^</code>, <code>|</code> have LOWER precedence than relational <code>==</code> and <code>!=</code> — so <code>x &amp; 1 == 0</code> parses as <code>x &amp; (1 == 0)</code>! Always parenthesize <code>(x &amp; 1) == 0</code>.',
   },
-  'cse-c:7': {
+  'cse-c:8': {
     bodyText:
       '<code>%[flags][width][.precision]specifier</code> controls I/O formatting; <code>scanf("%lf", &amp;d)</code> requires <code>%lf</code> for <code>double</code> and <code>&amp;</code> for scalars, while <code>" %c"</code> skips leading whitespace/newlines.',
     useText:
       'Fun fact: <code>printf</code> returns the exact count of characters printed, and <code>scanf</code> returns the number of items successfully matched (or <code>EOF = -1</code>) — a classic trick used in nested <code>if (printf(...))</code> trace puzzles.',
   },
-  'cse-c:8': {
-    bodyText:
-      'Catalogues 34 classic C/C++ pitfalls: assignment <code>=</code> inside <code>if (x = 0)</code>, unsequenced side effects (<code>i = i++</code>), dangling-else binding, missing <code>break</code> fallthrough, and off-by-one loop bounds.',
-    useText:
-      'Use when debugging segmentation faults or answering "Find and correct the errors" exam questions. Always verify: (1) local accumulators initialized to 0, (2) space reserved for <code>\'\\0\'</code>, and (3) no division by integer <code>1/2</code>.',
-  },
   'cse-c:9': {
     bodyText:
-      'Catalogues 34 classic C/C++ pitfalls: assignment <code>=</code> inside <code>if (x = 0)</code>, unsequenced side effects (<code>i = i++</code>), dangling-else binding, missing <code>break</code> fallthrough, and off-by-one loop bounds.',
+      'Catalogues 28 output-tracing rules and 34 classic C/C++ pitfalls: assignment <code>=</code> inside <code>if (x = 0)</code>, unsequenced side effects (<code>i = i++</code>), dangling-else binding, missing <code>break</code> fallthrough, and off-by-one loop bounds.',
     useText:
       'Use when debugging segmentation faults or answering "Find and correct the errors" exam questions. Always verify: (1) local accumulators initialized to 0, (2) space reserved for <code>\'\\0\'</code>, and (3) no division by integer <code>1/2</code>.',
   },
@@ -495,21 +472,7 @@ function ensureMeaningfulCardContext(
   cleanedBodyText: string,
   cleanedUseText: string | undefined
 ): { bodyText: string; useText?: string } {
-  // Resolve curated entry accurately across both 5..8 and 6..9 CSE-C indexing
-  let curated: { bodyText?: string; useText?: string } | undefined =
-    CURATED_CONTEXT_FALLBACKS[cardId];
-  if (cardTitle === 'Top 40 C Exam Reminders & Core Mnemonics') {
-    curated = CURATED_CONTEXT_FALLBACKS['cse-c:5'];
-  } else if (cardTitle === 'C Data Types, 15-Level Precedence & Type Promotion') {
-    curated = CURATED_CONTEXT_FALLBACKS['cse-c:6'];
-  } else if (cardTitle === 'printf/scanf Formatting & Loop Conversions') {
-    curated = CURATED_CONTEXT_FALLBACKS['cse-c:7'];
-  } else if (cardTitle === '34 Common C/C++ Exam Traps & Fixes') {
-    curated = CURATED_CONTEXT_FALLBACKS['cse-c:8'];
-  } else if (cardId === 'cse-c:5' && cleanedBodyText) {
-    curated = undefined;
-  }
-
+  const curated = CURATED_CONTEXT_FALLBACKS[cardId];
   const canonicalTopicId = topicId.replace(/^fm-/, '');
   const topicFallback =
     TOPIC_STRATEGY_AND_FUN_FACTS[topicId] || TOPIC_STRATEGY_AND_FUN_FACTS[canonicalTopicId];
@@ -956,7 +919,6 @@ export function parseTopicSections(html: string): TopicSectionRecord[] {
     if (openTagEnd === -1) continue;
     const openTagAttrs = rawSec.slice(0, openTagEnd);
     const id = (openTagAttrs.match(/id="([^"]+)"/) || [])[1] || '';
-    const canonicalSecId = id.replace(/^fm-/, '');
     const course = ((openTagAttrs.match(/data-c="([^"]+)"/) || [])[1] || 'ALL') as CourseCode;
     const isOpenByDefault = /\bopen\b/.test(openTagAttrs);
 
@@ -976,11 +938,18 @@ export function parseTopicSections(html: string): TopicSectionRecord[] {
       if (cardTagEnd === -1) continue;
       const cardAttrs = rawCard.slice(0, cardTagEnd);
       const cardTypeClass = (cardAttrs.match(/^([a-zA-Z0-9_-]+)/) || [])[1] || 'tex';
-      let cardId = (cardAttrs.match(/data-k="([^"]+)"/) || [])[1] || `${canonicalSecId}:${cardIdx}`;
-      // Fix duplicate data-k collisions where #cse-lib or #cse-ptr reused cse-c:6..8
-      if (seenCardIds.has(cardId) || (canonicalSecId !== 'cse-c' && /^cse-c:[678]$/.test(cardId))) {
-        cardId = `${canonicalSecId}:${cardIdx}`;
+      const explicitCardId = (cardAttrs.match(/data-k="([^"]+)"/) || [])[1]?.trim();
+      if (!explicitCardId) {
+        throw new Error(
+          `Missing explicit data-k attribute on card #${cardIdx} in section "${id}"`
+        );
       }
+      if (seenCardIds.has(explicitCardId)) {
+        throw new Error(
+          `Duplicate data-k="${explicitCardId}" encountered in section "${id}"`
+        );
+      }
+      const cardId = explicitCardId;
       seenCardIds.add(cardId);
       const keywordsRaw = (cardAttrs.match(/data-s="([^"]*)"/) || [])[1] || '';
       const keywords = decodeHtmlEntities(keywordsRaw);
@@ -1105,39 +1074,4 @@ export function parseTopicSections(html: string): TopicSectionRecord[] {
   }
 
   return sections;
-}
-
-function parseSingleNavBlock(navBlockHtml: string): NavCourseGroupRecord[] {
-  if (!navBlockHtml) return [];
-  const rowMatches = [
-    ...navBlockHtml.matchAll(/<div class="fmnavrow" data-c="([^"]+)">([\s\S]*?)<\/div>/g),
-  ];
-  return rowMatches.map((m) => {
-    const course = m[1] as CourseCode;
-    const inner = m[2];
-    const badgeRaw = (inner.match(/<b>([\s\S]*?)<\/b>/) || [])[1] || course;
-    const badgeText = decodeHtmlEntities(badgeRaw).trim();
-    const linkMatches = [
-      ...inner.matchAll(/<a href="([^"]+)" class="fmlink">([\s\S]*?)<\/a>/g),
-    ];
-    const links: NavLinkRecord[] = linkMatches.map((lm) => {
-      const href = lm[1];
-      const targetId = href.startsWith('#') ? href.slice(1) : href;
-      const label = decodeHtmlEntities(lm[2]).trim();
-      return { href, targetId, label };
-    });
-    return { course, badgeText, links };
-  });
-}
-
-/**
- * Parses `content-nav.html` into structured navigation groups for `#navF` and `#navT`.
- */
-export function parseNavContent(navHtml: string): ParsedNavContent {
-  const navFMatch = navHtml.match(/<nav class="fmnav" id="navF"[^>]*>([\s\S]*?)<\/nav>/);
-  const navTMatch = navHtml.match(/<nav class="fmnav" id="navT"[^>]*>([\s\S]*?)<\/nav>/);
-  return {
-    navF: parseSingleNavBlock(navFMatch ? navFMatch[1] : ''),
-    navT: parseSingleNavBlock(navTMatch ? navTMatch[1] : ''),
-  };
 }

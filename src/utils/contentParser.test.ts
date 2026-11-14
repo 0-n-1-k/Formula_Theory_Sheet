@@ -2,15 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
+  CURATED_CONTEXT_FALLBACKS,
   findOpeningTagEndIndex,
   parseTopicSections,
-  parseNavContent,
 } from './contentParser.ts';
+import { CARD_TITLE_OVERRIDES, extractValidExamTag } from './titleCleaner.ts';
 
 const fmCourseHtml = fs.readFileSync('src/content-fmroot.html', 'utf8');
 const genHtml = fs.readFileSync('src/content-gen.html', 'utf8');
 const thmHtml = fs.readFileSync('src/content-thmroot.html', 'utf8');
-const navHtml = fs.readFileSync('src/content-nav.html', 'utf8');
 
 test('findOpeningTagEndIndex ignores > inside quoted attributes and prevents m157-gamma:0 data-s truncation', () => {
   const sample = 'tex" data-k="m157-gamma:0" data-s="gamma ∫₀<sup>∞</sup> for n > 0"><div class="fmh">';
@@ -67,6 +67,12 @@ test('parseTopicSections extracts all 66 formula sections (59 course + 7 GEN = 5
     't-m1571:9 should retain fullTitle with Rolle & MVT proof details'
   );
   assert.equal(rolleCard?.steps?.length, 4, 't-m1571:9 should have 4 proof steps');
+
+  const cseConditionalCard = allFmCards.find((c) => c.id === 'cse-c:5');
+  assert.ok(
+    cseConditionalCard?.title.includes('Vowel Switch'),
+    'cse-c:5 must retain its Vowel Switch / Restricted Conditionals title and not be overwritten by cse-c:6'
+  );
 
   const cseReminders = allFmCards.find((c) => c.id === 'cse-c:6');
   assert.equal(cseReminders?.title, 'Top 40 C Exam Reminders & Core Mnemonics');
@@ -133,33 +139,103 @@ test('parseTopicSections strips all PDF/textbook/Sec. artifacts, ensures non-emp
     'cse-str:9 should extract far-right padded comments above unpacked multi-statement lines'
   );
 
-  // Verify duplicate data-k collision deduplication when #cse-lib or #cse-ptr reuses cse-c:6..8
-  const collisionHtml = `
+  // Verify missing or duplicate data-k throws instead of silently drifting
+  const missingKeyHtml = `<details class="fmt" id="fm-cse-c" data-c="CSE"><summary><span class="fmtt">C Basics</span></summary><div class="fmgrid"><div class="fmi html" data-s="c types"><div class="fmh"><span class="fmn">Missing Key</span><span class="fmb"></span></div><div class="fmbody"></div></div></div></details>`;
+  assert.throws(() => parseTopicSections(missingKeyHtml), /Missing explicit data-k/);
+
+  const duplicateKeyHtml = `
     <details class="fmt" id="fm-cse-c" data-c="CSE"><summary><span class="fmtt">C Basics</span></summary><div class="fmgrid">
-      <div class="fmi html" data-k="cse-c:6" data-s="c types"><div class="fmh"><span class="fmn">15-Level Operator Precedence</span><span class="fmb"></span></div><div class="fmbody"><div class="fmhtml"><p>Types</p></div></div></div>
-    </div></details>
-    <details class="fmt" id="fm-cse-lib" data-c="CSE"><summary><span class="fmtt">Stdlib</span></summary><div class="fmgrid">
-      <div class="fmi html" data-k="cse-c:6" data-s="headers"><div class="fmh"><span class="fmn">Common C headers</span><span class="fmb"></span></div><div class="fmbody"><div class="fmhtml"><p>Headers</p></div></div></div>
+      <div class="fmi html" data-k="cse-c:6" data-s="c types"><div class="fmh"><span class="fmn">First</span><span class="fmb"></span></div><div class="fmbody"></div></div>
+      <div class="fmi html" data-k="cse-c:6" data-s="c types"><div class="fmh"><span class="fmn">Duplicate</span><span class="fmb"></span></div><div class="fmbody"></div></div>
     </div></details>
   `;
-  const collisionParsed = parseTopicSections(collisionHtml);
-  assert.equal(collisionParsed[0].cards[0].id, 'cse-c:6');
-  assert.equal(collisionParsed[1].cards[0].id, 'cse-lib:0');
-  assert.equal(
-    collisionParsed[1].cards[0].title,
-    'Common C Headers: <stdio.h>, <stdlib.h>, <string.h>, <ctype.h>, <math.h>'
-  );
+  assert.throws(() => parseTopicSections(duplicateKeyHtml), /Duplicate data-k="cse-c:6"/);
 });
 
-test('parseNavContent extracts all course navigation groups for #navF and #navT', () => {
-  const parsedNav = parseNavContent(navHtml);
-  assert.equal(parsedNav.navF.length, 6, 'Expected 6 course groups in #navF (EEE, M157, M159, PHY, CSE, GEN)');
-  assert.equal(parsedNav.navT.length, 5, 'Expected 5 course groups in #navT (EEE, M157, M159, PHY, CSE)');
+test('CARD_TITLE_OVERRIDES and CURATED_CONTEXT_FALLBACKS have zero orphaned keys and every override aligns with its raw HTML card title', () => {
+  const allCards = [
+    ...parseTopicSections(fmCourseHtml).flatMap((s) => s.cards),
+    ...parseTopicSections(thmHtml).flatMap((s) => s.cards),
+    ...parseTopicSections(genHtml).flatMap((s) => s.cards),
+  ];
+  const cardById = new Map(allCards.map((c) => [c.id, c]));
 
-  const totalFmLinks = parsedNav.navF.reduce((acc, g) => acc + g.links.length, 0);
-  const totalThmLinks = parsedNav.navT.reduce((acc, g) => acc + g.links.length, 0);
-  assert.equal(totalFmLinks, 66, 'Every formula topic section has a corresponding link in #navF');
-  assert.equal(totalThmLinks, 13, 'Every theorem topic section has a corresponding link in #navT');
+  const stopWords = new Set([
+    'and',
+    'the',
+    'for',
+    'with',
+    'from',
+    'into',
+    'via',
+    'all',
+    'two',
+    'one',
+    'types',
+    'part',
+    'proof',
+    'proofs',
+    'exam',
+    'formula',
+    'formulas',
+    'common',
+  ]);
+
+  const tokenizeTitle = (str: string): string[] =>
+    str
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/leibnitz/g, 'leibniz')
+      .replace(/\\gamma|Γ/gi, 'gamma')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 3 && !stopWords.has(w));
+
+  for (const [cardId, override] of Object.entries(CARD_TITLE_OVERRIDES)) {
+    const card = cardById.get(cardId);
+    assert.ok(
+      card,
+      `CARD_TITLE_OVERRIDES["${cardId}"] ("${override.title}") does not match any card in HTML`
+    );
+
+    const overrideTokens = tokenizeTitle(override.title);
+    const rawTokens = new Set(tokenizeTitle(card.fullTitle || ''));
+    const sharedTokens = overrideTokens.filter((tok) => rawTokens.has(tok));
+
+    assert.ok(
+      sharedTokens.length >= 2,
+      `CARD_TITLE_OVERRIDES["${cardId}"] drift detected: override="${override.title}" shares only [${sharedTokens.join(', ')}] with raw fullTitle="${card.fullTitle}"`
+    );
+
+    const rawExamTag = extractValidExamTag(card.fullTitle);
+    if (rawExamTag) {
+      assert.ok(
+        Boolean(override.examTag),
+        `CARD_TITLE_OVERRIDES["${cardId}"] silently discards real examTag "${rawExamTag}" from raw fullTitle="${card.fullTitle}"`
+      );
+    }
+  }
+
+  for (const fallbackId of Object.keys(CURATED_CONTEXT_FALLBACKS)) {
+    assert.ok(
+      cardById.has(fallbackId),
+      `CURATED_CONTEXT_FALLBACKS["${fallbackId}"] does not match any card in HTML`
+    );
+  }
+});
+
+test('parseTopicSections provides complete course, id, and title metadata for dynamic sidebar navigation groups', () => {
+  const fmSections = [...parseTopicSections(fmCourseHtml), ...parseTopicSections(genHtml)];
+  const thmSections = parseTopicSections(thmHtml);
+  const fmCourses = new Set(fmSections.map((s) => s.course));
+  const thmCourses = new Set(thmSections.map((s) => s.course));
+
+  assert.equal(fmCourses.size, 6, 'Expected 6 course groups across formula + GEN sections');
+  assert.equal(thmCourses.size, 5, 'Expected 5 course groups across theorem sections');
+  for (const sec of [...fmSections, ...thmSections]) {
+    assert.ok(sec.id && sec.title && sec.course, `Section ${sec.id} must have id, title, and course`);
+  }
 });
 
 test('parseTopicSections decodes residual HTML entities in copyText and rawLatex and wraps math titles in $...$', () => {

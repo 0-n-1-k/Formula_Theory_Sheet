@@ -288,25 +288,6 @@ export function highlightHtmlContent(
   return finalHtml;
 }
 
-/**
- * Escapes plain text into safe HTML and wraps matching search keywords in `<mark class="fm-hl">`.
- */
-export function highlightPlainTextToHtml(
-  text: string,
-  highlightTokens?: readonly string[]
-): string {
-  if (!text) return '';
-  const escaped = String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-  if (!highlightTokens || highlightTokens.length === 0) {
-    return escaped;
-  }
-  return highlightHtmlContent(escaped, highlightTokens);
-}
-
 const CPP_SYNTAX_TOKEN_RE =
   /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|((?:^[ \t]*|(?<=\s))#[ \t]*[a-zA-Z_][^\n]*|&lt;[a-zA-Z0-9_./+-]+\.h(?:pp)?&gt;)|\b(auto|bool|break|calloc|case|catch|char|cin|class|const|constexpr|continue|cout|default|delete|do|double|dynamic_cast|else|endl|enum|EOF|exception|explicit|extern|false|FILE|final|float|for|free|friend|goto|if|inline|int|INT_MAX|INT_MIN|iostream|istream|long|make_unique|malloc|map|mutable|namespace|new|noexcept|NULL|nullptr|operator|ostream|override|pair|private|protected|public|realloc|register|reinterpret_cast|return|runtime_error|SEEK_CUR|SEEK_END|SEEK_SET|set|shared_ptr|short|signed|sizeof|size_t|static|static_cast|std|string|struct|switch|template|this|throw|true|try|typedef|typename|union|unique_ptr|unsigned|using|vector|virtual|void|volatile|while)\b|\b(0x[0-9a-fA-F]+[uUlL]*|0b[01]+[uUlL]*|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[uUlLfF]*)\b/gm;
 

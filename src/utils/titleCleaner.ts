@@ -28,18 +28,10 @@ export function extractValidExamTag(rawTag?: string | null): string | undefined 
  */
 export const CARD_TITLE_OVERRIDES: Record<string, CleanedTitleResult> = {
   // EEE 101 Formulas (verified exact IDs)
-  'eee-basic:6': { title: 'Independent vs. Dependent Sources' },
-  'eee-delta:3': { title: 'Balanced Bridge Condition' },
-  'eee-delta:4': { title: 'Ladder & Symmetric Network Reduction' },
-  'eee-nodal:6': { title: 'Mesh Analysis with Current Sources' },
-  'eee-thev:4': { title: 'Thévenin Resistance ($R_{th}$) — 3 Cases' },
-  'eee-thev:5': { title: 'Open-Circuit & Short-Circuit Specials' },
-  'eee-thev:6': { title: 'Valid vs. Invalid Source Transformation' },
-  'eee-maxp:4': {
+  'eee-delta:6': {
     title: 'Sliding Load on Resistive Rails',
     examTag: '2018–19 Q.1c',
   },
-  'eee-ac:10': { title: 'Instantaneous, Average & Reactive Power' },
 
   // MATH 157 Formulas (verified exact IDs)
   'm157-limits:6': {
@@ -79,50 +71,20 @@ export const CARD_TITLE_OVERRIDES: Record<string, CleanedTitleResult> = {
   },
 
   // CSE 109 Formulas & Reference Cards (verified exact IDs, no Sec. tags)
-  'cse-c:5': {
-    title: 'Top 40 C Exam Reminders & Core Mnemonics',
-  },
-  'cse-c:6': {
-    title: 'C Data Types, 15-Level Precedence & Type Promotion',
-  },
-  'cse-c:7': {
-    title: 'printf/scanf Formatting & Loop Conversions',
-  },
-  'cse-c:8': {
-    title: '34 Common C/C++ Exam Traps & Fixes',
-  },
-  'cse-c:9': {
-    title: '34 Common C/C++ Exam Traps & Fixes',
-  },
   'cse-lib:0': {
     title: 'Common C Headers: <stdio.h>, <stdlib.h>, <string.h>, <ctype.h>, <math.h>',
   },
   'cse-lib:1': {
     title: 'math.h Exact Results & string.h / ctype.h / stdlib.h Quick Table',
   },
-  'cse-c:10': {
-    title: 'Score Frequency, Duplicate Removal & Caesar Cipher',
-  },
-  'cse-c:11': {
-    title: 'Dynamic 2D Matrix Allocate, Read, Free & 3x3 Multiply',
-  },
   'cse-ptr:4': {
     title: 'Dynamic 2D Matrix Allocate, Read, Free & 3x3 Multiply',
-  },
-  'cse-c:12': {
-    title: 'Magic Square Verification, Diagonal Sums & Row-Major 2D Sort',
   },
   'cse-ptr:5': {
     title: 'Magic Square Verification, Diagonal Sums & Row-Major 2D Sort',
   },
-  'cse-c:13': {
-    title: '2D Spatial Grids, Saddle Point & 8-Neighbor Checks',
-  },
   'cse-ptr:7': {
     title: 'Pointer Expressions, 2D/3D Star Indexing & Dynamic Memory Idioms',
-  },
-  'cse-c:14': {
-    title: 'Manual strlen, strcpy, strcat, strcmp & In-Place Reverse (No <string.h>)',
   },
   'cse-str:0': {
     title: 'Manual strlen, strcpy, strcat, strcmp & In-Place Reverse (No <string.h>)',
@@ -205,7 +167,7 @@ export const CARD_TITLE_OVERRIDES: Record<string, CleanedTitleResult> = {
 
 /**
  * Cleans any card title:
- * 1. Checks content-matched CSE revision guide titles and `CARD_TITLE_OVERRIDES[cardId]`.
+ * 1. Matches the 4 CSE-109 Revision Guide cards by content and checks `CARD_TITLE_OVERRIDES[cardId]`.
  * 2. Extracts genuine exam-year citations into `examTag`.
  * 3. Strips textbook/PDF section/chapter/lecture/page/Sadiku/Rev. Guide tags and stray trailing digits.
  * 4. Strips redundant inline formulas `($...$)` inside parentheticals when the title is already descriptive.
@@ -213,7 +175,7 @@ export const CARD_TITLE_OVERRIDES: Record<string, CleanedTitleResult> = {
 export function cleanCardTitle(rawTitle: string, cardId?: string): CleanedTitleResult {
   const rawTrimmed = String(rawTitle || '').trim();
 
-  // Match the 4 CSE-109 Revision Guide cards accurately whether indexed at cse-c:5..8 or cse-c:6..9
+  // Content match for the 4 CSE-109 Revision Guide cards before checking synthetic cardId overrides
   if (/Top\s+40\s+Exam\s+Reminders/i.test(rawTrimmed)) {
     return { title: 'Top 40 C Exam Reminders & Core Mnemonics' };
   }
@@ -223,15 +185,11 @@ export function cleanCardTitle(rawTitle: string, cardId?: string): CleanedTitleR
   if (/printf\s*\/\s*scanf\s+Quick\s+Sheet/i.test(rawTrimmed)) {
     return { title: 'printf/scanf Formatting & Loop Conversions' };
   }
-  if (/28\s+Output-Tracing\s+Rules/i.test(rawTrimmed)) {
-    return { title: '34 Common C/C++ Exam Traps & Fixes' };
+  if (/28\s+Output-Tracing\s+Rules/i.test(rawTrimmed) && !/Two's\s+Complement/i.test(rawTrimmed)) {
+    return { title: '28 Output-Tracing Rules & Common C/C++ Exam Traps' };
   }
 
-  if (
-    cardId &&
-    CARD_TITLE_OVERRIDES[cardId] &&
-    !(cardId === 'cse-c:5' && /Restricted\s+Conditionals/i.test(rawTrimmed))
-  ) {
+  if (cardId && CARD_TITLE_OVERRIDES[cardId]) {
     const ov = CARD_TITLE_OVERRIDES[cardId];
     return {
       title: ov.title,

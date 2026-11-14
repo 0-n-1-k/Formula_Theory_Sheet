@@ -26,10 +26,6 @@ const PdfPageCanvas = memo(function PdfPageCanvas({
     width: 612,
     height: 792,
   });
-  const [dimensions, setDimensions] = useState<{ width: number; height: number }>({
-    width: Math.round(612 * scale),
-    height: Math.round(792 * scale),
-  });
 
   useEffect(() => {
     const el = wrapperRef.current;
@@ -72,14 +68,6 @@ const PdfPageCanvas = memo(function PdfPageCanvas({
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const outputViewport = page.getViewport({ scale: scale * dpr });
 
-        const nextW = Math.round(viewport.width);
-        const nextH = Math.round(viewport.height);
-        setDimensions((prev) =>
-          prev.width === nextW && prev.height === nextH
-            ? prev
-            : { width: nextW, height: nextH }
-        );
-
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
@@ -120,7 +108,6 @@ const PdfPageCanvas = memo(function PdfPageCanvas({
       className="pdf-canvas-page"
       style={{
         minHeight: `${Math.round(baseDims.height * scale)}px`,
-        minWidth: `${ dimensions.width > 0 ? 0 : 0 }px`,
       }}
     >
       <div className="pdf-page-surface">

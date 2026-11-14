@@ -6,7 +6,6 @@ import {
   renderLatexCached,
   renderTextWithMath,
   highlightHtmlContent,
-  highlightPlainTextToHtml,
   highlightCppCodeToHtml,
 } from './mathParser.ts';
 
@@ -91,7 +90,7 @@ test('renderTextWithMath and highlightHtmlContent highlight matching keywords in
     'Highlights th subscript inside KaTeX formula when searching vth'
   );
 
-  const codeHighlighted = highlightPlainTextToHtml(
+  const codeHighlighted = highlightCppCodeToHtml(
     'if (a < b && strcmp(s1, s2) == 0) return 1;',
     ['strcmp']
   );

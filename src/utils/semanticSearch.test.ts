@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -31,11 +32,46 @@ const fmHtml = fs.readFileSync(path.join(ROOT_DIR, 'src', 'content-fmroot.html')
 const thmHtml = fs.readFileSync(path.join(ROOT_DIR, 'src', 'content-thmroot.html'), 'utf8');
 const genHtml = fs.readFileSync(path.join(ROOT_DIR, 'src', 'content-gen.html'), 'utf8');
 
-const allCards = [
+const allSections = [
   ...parseTopicSections(fmHtml),
   ...parseTopicSections(thmHtml),
   ...parseTopicSections(genHtml),
-].flatMap((s) => s.cards);
+];
+
+const allCards = allSections.flatMap((s) => s.cards);
+
+function stripMarkupForEmbedding(raw?: string): string {
+  if (!raw) return '';
+  return String(raw)
+    .replace(/<pre[\s\S]*?<\/pre>/gi, ' ')
+    .replace(/<code[\s\S]*?<\/code>/gi, ' ')
+    .replace(/<table[\s\S]*?<\/table>/gi, ' ')
+    .replace(/\$\$[\s\S]*?\$\$/g, ' ')
+    .replace(/\$([^$]+)\$/g, (_, inner: string) => {
+      const textMatches = [...inner.matchAll(/\\(?:text|textbf|textrm|mathrm)\{([^{}]*)\}/g)];
+      return textMatches.length > 0 ? ' ' + textMatches.map((m) => m[1]).join(' ') + ' ' : ' ';
+    })
+    .replace(/<\/?(?:sub|sup)[^>]*>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\b(?:BUET\s*)?\d{4}[–-]\d{2,4}\s*Q\.?\s*\d+[a-z]?/gi, ' ')
+    .replace(/\([^)]*\d{4}[–-]\d{2}[^)]*\)/g, ' ')
+    .replace(/\b(?:Where|Use|Conditions|Exam Application|Note)\s*:/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function computeCardSemanticHash(card: (typeof allCards)[number]): string {
+  const parts = [
+    stripMarkupForEmbedding(card.title),
+    stripMarkupForEmbedding(card.useText),
+    stripMarkupForEmbedding(card.htmlContent),
+    stripMarkupForEmbedding(card.bodyText),
+    stripMarkupForEmbedding(card.note),
+    stripMarkupForEmbedding(card.topicTitle),
+  ].filter(Boolean);
+  const text = parts.join('. ').replace(/\.\s*\./g, '.').trim();
+  return crypto.createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 16);
+}
 
 const precomputedIndexById = new Map(
   allCards.map((c) => [c.id, buildFormulaSearchIndex(c)])
@@ -44,15 +80,25 @@ const precomputedIndexById = new Map(
 const embeddingsFile = cardEmbeddingsData as unknown as CardEmbeddingsFile;
 
 describe('Semantic Search Upgrade — Phase 1 to Phase 4 & Appendix A Verification', () => {
-  it('Phase 1: card-embeddings.json covers all cards with 384-d unit vectors and separates related vs unrelated cards', () => {
+  it('Phase 1: card-embeddings.json covers all cards with fresh 384-d unit vectors and separates related vs unrelated cards', () => {
     assert.equal(embeddingsFile.model, 'Xenova/all-MiniLM-L6-v2');
     assert.equal(embeddingsFile.dim, 384);
+    assert.equal(
+      Object.keys(embeddingsFile.cards).length,
+      allCards.length,
+      'card-embeddings.json must contain the exact number of parsed cards with no orphans'
+    );
 
     for (const card of allCards) {
       const entry = embeddingsFile.cards[card.id];
       assert.ok(entry, `Missing embedding entry for card ${card.id}`);
       assert.equal(entry.vector.length, 384, `Card ${card.id} vector must have length 384`);
-      assert.ok(entry.hash && entry.hash.length >= 8, `Card ${card.id} must have content hash`);
+      const expectedHash = computeCardSemanticHash(card);
+      assert.equal(
+        entry.hash,
+        expectedHash,
+        `Stale embedding hash for card ${card.id} ("${card.title}"): run "npm run embeddings:build" to resync card-embeddings.json`
+      );
     }
 
     const thevVec = embeddingsFile.cards['eee-thev:0']?.vector;

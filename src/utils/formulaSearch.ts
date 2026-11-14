@@ -615,25 +615,6 @@ export function normalizeLatexForSearch(latex: string): string {
 }
 
 const cardSearchIndexWeakCache = new WeakMap<object, string>();
-const searchIndexWordsCache = new Map<string, string[]>();
-
-/**
- * Extracts and caches a deduplicated array of normalized alphanumeric words (length >= 3)
- * from a card's searchIndex for fast Damerau–Levenshtein fuzzy matching.
- */
-export function getSearchIndexWords(searchIndex: string): string[] {
-  const cached = searchIndexWordsCache.get(searchIndex);
-  if (cached !== undefined) return cached;
-
-  const matches = searchIndex.match(/[a-z0-9]{3,}/g) || [];
-  const uniqueWords = Array.from(new Set(matches));
-  // Prevent unbounded growth in synthetic test loops while keeping all ~600 real cards cached
-  if (searchIndexWordsCache.size > 2500) {
-    searchIndexWordsCache.clear();
-  }
-  searchIndexWordsCache.set(searchIndex, uniqueWords);
-  return uniqueWords;
-}
 
 /**
  * Sanitizes multi-topic section headers (e.g., "Network theorems: Thevenin, Norton, superposition"
