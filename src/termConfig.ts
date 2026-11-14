@@ -85,11 +85,6 @@ export const TERM_REGISTRY: Readonly<Record<TermId, TermConfig>> = {
 
 export const CURRENT_TERM_CONFIG: TermConfig = TERM_REGISTRY[ACTIVE_TERM_ID];
 
-/**
- * Combines the active term's configured courses with any auto-discovered `data-c` course codes
- * found in `fmSections` or `thmSections` so that no course is ever hidden.
- * Always prepends `{ code: 'ALL', badge: 'ALL', label: 'All Courses' }` and keeps `'GEN'` last.
- */
 export function buildEffectiveCoursePills(
   termConfig: TermConfig = CURRENT_TERM_CONFIG,
   discoveredCourseCodes: Iterable<string> = []
@@ -123,21 +118,11 @@ export function buildEffectiveCoursePills(
   ];
 }
 
-/**
- * Generates a term-specific SEO & OpenGraph description string from a `TermConfig`.
- */
 export function buildTermMetaDescription(termConfig: TermConfig = CURRENT_TERM_CONFIG): string {
-  const courseList = termConfig.courses
-    .filter((c) => c.code !== 'GEN')
-    .map((c) => `${c.badge} (${c.label})`)
-    .join(', ');
-  return `Interactive BUET ${termConfig.shortCode.replace(/\s*\/\/\s*/g, '/')} EEE formula, theorem, and definition reference sheet covering ${courseList}, plus general mathematics and physical constants.`;
+  const termCode = termConfig.shortCode.replace(/\s*\/\/\s*/g, '/');
+  return `BUET ${termCode} EEE formula, theorem, and code reference sheet.`.slice(0, 60);
 }
 
-/**
- * Synchronizes `document.title` as well as `<meta name="description">`, `og:title`,
- * `og:description`, `twitter:title`, and `twitter:description` with the active `TermConfig`.
- */
 export function syncDocumentMetaForTerm(
   termConfig: TermConfig = CURRENT_TERM_CONFIG,
   doc: Document | undefined = typeof document !== 'undefined' ? document : undefined

@@ -48,12 +48,9 @@ export function getExtractor(): Promise<FeatureExtractionPipeline> {
   return extractorPromise;
 }
 
-/**
- * Triggers a background preload of the embedding pipeline without throwing if offline/unsupported.
- */
 export function warmUpEmbeddingModel(): void {
   if (!semanticAvailable) return;
   void getExtractor().catch(() => {
-    // Silently degrade to lexical-only search per Appendix A
+    // Degrade to lexical search on failure
   });
 }

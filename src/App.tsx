@@ -243,11 +243,6 @@ function formatDoomsdayParts(examDate: string, nowMs: number) {
   return { days, hrs, mins, secs, prefix };
 }
 
-/**
- * Optimization D: Isolated Doomsday Countdown Button & Drawer Clock
- * Houses its own 1-second setInterval so every-second ticks never re-render the search bar,
- * sidebar, or formula/theorem card grids.
- */
 export interface DoomsdayToggleButtonProps {
   examDate: string;
   goalOpen: boolean;
@@ -356,9 +351,7 @@ export const DoomsdayDrawerClock = memo(function DoomsdayDrawerClock({
 });
 
 /**
- * Estimates visual vertical complexity of a card so cards within each topic
- * sort cleanly from shortest -> longest, and extra-heavy reference cards
- * automatically span both columns (`is-wide`) at the bottom of the topic.
+ * Estimates vertical content length of a card for ascending layout sorting.
  */
 function computeCardLengthScore(card: FormulaCardRecord): number {
   let score = 0;
@@ -387,9 +380,7 @@ function computeCardLengthScore(card: FormulaCardRecord): number {
 }
 
 /**
- * Determines whether a card contains wide tables, multi-column matrices,
- * long code blocks, or dense multi-item lists/prose that look cleaner spanning
- * the full grid width (`grid-column: 1 / -1`) with no neighboring card beside them.
+ * Determines whether a card spans the full two-column grid width.
  */
 export function shouldCardSpanFullWidth(card: FormulaCardRecord): boolean {
   if (card.htmlContent) {
@@ -470,10 +461,6 @@ export interface FormulaCardViewProps {
   highlightTokens?: readonly string[];
 }
 
-/**
- * Optimization A & B: Kept mounted in DOM and toggles `.hidden` class instead of unmounting/remounting.
- * Applies `renderTextWithMath` across `.fmhtml`, `.fmw`, `.fmu`, `.fmsteps li`, `.fmnote`, and `.thsee`.
- */
 export const FormulaCardView = memo(function FormulaCardView({
   card,
   cardIndex,
@@ -2133,10 +2120,7 @@ export default function App() {
         }
       );
 
-      // 1) Topic-Wise -> 2) Short-to-Long Card Sorting:
-      // - When searching: sort by search relevance score first, then shortest -> longest.
-      // - In default browse view: sort compact cards first (shortest -> longest), and place
-      //   full-width (`isWide`) reference tables/code blocks cleanly at the bottom of the topic.
+      // Sort cards by search relevance when searching, or by ascending length in browse view
       if (visibleInTopic > 1) {
         if (hasActiveSearch) {
           cardVisibility.sort((a, b) => {
@@ -3398,7 +3382,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* Phone-Only Controls inside [INDEX] Drawer: BUET Logo, Term Switcher & Rectangular Course Select */}
           <div className="sidebar-phone-controls" aria-label="Mobile Term and Course Controls">
             <div className="sb-phone-brand-row">
               <a
@@ -3696,7 +3679,6 @@ export default function App() {
               >
                 <div className="command-deck-collapse-inner">
                   <div className="command-deck-grid">
-                    {/* Tile 1: Mastery Telemetry & Tactile Course Matrix */}
                     <div className="deck-tile bento-mastery-pod">
                       <div className="bento-kpi-row">
                         <div className="bento-kpi-main">
@@ -3751,7 +3733,6 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Tile 2: Status Filter (All / Starred / Unlearned) & 5/5 High-Yield Radar */}
                     <div className="deck-tile bento-radar-pod">
                       <div
                         className="bento-status-strip"
@@ -3805,7 +3786,6 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Tile 3: Tactile Quick Workflows */}
                     <div className="deck-tile bento-launchpad-pod">
                       <div className="bento-launch-grid">
                         <button

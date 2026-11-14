@@ -45,14 +45,12 @@
   --fs-md: 15.5px;
   --fs-lg: 18px;
   --fs-xl: 26px;
-  /* Semantic inline definition & section headings inside cards */
   --def-heading: #64d2ff;
   --def-heading-bg: rgba(100, 210, 255, 0.1);
   --def-heading-border: rgba(90, 200, 250, 0.55);
   --cond-heading: #b4b2ff;
   --use-heading: #4ae072;
   --step-heading: #5ac8fa;
-  /* Course-specific hardware signal accents */
   --course-signal: var(--accent);
   --course-signal-soft: rgba(41, 151, 255, 0.13);
   --course-signal-border: rgba(41, 151, 255, 0.36);
@@ -102,7 +100,6 @@ body {
   position: relative;
 }
 
-/* Electrical-Engineering Dot-Matrix Grid + Ambient Radial Glows */
 body::before {
   content: "";
   position: fixed;
@@ -145,7 +142,6 @@ body::after {
   }
 }
 
-/* Nothing OS NType82 Dot-Matrix Utility Classes */
 .tn,
 .nav-cnt,
 .fmcnt,
@@ -1659,7 +1655,7 @@ details.fmt > summary:hover {
   color: var(--text-primary);
 }
 
-/* Animated [+] / [-] NType82 Accordion Indicator */
+/* Accordion indicator */
 .fmtt::before {
   content: "[+]";
   font-family: var(--font-dot);
@@ -3328,7 +3324,7 @@ details.fmd[open] > summary::after {
   }
 }
 
-/* ======================== BENTO COMMAND DECK & 3-TIER CARD HIERARCHY ======================== */
+/* Dashboard & Card Layout */
 
 .bento-deck-wrap {
   margin-bottom: 16px;
@@ -3687,7 +3683,7 @@ details.fmd[open] > summary::after {
   color: var(--text-secondary);
 }
 
-/* ======================== UPGRADED TOPIC HEADERS (details.fmt) ======================== */
+/* Topic Header Styles */
 
 details.fmt.is-high-yield {
   border-color: rgba(255, 214, 10, 0.22);
@@ -3776,11 +3772,8 @@ details.fmt[open].is-high-yield {
   transition: width var(--dur-med) var(--ease-out);
 }
 
-/* ======================== SHORT-TO-LONG CARD GRID & 3-TIER CARD ARCHITECTURE ======================== */
+/* Card Grid & Header Layout */
 
-/* Because cards are now sorted shortest -> longest within each topic, paired cards in the same row
-   have nearly identical content lengths. Stretching them to equal row height creates a crisp,
-   aligned Bento grid with zero jagged bottom edges. */
 .fmgrid {
   align-items: stretch;
   gap: 16px;
@@ -3795,8 +3788,7 @@ details.fmt[open].is-high-yield {
   border: 1px solid rgba(255, 255, 255, 0.09);
 }
 
-/* Full-width XL cards (multi-column comparison tables, wide matrices, long C/C++ code)
-   automatically span both columns at the bottom of the topic */
+/* Span full-width cards across both grid columns on desktop */
 @media (min-width: 960px) {
   body:not(.single-col) .fmgrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3807,7 +3799,6 @@ details.fmt[open].is-high-yield {
   }
 }
 
-/* Tier 1: Clean Card Header Bar (.fmh) */
 .fmh {
   padding: 10px 14px;
   background: rgba(255, 255, 255, 0.025);
@@ -3834,7 +3825,6 @@ details.fmt[open].is-high-yield {
   line-height: 1.3;
 }
 
-/* Tier 2: Hero Formula / Code Stage (.fmm & .fmcode) — clean uniform border with no left-side stripe */
 .fmm {
   margin: 0;
   padding: 14px 16px;
@@ -3873,9 +3863,8 @@ details.fmt[open].is-high-yield {
   color: var(--text-secondary);
 }
 
-/* ======================== PHONE-ONLY INDEX MENU CONTROLS (<= 768px) ======================== */
+/* Mobile Sidebar Controls (<= 768px) */
 
-/* Hidden on desktop and larger screens so desktop layout remains 100% unchanged */
 .sidebar-phone-controls {
   display: none;
 }
@@ -3887,14 +3876,12 @@ details.fmt[open].is-high-yield {
 }
 
 @media (max-width: 768px) {
-  /* Declutter phone top header: move Term Switcher, BUET Logo, and Course Select into [INDEX] menu */
   .brand-wrap > .term-switcher-wrap,
   .brand-wrap > .buet-ascii-link,
   #fmbar .course-selector-row.course-bar {
     display: none !important;
   }
 
-  /* Show Logo, Term Switcher & Rectangular Course Select inside the [INDEX] drawer on phone */
   .sidebar-phone-controls {
     display: flex;
     flex-direction: column;
@@ -3971,7 +3958,6 @@ details.fmt[open].is-high-yield {
     border: 1px solid rgba(41, 151, 255, 0.3);
   }
 
-  /* Non-capsule rectangular Course Select Grid for Phone View */
   .sb-phone-course-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4051,12 +4037,8 @@ details.fmt[open].is-high-yield {
   }
 }
 
-/* ==========================================================================
-   Inline Definition Heading Color Hierarchy, 1-Line Definition Spacing,
-   and Multi-Column Horizontal Flow for Wide Cards on Larger Screens
-   ========================================================================== */
+/* Inline Content Formatting & Multi-Column Flow */
 
-/* 1. Theorem / Definition Statement Sub-Headings inside .fmhtml */
 .fmhtml b {
   color: var(--text-primary);
   font-weight: 650;
@@ -4078,7 +4060,6 @@ details.fmt[open].is-high-yield {
   -webkit-box-decoration-break: clone;
 }
 
-/* 1-Line Vertical Space Between Definitions inside .fmhtml */
 .fmhtml p {
   margin: 0 0 1em 0;
   line-height: 1.65;
@@ -4110,7 +4091,6 @@ details.fmt[open].is-high-yield {
   margin-top: 0.9em;
 }
 
-/* 2. Parameters / Conditions Sub-Headings inside .fmw */
 .fmw b {
   color: var(--cond-heading);
   font-weight: 600;
@@ -4119,7 +4099,6 @@ details.fmt[open].is-high-yield {
   border-radius: 3px;
 }
 
-/* 3. Exam Application / Strategy Sub-Headings inside .fmu */
 .fmu b {
   color: var(--use-heading);
   font-weight: 600;
@@ -4128,13 +4107,11 @@ details.fmt[open].is-high-yield {
   border-radius: 3px;
 }
 
-/* 4. Numbered Proof / Derivation Step Lead-ins inside .fmsteps */
 .fmsteps li > b {
   color: var(--step-heading);
   font-weight: 600;
 }
 
-/* 5. Extracted Exam-Year Pill in Card Header (.fm-year-tag) */
 .fm-year-tag {
   display: inline-flex;
   align-items: center;
@@ -4150,7 +4127,7 @@ details.fmt[open].is-high-yield {
   flex-shrink: 0;
 }
 
-/* 6. Horizontal Multi-Column Expansion for Very Long Wide Cards on Larger Screens */
+/* Multi-column flow for wide cards on desktop */
 @media (min-width: 960px) {
   .fmi.is-wide .fmhtml.fmhtml-cols {
     column-count: 2;
@@ -4190,7 +4167,7 @@ details.fmt[open].is-high-yield {
   }
 }
 
-/* Accessibility: Reduced Motion Fallback */
+/* Reduced motion fallback */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -4200,7 +4177,7 @@ details.fmt[open].is-high-yield {
   }
 }
 
-/* ======================== 1. COURSE-SPECIFIC HARDWARE SIGNAL ACCENTS ======================== */
+/* Course Accent Variables */
 [data-c="EEE"], [data-course="EEE"] {
   --course-signal: #2997ff;
   --course-signal-soft: rgba(41, 151, 255, 0.14);
@@ -4257,7 +4234,7 @@ details.fmt[open].is-high-yield {
   color: #030305;
 }
 
-/* ======================== 2. TOPIC ACCORDION TELEMETRY TRACK ======================== */
+/* Topic Accordion Progress Bar */
 details.fmt > summary {
   position: relative;
   border-left: 3px solid transparent;
@@ -4283,7 +4260,7 @@ details.fmt > summary::after {
   transition: width var(--dur-med) var(--ease-out);
 }
 
-/* ======================== 3. QUIET CARD CHROME (GHOST UNTIL HOVER) ======================== */
+/* Card Action Buttons */
 .fmi .fmb .fmst:not(.on),
 .fmi .fmb .fmcp,
 .fmi:not(.learned) .fmb .fml {
@@ -4311,7 +4288,7 @@ details.fmt > summary::after {
   background: rgba(48, 209, 88, 0.1);
 }
 
-/* ======================== 4. FLUSH ARCHITECTURAL SPEC GRID (NO BOX-IN-BOX) ======================== */
+/* Card Footer Details Grid */
 .fmbody {
   padding: 12px 14px 0;
   gap: 12px;
@@ -4351,7 +4328,7 @@ details.fmt > summary::after {
   border-right: none;
 }
 
-/* ======================== 5. C/C++ IDE SYNTAX HIGHLIGHTING TOKENS ======================== */
+/* C/C++ Syntax Highlighting Tokens */
 code .tok-com,
 .fmcode .tok-com,
 .tok-com {
@@ -4384,7 +4361,7 @@ code .tok-num,
   color: #4ae072;
 }
 
-/* ======================== 6. FLUSH ARCHITECTURAL TOP BAR (NO BOX-IN-BOX CLUTTER) ======================== */
+/* Top Bar & Header Overrides */
 .top-chrome {
   background: rgba(8, 8, 12, 0.92);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -4409,7 +4386,6 @@ code .tok-num,
   align-items: stretch;
 }
 
-/* Flush architectural mode tabs in top header */
 .tabs {
   padding: 0;
   border-radius: 0;
@@ -4448,7 +4424,6 @@ code .tok-num,
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
-/* Reversed Doomsday Clock Button in Header (Animated When Closed, Static When Open) */
 .goal-toggle-btn {
   height: auto;
   min-height: 54px;
@@ -4478,7 +4453,6 @@ code .tok-num,
   color: var(--text-primary);
 }
 
-/* Top-Right Settings Gear Icon Button */
 .settings-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -4514,7 +4488,6 @@ code .tok-num,
   align-items: stretch;
 }
 
-/* Flush Architectural Control Bar (#fmbar) */
 #fmbar {
   background: rgba(6, 6, 10, 0.94);
   border-bottom: 1px solid rgba(255, 255, 255, 0.09);
@@ -4526,7 +4499,7 @@ code .tok-num,
   gap: 0;
 }
 
-/* ======================== GHOST-TO-CAPSULE COURSE BAR (ZERO BOX-IN-BOX CLUTTER) ======================== */
+/* Course Filter Bar */
 .course-selector-row.course-bar {
   display: flex;
   align-items: center;
@@ -4546,7 +4519,6 @@ code .tok-num,
   flex: 1;
 }
 
-/* At rest: borderless ghost pill with a tiny course-colored status LED dot */
 .course-pill,
 #fmchips.chip-group button[data-c] {
   position: relative;
@@ -4572,7 +4544,6 @@ code .tok-num,
     box-shadow 0.22s ease;
 }
 
-/* Course LED indicator dot on every pill */
 .course-pill[data-c]:not([data-c="ALL"])::before {
   content: "";
   width: 6px;
@@ -4583,7 +4554,6 @@ code .tok-num,
   transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Hover state: soft floating capsule */
 .course-pill:hover,
 #fmchips.chip-group button[data-c]:hover {
   color: var(--text-primary);
@@ -4598,7 +4568,6 @@ code .tok-num,
   box-shadow: 0 0 8px var(--course-signal);
 }
 
-/* Active state: Full backlit Apple-style capsule */
 .course-pill.active,
 .course-pill[aria-pressed="true"],
 #fmchips.chip-group button[data-c].active {
@@ -4629,7 +4598,6 @@ code .tok-num,
   transform: translateY(0) scale(0.97);
 }
 
-/* Subtle collapse icon button at the left of the course track */
 .course-selector-toggle {
   height: 30px;
   padding: 0 10px;
@@ -4655,7 +4623,7 @@ code .tok-num,
   color: var(--text-primary);
 }
 
-/* Laser-Gradient Rim Search Bar in #fmbar */
+/* Search Input Bar */
 .controls-utility-row {
   gap: 10px;
   min-height: 46px;
@@ -4668,7 +4636,6 @@ code .tok-num,
   border-radius: 12px;
 }
 
-/* Top laser-etched specular gradient rim on the search bar */
 .search-wrap::before {
   content: "";
   position: absolute;
@@ -4690,7 +4657,6 @@ code .tok-num,
   border-radius: 999px;
 }
 
-/* Bottom laser-etched counterweight rim on the search bar */
 .search-wrap::after {
   content: "";
   position: absolute;
@@ -4757,7 +4723,7 @@ code .tok-num,
   height: 40px;
 }
 
-/* ======================== 7. HERO COMMAND DECK (STANDS OUT + POP-OUT TILES) ======================== */
+/* Dashboard Container & Tiles */
 .command-deck {
   position: relative;
   margin: 14px 0 22px;
@@ -4772,12 +4738,10 @@ code .tok-num,
     inset 0 1px 0 rgba(255, 255, 255, 0.16);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  /* Allow hovered tiles to pop out past the grid plane */
   overflow: visible;
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
-/* Top laser-etched specular accent line */
 .command-deck::before {
   content: "";
   position: absolute;
@@ -4794,7 +4758,6 @@ code .tok-num,
   pointer-events: none;
 }
 
-/* Click-anywhere Telemetry Header Strip (No extra button box) */
 .command-deck-header {
   display: flex;
   align-items: center;
@@ -4898,7 +4861,6 @@ code .tok-num,
   color: var(--text-secondary);
 }
 
-/* Minimal chevron indicator that rotates smoothly when deck opens/closes */
 .command-deck-chevron {
   width: 7px;
   height: 7px;
@@ -4914,7 +4876,6 @@ code .tok-num,
   border-color: var(--accent-hover);
 }
 
-/* Flush 1px Hairline Grid at Rest -> Magnetic Pop-Out Tiles on Hover */
 .command-deck-grid {
   display: grid;
   grid-template-columns: 1.25fr 1fr 1.15fr;
@@ -4948,7 +4909,6 @@ code .tok-num,
   border-bottom-right-radius: 15px;
 }
 
-/* Pop-out 3D elevation when hovering any of the 3 tiles */
 .deck-tile:hover {
   z-index: 6;
   border-radius: 14px;
@@ -4962,7 +4922,6 @@ code .tok-num,
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
-/* Tactile borderless sub-cells inside the tiles (No Box-in-Box Borders at Rest) */
 .bento-course-cell,
 .bento-launch-btn,
 .bento-action-chip {
@@ -5002,7 +4961,6 @@ code .tok-num,
     inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
 }
 
-/* Borderless recessed status track (All / Starred / Unlearned) with floating active pill */
 .bento-status-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -5061,7 +5019,7 @@ code .tok-num,
   }
 }
 
-/* ======================== 8. DETACHED SLOPED-EDGE VERTICAL INDEX PULL-TAB ======================== */
+/* Detached Vertical Index Pull-Tab */
 .sb-detached-tab {
   position: fixed;
   left: 0;
@@ -5089,7 +5047,6 @@ code .tok-num,
   pointer-events: auto;
 }
 
-/* Continuous 1.5px vertical rail line extending to the top and bottom of the screen */
 .sb-detached-tab::before,
 .sb-detached-tab::after {
   content: "";
@@ -5219,7 +5176,7 @@ code .tok-num,
   box-shadow: 0 0 8px var(--accent);
 }
 
-/* ======================== QUIET CONTEXT OPACITY THEME (.fmdet) ======================== */
+/* Card Context Footer Opacity Transitions */
 .fmi .fmdet {
   opacity: 0.44;
   filter: saturate(0.65);
@@ -5241,7 +5198,6 @@ code .tok-num,
   border-top-color: rgba(255, 255, 255, 0.12);
 }
 
-/* Also keep .fmnote and .thsee calm at rest and crisp on card hover */
 .fmi .fmnote,
 .fmi .thsee {
   opacity: 0.68;
@@ -5255,16 +5211,15 @@ code .tok-num,
   opacity: 1;
 }
 
-/* ======================== 9. BIRD-LANDING CURVED ANIMATION SYSTEM (60FPS LOW-TIER SAFE) ======================== */
+/* UI Transition & Collapse Rules */
 :root {
-  /* Fast dive (0-15% time) -> long graceful landing deceleration (15-100% time) */
   --ease-glide: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.22, 1.12, 0.36, 1);
   --dur-glide: 0.42s;
   --dur-ui: 0.32s;
 }
 
-/* 1. Reusable GPU-friendly Grid Collapse Shell (Doomsday Drawer, Command Deck, Derivation Steps) */
+/* Grid collapse containers */
 .goal-collapse-shell,
 .command-deck-collapse,
 .fmd-collapse {
@@ -5292,7 +5247,6 @@ code .tok-num,
   min-height: 0;
 }
 
-/* Allow hovered dashboard tiles to pop out vertically once the Command Deck is open */
 .command-deck.is-open .command-deck-collapse.is-open,
 .command-deck.is-open .command-deck-collapse.is-open > .command-deck-collapse-inner {
   overflow: visible;
@@ -5307,7 +5261,7 @@ code .tok-num,
   transform: translate3d(0, 0, 0);
 }
 
-/* 2. Search History Dropdown & Term Switcher Dropdown Landing Curve */
+/* Dropdown visibility transitions */
 .search-history-dropdown,
 .term-archive-dropdown,
 .tools-dropdown {
@@ -5340,7 +5294,6 @@ code .tok-num,
   visibility: visible;
 }
 
-/* Staggered landing for search history items & quick shortcuts */
 .search-history-dropdown .sh-item,
 .search-history-dropdown .sh-shortcut-pill {
   transition:
@@ -5358,7 +5311,7 @@ code .tok-num,
   transform: translate3d(0, -2px, 0);
 }
 
-/* 3. Compositor-Only Desktop & Mobile Index Slide-Over Drawer (Zero .content-col Reflow) */
+/* Fixed slide-over index drawer */
 #sbBtn.fm-index-trigger {
   will-change: transform, opacity;
   transition:
@@ -5425,7 +5378,7 @@ code .tok-num,
   pointer-events: auto;
 }
 
-/* 4. Course Selector Bar Smooth Collapse & Pill Glide */
+/* Course bar collapse transition */
 #fmchips.chip-group {
   max-height: 56px;
   opacity: 1;
@@ -5444,7 +5397,7 @@ code .tok-num,
   overflow: hidden;
 }
 
-/* 5. Workspace Tab Switching (Formulas / Theorems / Practice) & Practice Module Landing */
+/* Workspace and card entry transitions */
 @keyframes workspaceLand {
   0% {
     opacity: 0;
@@ -5463,7 +5416,6 @@ code .tok-num,
   animation: workspaceLand 0.42s var(--ease-glide) both;
 }
 
-/* Mode Tab Bottom Indicator Glide */
 .tab {
   transition:
     background-color 0.28s var(--ease-glide),
@@ -5483,7 +5435,6 @@ code .tok-num,
   transform: scale(1.06);
 }
 
-/* 6. Topic Accordion Open/Close & Staggered Card Landing */
 @keyframes cardGlideIn {
   0% {
     opacity: 0;
@@ -5500,7 +5451,6 @@ details.fmt[open] > .fmgrid > .fmi {
   animation-delay: calc(var(--card-stagger, 0) * 28ms);
 }
 
-/* Card Hover & Self-Test Tap-to-Reveal Landing Curve */
 .fmi {
   transition:
     transform 0.36s var(--ease-glide),
@@ -5533,11 +5483,6 @@ body.self-test .fmi.revealed .fmbody .fmhtml {
   transform: scale(1);
 }
 
-/* Proof & Derivation Steps (.fmd) Smooth Chevron & Reveal */
-details.fmd:not([open]) {
-  /* Keep native details open so .fmd-collapse controls height smoothly */
-}
-
 details.fmd > summary::after {
   content: "[STEPS +]";
   transition: transform 0.32s var(--ease-glide), color 0.25s ease;
@@ -5548,7 +5493,6 @@ details.fmd.is-open > summary::after {
   color: var(--text-primary);
 }
 
-/* 7. Modal (#appModal) & Detached Vertical Index Tab Glide */
 .fcm {
   visibility: hidden;
   transition:

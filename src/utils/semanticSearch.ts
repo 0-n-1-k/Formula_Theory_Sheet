@@ -207,7 +207,6 @@ export interface HybridRankOptions {
 
 /**
  * Standalone hybrid (lexical + semantic) ranking pipeline over a pool of FormulaCardRecords.
- * Used both by the Phase 4 validation harness and for inspecting hybrid rankings directly.
  */
 export async function rankCardsHybrid(
   cards: FormulaCardRecord[],

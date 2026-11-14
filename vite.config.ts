@@ -3,6 +3,14 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
 
+const securityHeaders = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'SAMEORIGIN',
+  'Content-Security-Policy':
+    "frame-ancestors 'self' https://*.google.com https://*.gstatic.com https://*.run.app;",
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+};
+
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
@@ -12,11 +20,12 @@ export default defineConfig(() => {
       },
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modify—file watching is disabled to prevent flickering during agent edits.
+      headers: securityHeaders,
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+    },
+    preview: {
+      headers: securityHeaders,
     },
   };
 });

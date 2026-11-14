@@ -27,13 +27,13 @@ export function extractValidExamTag(rawTag?: string | null): string | undefined 
  * and indexed in `buildFormulaSearchIndex` so 100% of keywords remain searchable.
  */
 export const CARD_TITLE_OVERRIDES: Record<string, CleanedTitleResult> = {
-  // EEE 101 Formulas (verified exact IDs)
+  // EEE 101 Formulas
   'eee-delta:6': {
     title: 'Sliding Load on Resistive Rails',
     examTag: '2018–19 Q.1c',
   },
 
-  // MATH 157 Formulas (verified exact IDs)
+  // MATH 157 Formulas
   'm157-limits:6': {
     title: 'Oscillating & Cusp Continuity Proofs ($x = 0$)',
     examTag: '2012–2025',
@@ -70,7 +70,7 @@ export const CARD_TITLE_OVERRIDES: Record<string, CleanedTitleResult> = {
     title: 'Strophoid, Witch of Agnesi & Polar Circle Areas',
   },
 
-  // CSE 109 Formulas & Reference Cards (verified exact IDs, no Sec. tags)
+  // CSE 109 Formulas & Reference Cards
   'cse-lib:0': {
     title: 'Common C Headers: <stdio.h>, <stdlib.h>, <string.h>, <ctype.h>, <math.h>',
   },
@@ -117,7 +117,7 @@ export const CARD_TITLE_OVERRIDES: Record<string, CleanedTitleResult> = {
     title: 'C++ Class Skeleton (Rule of Three), Operator Overloading & Virtual Dispatch',
   },
 
-  // Theorem & Definition Cards (content-thmroot.html, verified exact IDs)
+  // Theorem & Definition Cards
   't-m1571:7': {
     title: 'Solved Indeterminate Limits ($1^\\infty, \\infty - \\infty$) & RL $R \\to 0^+$ Limit',
   },
