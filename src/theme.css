@@ -1418,8 +1418,8 @@ mark.search-hl {
   margin: 0 auto;
   padding: 18px 20px 64px;
   display: grid;
-  grid-template-columns: 290px minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
   align-items: start;
 }
 
@@ -1427,25 +1427,26 @@ mark.search-hl {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.app-layout.sidebar-collapsed .sidebar {
-  display: none;
-}
-
 .sidebar {
-  position: sticky;
-  top: 16px;
-  z-index: 90;
-  max-height: calc(100vh - 32px);
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 200;
+  width: min(316px, 88vw);
+  max-height: 100vh;
   overflow-y: auto;
   padding: 14px;
-  border-radius: 16px;
-  background: var(--glass-chrome);
-  backdrop-filter: blur(var(--blur-md)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(180%);
-  border: 1px solid var(--border-crisp);
-  box-shadow: var(--shadow-card);
+  border-radius: 0 18px 18px 0;
+  background: linear-gradient(180deg, rgba(13, 15, 22, 0.98) 0%, rgba(8, 9, 14, 0.99) 100%);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-right: 1px solid rgba(41, 151, 255, 0.28);
+  box-shadow: 16px 0 42px rgba(0, 0, 0, 0.78);
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  will-change: transform;
+  contain: layout paint style;
 }
 
 .focus-pill {
@@ -1459,10 +1460,10 @@ mark.search-hl {
   padding: 8px 11px;
   margin-bottom: 12px;
   border-radius: 10px;
-  background: rgba(13, 21, 35, 0.94);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(41, 151, 255, 0.25);
+  background: rgba(15, 23, 38, 0.98);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid rgba(41, 151, 255, 0.28);
   font-size: var(--fs-sm);
   color: var(--text-primary);
   flex-shrink: 0;
@@ -5357,88 +5358,71 @@ code .tok-num,
   transform: translate3d(0, -2px, 0);
 }
 
-/* 3. Smooth Desktop & Mobile Index Sidebar Open/Close + Header [INDEX] Button Glide */
+/* 3. Compositor-Only Desktop & Mobile Index Slide-Over Drawer (Zero .content-col Reflow) */
 #sbBtn.fm-index-trigger {
-  max-width: 96px;
-  overflow: hidden;
+  will-change: transform, opacity;
   transition:
-    max-width 0.36s var(--ease-glide),
-    padding 0.36s var(--ease-glide),
-    margin 0.36s var(--ease-glide),
-    opacity 0.24s var(--ease-glide),
-    transform 0.32s var(--ease-glide),
+    opacity 0.22s var(--ease-glide),
+    transform 0.26s var(--ease-glide),
     background-color 0.2s ease,
     border-color 0.2s ease;
 }
 
 #sbBtn.fm-index-trigger.is-hidden {
-  max-width: 0;
-  padding-left: 0;
-  padding-right: 0;
-  margin-right: -12px;
-  border-width: 0;
   opacity: 0;
-  transform: translate3d(-12px, 0, 0);
+  transform: scale(0.92);
   pointer-events: none;
 }
 
-@media (min-width: 1025px) {
-  .app-layout {
-    grid-template-columns: 290px minmax(0, 1fr);
-    transition:
-      grid-template-columns 0.42s var(--ease-glide),
-      gap 0.42s var(--ease-glide);
-  }
-
-  .app-layout.sidebar-collapsed {
-    grid-template-columns: 0px minmax(0, 1fr);
-    gap: 0px;
-  }
-
-  .app-layout .sidebar {
-    display: block !important;
-    width: 290px;
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-    transition:
-      transform 0.42s var(--ease-glide),
-      opacity 0.28s var(--ease-glide);
-  }
-
-  .app-layout.sidebar-collapsed .sidebar {
-    opacity: 0;
-    transform: translate3d(-36px, 0, 0);
-    pointer-events: none;
-    overflow: hidden;
-  }
+.sidebar-backdrop {
+  display: block !important;
+  position: fixed;
+  inset: 0;
+  z-index: 195;
+  background: rgba(3, 3, 5, 0.62);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  will-change: opacity;
+  transition:
+    opacity 0.32s var(--ease-glide),
+    visibility 0.32s var(--ease-glide);
 }
 
-@media (max-width: 1024px) {
-  .sidebar-backdrop {
-    display: block !important;
-    position: fixed;
-    inset: 0;
-    z-index: 195;
-    background: rgba(3, 3, 5, 0.72);
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transition:
-      opacity 0.36s var(--ease-glide),
-      visibility 0.36s var(--ease-glide);
-  }
+.sidebar-backdrop.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
 
-  .sidebar-backdrop.open {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
-  }
+.sidebar,
+.app-layout .sidebar,
+.app-layout.sidebar-collapsed .sidebar {
+  display: flex !important;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(316px, 88vw);
+  max-height: 100vh;
+  z-index: 200;
+  transform: translate3d(-104%, 0, 0);
+  visibility: hidden;
+  pointer-events: none;
+  will-change: transform;
+  contain: layout paint style;
+  transition:
+    transform 0.38s var(--ease-glide),
+    visibility 0.38s var(--ease-glide) !important;
+}
 
-  .sidebar {
-    transition:
-      transform 0.44s var(--ease-glide),
-      visibility 0.44s var(--ease-glide) !important;
-  }
+.sidebar.mobile-open,
+.app-layout .sidebar.mobile-open,
+.app-layout.sidebar-collapsed .sidebar.mobile-open {
+  transform: translate3d(0, 0, 0);
+  visibility: visible;
+  pointer-events: auto;
 }
 
 /* 4. Course Selector Bar Smooth Collapse & Pill Glide */

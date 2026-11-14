@@ -972,9 +972,7 @@ export default function App() {
   } | null>(null);
   const searchDebugMode = useMemo(() => getSearchDebugMode(), []);
 
-  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() =>
-    typeof window !== 'undefined' ? window.innerWidth > 1024 : true
-  );
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [thmFilter, setThmFilter] = useState<TheoremCategoryFilter>('all');
   const [toolsOpen, setToolsOpen] = useState<boolean>(false);
   const [termMenuOpen, setTermMenuOpen] = useState<boolean>(false);
@@ -1189,7 +1187,6 @@ export default function App() {
   }, []);
 
   const toggleNavDrawer = useCallback(() => {
-    setBentoOpen(false);
     setSidebarOpen((open) => !open);
   }, []);
 
@@ -1871,12 +1868,9 @@ export default function App() {
   );
 
   const handleSelectTopicFromNav = useCallback((targetId: string, href: string) => {
-    setBentoOpen(false);
     setSelectedTopicId(targetId);
     setOpenTopics((prev) => ({ ...prev, [targetId]: true }));
-    if (typeof window !== 'undefined' && window.innerWidth <= 1024) {
-      setSidebarOpen(false);
-    }
+    setSidebarOpen(false);
     if (typeof window !== 'undefined') {
       window.requestAnimationFrame(() => {
         const el = document.getElementById(targetId);
@@ -3134,10 +3128,7 @@ export default function App() {
         aria-label="Toggle Topic Index Sidebar"
         aria-expanded={sidebarOpen}
         title={sidebarOpen ? 'Hide Topic Index' : 'Pull out Topic Index'}
-        onClick={() => {
-          setBentoOpen(false);
-          setSidebarOpen((open) => !open);
-        }}
+        onClick={toggleNavDrawer}
       >
         <span className="sb-detached-shape" aria-hidden="true">
           <svg viewBox="0 0 30 148" preserveAspectRatio="none" className="sb-detached-svg">
