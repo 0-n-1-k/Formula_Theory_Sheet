@@ -34,7 +34,11 @@
   --dur-med: 0.32s;
   --chrome-h: 58px;
   --fmbar-h: 108px;
-  --radius-lg: 16px;
+  --radius-card: 12px;
+  --radius-lg: 12px;
+  --radius-ctl: 8px;
+  --radius-badge: 6px;
+  --radius-pill: 999px;
   --blur-sm: 16px;
   --blur-md: 22px;
   --blur-lg: 28px;
@@ -4727,7 +4731,7 @@ code .tok-num,
 .command-deck {
   position: relative;
   margin: 14px 0 22px;
-  border-radius: 16px;
+  border-radius: var(--radius-card);
   background:
     radial-gradient(120% 140% at 12% 0%, rgba(41, 151, 255, 0.11) 0%, transparent 55%),
     radial-gradient(100% 120% at 88% 100%, rgba(48, 209, 88, 0.06) 0%, transparent 50%),
@@ -4759,19 +4763,19 @@ code .tok-num,
 }
 
 .command-deck-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  padding: 11px 18px;
+  padding: 10px 16px;
   cursor: pointer;
   user-select: none;
-  border-radius: 16px 16px 0 0;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
   transition: background 0.2s ease;
 }
 
 .command-deck.is-collapsed .command-deck-header {
-  border-radius: 16px;
+  border-radius: var(--radius-card);
 }
 
 .command-deck-header:hover {
@@ -4781,15 +4785,18 @@ code .tok-num,
 .command-deck-title-group {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
+  justify-self: start;
+  min-width: 0;
 }
 
 .command-deck-led {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 10px var(--accent);
+  background: var(--course-signal, var(--accent));
+  box-shadow: 0 0 10px var(--course-signal, var(--accent));
+  flex-shrink: 0;
 }
 
 .command-deck-eyebrow {
@@ -4797,32 +4804,64 @@ code .tok-num,
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
+  line-height: 1;
   color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.command-deck-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  justify-self: center;
+  min-width: 0;
 }
 
 .command-deck-scope {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 10px 0 calc(10px + 0.05em);
   font-family: var(--font-mono);
   font-size: 10.5px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(41, 151, 255, 0.12);
-  color: var(--accent-hover);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  border-radius: var(--radius-ctl);
+  background: var(--course-signal-soft, rgba(41, 151, 255, 0.14));
+  border: 1px solid var(--course-signal-border, rgba(41, 151, 255, 0.34));
+  color: var(--course-signal, var(--accent-hover));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .command-deck-Telemetry-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 10px;
+  justify-self: end;
+  min-width: 0;
 }
 
 .deck-active-pill {
-  height: 22px;
-  padding: 0 9px;
-  border-radius: 999px;
-  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(255, 214, 10, 0.35);
   font-family: var(--font-dot);
   font-size: 10px;
   letter-spacing: 0.05em;
+  line-height: 1;
   cursor: pointer;
   background: rgba(255, 214, 10, 0.16);
   color: var(--warning);
@@ -4838,19 +4877,21 @@ code .tok-num,
   display: flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
 }
 
 .command-deck-inline-bar {
-  width: 76px;
+  width: 72px;
   height: 5px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.08);
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .command-deck-inline-fill {
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: linear-gradient(90deg, var(--accent), var(--success));
   transition: width 0.35s var(--ease-out);
 }
@@ -4858,7 +4899,10 @@ code .tok-num,
 .command-deck-inline-Label {
   font-family: var(--font-mono);
   font-size: 11px;
+  line-height: 1;
   color: var(--text-secondary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .command-deck-chevron {
@@ -4869,6 +4913,7 @@ code .tok-num,
   transform: rotate(45deg);
   transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease;
   margin-right: 2px;
+  flex-shrink: 0;
 }
 
 .command-deck.is-open .command-deck-chevron {
@@ -4882,14 +4927,14 @@ code .tok-num,
   gap: 1px;
   background: rgba(255, 255, 255, 0.07);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0 0 16px 16px;
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
 }
 
 .deck-tile {
   position: relative;
   z-index: 1;
   background: rgba(12, 13, 19, 0.94);
-  padding: 16px 18px;
+  padding: 15px 16px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -4902,20 +4947,20 @@ code .tok-num,
 }
 
 .deck-tile:first-child {
-  border-bottom-left-radius: 15px;
+  border-bottom-left-radius: calc(var(--radius-card) - 1px);
 }
 
 .deck-tile:last-child {
-  border-bottom-right-radius: 15px;
+  border-bottom-right-radius: calc(var(--radius-card) - 1px);
 }
 
 .deck-tile:hover {
   z-index: 6;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background:
     radial-gradient(120% 100% at 50% 0%, rgba(41, 151, 255, 0.09) 0%, transparent 70%),
     rgba(18, 20, 30, 0.98);
-  transform: translateY(-5px) scale(1.014);
+  transform: translateY(-4px) scale(1.012);
   box-shadow:
     0 22px 44px -10px rgba(0, 0, 0, 0.88),
     0 0 0 1px rgba(41, 151, 255, 0.32),
@@ -4925,21 +4970,45 @@ code .tok-num,
 .bento-course-cell,
 .bento-launch-btn,
 .bento-action-chip {
-  border: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
   background: rgba(255, 255, 255, 0.03) !important;
-  border-radius: 10px !important;
+  border-radius: var(--radius-ctl) !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   transition:
     transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
     background 0.2s ease,
+    border-color 0.2s ease,
     box-shadow 0.2s ease !important;
+}
+
+.bento-course-cell {
+  padding: 7px 8px;
+  gap: 6px;
+}
+
+.bento-course-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  width: 100%;
+}
+
+.bento-course-code {
+  line-height: 1;
+  font-weight: 600;
+}
+
+.bento-course-pct {
+  line-height: 1;
 }
 
 .bento-course-cell:hover,
 .bento-launch-btn:hover,
 .bento-action-chip:hover {
   background: rgba(255, 255, 255, 0.075) !important;
-  transform: translateY(-2.5px) scale(1.02);
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  transform: translateY(-2px) scale(1.015);
   box-shadow:
     0 10px 20px -6px rgba(0, 0, 0, 0.65),
     inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
@@ -4955,9 +5024,9 @@ code .tok-num,
 .bento-launch-btn.active,
 .bento-action-chip.active {
   background: rgba(41, 151, 255, 0.16) !important;
+  border-color: rgba(41, 151, 255, 0.45) !important;
   box-shadow:
     0 8px 18px -6px rgba(41, 151, 255, 0.35),
-    inset 0 0 0 1px rgba(41, 151, 255, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
 }
 
@@ -4966,15 +5035,15 @@ code .tok-num,
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
-  border-radius: 999px;
-  border: none;
-  background: rgba(0, 0, 0, 0.42);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.65);
 }
 
 .bento-status-btn {
   height: 30px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -5014,8 +5083,8 @@ code .tok-num,
     border-bottom-left-radius: 0;
   }
   .deck-tile:last-child {
-    border-bottom-left-radius: 15px;
-    border-bottom-right-radius: 15px;
+    border-bottom-left-radius: calc(var(--radius-card) - 1px);
+    border-bottom-right-radius: calc(var(--radius-card) - 1px);
   }
 }
 
@@ -5521,4 +5590,204 @@ details.fmd.is-open > summary::after {
     opacity 0.32s var(--ease-glide),
     width 0.28s var(--ease-glide);
 }
+
+/* Streamlined Unified Border-Radius System & Responsive Header/Dashboard Refinements */
+
+/* 1. Primary Containers & Cards -> var(--radius-card) (12px) */
+details.fmt,
+.fmi,
+.command-deck,
+.bento-deck-wrap,
+.search-wrap,
+#fmq,
+#thmTypeGroup,
+.goal,
+.search-empty-state,
+.topic-Pager,
+.practice-slot-card,
+.practice-hub-card,
+.fs-pinned-card,
+.pdf-reader-shell,
+.fcb,
+.search-history-dropdown,
+.tools-dropdown,
+.term-archive-dropdown {
+  border-radius: var(--radius-card);
+}
+
+/* 2. Inner Stages, Sub-Cards & Rectangular Controls -> var(--radius-ctl) (8px) */
+.fmm,
+.fmcode,
+details.fmd,
+.mini-wrap,
+table.mini,
+.fmnote,
+.thsee,
+.bento-course-cell,
+.bento-launch-btn,
+.bento-action-chip,
+.bento-scope-chip,
+.command-deck-scope,
+.sb-btn,
+.dd-seg,
+.doomsday-tag,
+.fmfreq,
+.fmcnt,
+.fmst,
+.fmcp,
+.fml,
+.sb-phone-controls,
+.sb-phone-course-btn,
+.sb-phone-term-btn.ntype-emblem,
+.sb-phone-term-list,
+.sh-item,
+.dropdown-item,
+.practice-mod-pill,
+.hud-btn,
+.pdf-ctrl-btn {
+  border-radius: var(--radius-ctl);
+}
+
+/* 3. Compact Inline Badges & Counters -> var(--radius-badge) (6px) */
+.tn,
+.fm-idx-badge,
+.fm-year-tag,
+.fmt-course-tag,
+.bento-chip-count,
+.sb-close-btn,
+.sidebar-close-btn,
+.term-status-badge,
+.sb-phone-sec-val,
+#qcnt {
+  border-radius: var(--radius-badge);
+}
+
+/* 4. Standout Capsule Controls (All / Starred / Unlearned & Course Selector Pills) -> var(--radius-pill) (999px) */
+.bento-status-strip,
+.bento-status-btn,
+.course-pill,
+#fmchips.chip-group button[data-c],
+.course-selector-toggle,
+.deck-active-pill {
+  border-radius: var(--radius-pill);
+}
+
+.bento-scope-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 9px;
+  line-height: 1;
+}
+
+.bento-kpi-meter {
+  min-width: 56px;
+}
+
+/* Mobile & Tablet Top Header + Dashboard Refinements */
+@media (max-width: 860px) {
+  .hd {
+    padding: 8px 12px;
+    min-height: 0;
+    gap: 8px;
+  }
+
+  .hd-left {
+    width: 100%;
+    padding: 0;
+    justify-content: flex-start;
+  }
+
+  .hd-right {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tabs {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: var(--radius-ctl);
+    background: rgba(255, 255, 255, 0.02);
+    overflow: hidden;
+  }
+
+  .tab {
+    min-height: 36px;
+    height: 36px;
+    padding: 0 8px;
+    justify-content: center;
+    font-size: var(--fs-xs);
+    gap: 6px;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .tab > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .goal-toggle-btn {
+    min-height: 36px;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-ctl);
+    background: rgba(255, 255, 255, 0.02);
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .hd-right .tools-menu-wrap {
+    align-items: center;
+  }
+
+  .settings-icon-btn {
+    min-height: 36px;
+    height: 36px;
+    width: 38px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-ctl);
+    background: rgba(255, 255, 255, 0.02);
+  }
+}
+
+@media (max-width: 640px) {
+  .command-deck-header {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .command-deck-inline-bar {
+    display: none;
+  }
+
+  .bento-kpi-meter {
+    display: none;
+  }
+
+  .deck-tile {
+    padding: 12px 14px;
+  }
+
+  .bento-course-matrix {
+    gap: 5px;
+  }
+
+  .bento-course-cell {
+    padding: 6px 6px;
+  }
+}
+
 

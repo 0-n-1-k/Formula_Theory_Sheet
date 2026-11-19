@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://ais-pre-y3gnskh6hsbvpulg4fe7hr-422301912080.asia-northeast1.run.app/sitemap.txt
+Sitemap: https://formula-theory-sheet.vercel.app/sitemap.xml

@@ -3624,12 +3624,12 @@ export default function App() {
                 <div className="command-deck-title-group">
                   <span className="command-deck-led" aria-hidden="true" />
                   <span className="command-deck-eyebrow">DASHBOARD</span>
+                </div>
+
+                <div className="command-deck-center">
                   <span className="command-deck-scope">
                     {persisted.course === 'ALL' ? 'ALL COURSES' : activeCourseBadge}
                   </span>
-                </div>
-
-                <div className="command-deck-Telemetry-right">
                   {highYieldOnly ? (
                     <button
                       type="button"
@@ -3656,7 +3656,9 @@ export default function App() {
                       {persisted.status.toUpperCase()} ×
                     </button>
                   ) : null}
+                </div>
 
+                <div className="command-deck-Telemetry-right">
                   <div className="command-deck-inline-progress" aria-hidden="true">
                     <div className="command-deck-inline-bar">
                       <div
