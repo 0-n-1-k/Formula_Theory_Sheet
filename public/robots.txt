@@ -2,3 +2,5 @@ User-agent: *
 Allow: /
 
 Sitemap: https://formula-theory-sheet.vercel.app/sitemap.xml
+Sitemap: https://formula-theory-sheet.vercel.app/sitemap.txt
+
