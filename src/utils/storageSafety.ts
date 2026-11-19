@@ -305,7 +305,8 @@ export function clampHudHeightPx(pointerY: number, viewportHeight: number): numb
   return Math.min(maxPx, Math.max(MIN_HUD_HEIGHT_PX, Math.round(pointerY)));
 }
 
-export type ResizeCorner = 'nw' | 'ne' | 'sw' | 'se';
+export type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
+export type ResizeCorner = ResizeDirection;
 export type PinnedCardSizeMode = 'formula-only' | 'compact' | 'full';
 
 export interface PinnedCardLayout {
@@ -317,11 +318,13 @@ export interface PinnedCardLayout {
 }
 
 export const PINNED_MIN_WIDTH = 240;
-export const PINNED_MAX_WIDTH = 680;
+export const PINNED_MAX_WIDTH = 1120;
 export const PINNED_DEFAULT_WIDTH = 420;
+export const PINNED_WIDE_DEFAULT_WIDTH = 560;
 export const PINNED_MIN_HEIGHT = 104;
-export const PINNED_MAX_HEIGHT = 560;
+export const PINNED_MAX_HEIGHT = 820;
 export const PINNED_DEFAULT_HEIGHT = 330;
+export const PINNED_WIDE_DEFAULT_HEIGHT = 420;
 export const PINNED_FORMULA_ONLY_MAX_HEIGHT = 155;
 export const PINNED_FORMULA_ONLY_MAX_WIDTH = 290;
 
@@ -343,15 +346,90 @@ export function clampPinnedCardPosition(
   };
 }
 
+export interface PinnedCardContentSizingInput {
+  rawLatex?: string;
+  codeContent?: string;
+  htmlContent?: string;
+  hasSteps?: boolean;
+  isWide?: boolean;
+}
+
+export function estimatePinnedCardSize(
+  input: PinnedCardContentSizingInput
+): { width: number; height: number } {
+  const rawLatex = (input.rawLatex ?? '').trim();
+  const codeContent = (input.codeContent ?? '').trim();
+  const htmlContent = (input.htmlContent ?? '').trim();
+  const stepsExtra = input.hasSteps ? 38 : 0;
+
+  let width = PINNED_DEFAULT_WIDTH;
+  let height = 180;
+
+  if (codeContent) {
+    const lines = codeContent.split('\n');
+    const maxLineLen = lines.reduce((m, line) => Math.max(m, line.length), 0);
+    width = Math.round(Math.min(720, Math.max(480, 120 + Math.min(82, maxLineLen) * 7.5)));
+    const htmlExtra = htmlContent ? 56 : 0;
+    const latexExtra = rawLatex ? 64 : 0;
+    height = Math.round(
+      Math.min(480, Math.max(196, 94 + lines.length * 22 + htmlExtra + latexExtra + stepsExtra))
+    );
+  } else if (htmlContent) {
+    const hasTable = /<table[\s>]/i.test(htmlContent);
+    const tableRows = (htmlContent.match(/<tr[\s>]/gi) || []).length;
+    const listItems = (htmlContent.match(/<li[\s>]/gi) || []).length;
+    const plainTextLen = htmlContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().length;
+    width = hasTable || input.isWide ? 560 : 440;
+    const latexExtra = rawLatex ? 78 : 0;
+    height = Math.round(
+      Math.min(
+        460,
+        Math.max(
+          184,
+          104 + tableRows * 32 + listItems * 26 + Math.round(plainTextLen / 2.8) + latexExtra + stepsExtra
+        )
+      )
+    );
+  } else if (rawLatex) {
+    const envLines = (rawLatex.match(/\\\\/g) || []).length;
+    const hasBlockEnv = /\\begin\{(cases|aligned|align|matrix|pmatrix|bmatrix|vmatrix|array)\}/.test(rawLatex);
+    if (envLines === 0 && !hasBlockEnv && rawLatex.length <= 95) {
+      width = Math.round(Math.min(460, Math.max(360, 260 + rawLatex.length * 2.1)));
+      height = 172 + stepsExtra;
+    } else {
+      width = input.isWide || rawLatex.length > 140 ? 540 : 460;
+      height = Math.round(Math.min(360, Math.max(204, 152 + envLines * 36 + stepsExtra)));
+    }
+  }
+
+  return {
+    width: Math.min(PINNED_MAX_WIDTH, Math.max(PINNED_MIN_WIDTH, width)),
+    height: Math.min(PINNED_MAX_HEIGHT, Math.max(PINNED_MIN_HEIGHT, height)),
+  };
+}
+
 export function createInitialPinnedLayout(
   index: number,
   viewportWidth = 1440,
   viewportHeight = 900,
-  zIndex = 10006
+  zIndex = 10006,
+  preferWideOrSize: boolean | { width: number; height: number } = false
 ): PinnedCardLayout {
   const safeIdx = Math.max(0, index);
-  const width = Math.min(PINNED_DEFAULT_WIDTH, Math.max(PINNED_MIN_WIDTH, viewportWidth - 32));
-  const height = Math.min(PINNED_DEFAULT_HEIGHT, Math.max(PINNED_MIN_HEIGHT, viewportHeight - 100));
+  const targetWidth =
+    typeof preferWideOrSize === 'object'
+      ? preferWideOrSize.width
+      : preferWideOrSize
+      ? PINNED_WIDE_DEFAULT_WIDTH
+      : PINNED_DEFAULT_WIDTH;
+  const targetHeight =
+    typeof preferWideOrSize === 'object'
+      ? preferWideOrSize.height
+      : preferWideOrSize
+      ? PINNED_WIDE_DEFAULT_HEIGHT
+      : PINNED_DEFAULT_HEIGHT;
+  const width = Math.min(targetWidth, Math.max(PINNED_MIN_WIDTH, viewportWidth - 32));
+  const height = Math.min(targetHeight, Math.max(PINNED_MIN_HEIGHT, viewportHeight - 100));
   const rawX = 20 + safeIdx * 26;
   const rawY = viewportHeight - height - 24 - safeIdx * 26;
   const pos = clampPinnedCardPosition(rawX, rawY, width, height, viewportWidth, viewportHeight);
@@ -366,7 +444,7 @@ export function createInitialPinnedLayout(
 
 export function computeCornerResizedLayout(
   start: PinnedCardLayout,
-  corner: ResizeCorner,
+  direction: ResizeDirection,
   deltaX: number,
   deltaY: number,
   viewportWidth = 1440,
@@ -385,16 +463,21 @@ export function computeCornerResizedLayout(
   let nextX = start.x;
   let nextY = start.y;
 
-  if (corner === 'se' || corner === 'ne') {
+  const resizesEast = direction === 'e' || direction === 'ne' || direction === 'se';
+  const resizesWest = direction === 'w' || direction === 'nw' || direction === 'sw';
+  const resizesSouth = direction === 's' || direction === 'sw' || direction === 'se';
+  const resizesNorth = direction === 'n' || direction === 'nw' || direction === 'ne';
+
+  if (resizesEast) {
     nextWidth = Math.min(maxWidth, Math.max(PINNED_MIN_WIDTH, Math.round(start.width + deltaX)));
-  } else {
+  } else if (resizesWest) {
     nextWidth = Math.min(maxWidth, Math.max(PINNED_MIN_WIDTH, Math.round(start.width - deltaX)));
     nextX = rightEdge - nextWidth;
   }
 
-  if (corner === 'se' || corner === 'sw') {
+  if (resizesSouth) {
     nextHeight = Math.min(maxHeight, Math.max(PINNED_MIN_HEIGHT, Math.round(start.height + deltaY)));
-  } else {
+  } else if (resizesNorth) {
     nextHeight = Math.min(maxHeight, Math.max(PINNED_MIN_HEIGHT, Math.round(start.height - deltaY)));
     nextY = bottomEdge - nextHeight;
   }
@@ -408,6 +491,8 @@ export function computeCornerResizedLayout(
     zIndex: start.zIndex,
   };
 }
+
+export const computePinnedResizedLayout = computeCornerResizedLayout;
 
 export function getPinnedCardSizeMode(
   width: number,

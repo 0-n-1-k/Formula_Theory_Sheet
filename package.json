@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "test": "tsx --test src/utils/*.test.ts",
-    "lint": "tsc --noEmit && tsx --test src/utils/academicData.test.ts src/utils/contentParser.test.ts",
+    "audit:cards": "tsx scripts/audit-cards.ts",
+    "lint": "tsc --noEmit && tsx --test src/utils/academicData.test.ts src/utils/contentParser.test.ts src/utils/cardAudit.test.ts",
     "embeddings:build": "node scripts/generate-card-embeddings.mjs"
   },
   "dependencies": {

@@ -13,6 +13,7 @@ import {
   clampHudHeightPx,
   MIN_HUD_HEIGHT_PX,
   createInitialPinnedLayout,
+  estimatePinnedCardSize,
   clampPinnedCardPosition,
   computeCornerResizedLayout,
   getPinnedCardSizeMode,
@@ -190,24 +191,96 @@ test('clampHudHeightPx clamps vertical pointer position between MIN_HUD_HEIGHT_P
   assert.equal(clampHudHeightPx(Number.NaN, 900), 450);
 });
 
-test('pinned card position, corner resizing, and size modes clamp and switch between formula-only and full card', () => {
+test('pinned card position, 8-way omnidirectional resizing, and size modes clamp accurately', () => {
   const initial = createInitialPinnedLayout(0, 1440, 900, 10010);
   assert.equal(initial.width, 420);
   assert.equal(initial.height, 330);
   assert.equal(getPinnedCardSizeMode(initial.width, initial.height, false), 'full');
+
+  const wideInitial = createInitialPinnedLayout(0, 1440, 900, 10011, true);
+  assert.equal(wideInitial.width, 560);
+  assert.equal(wideInitial.height, 420);
 
   const shrunkSe = computeCornerResizedLayout(initial, 'se', -200, -250, 1440, 900);
   assert.equal(shrunkSe.width, PINNED_MIN_WIDTH);
   assert.equal(shrunkSe.height, PINNED_MIN_HEIGHT);
   assert.equal(getPinnedCardSizeMode(shrunkSe.width, shrunkSe.height, false), 'formula-only');
 
-  const expandedSe = computeCornerResizedLayout(initial, 'se', 500, 400, 1440, 900);
+  const expandedSe = computeCornerResizedLayout(initial, 'se', 900, 700, 1440, 900);
   assert.equal(expandedSe.width, PINNED_MAX_WIDTH);
   assert.equal(expandedSe.height, PINNED_MAX_HEIGHT);
   assert.equal(getPinnedCardSizeMode(expandedSe.width, expandedSe.height, false), 'full');
 
+  const centered = { x: 400, y: 300, width: 420, height: 300, zIndex: 10010 };
+  const dragE = computeCornerResizedLayout(centered, 'e', 120, 999, 1440, 900);
+  assert.equal(dragE.width, 540);
+  assert.equal(dragE.height, 300);
+  assert.equal(dragE.x, 400);
+  assert.equal(dragE.y, 300);
+
+  const dragW = computeCornerResizedLayout(centered, 'w', -100, 999, 1440, 900);
+  assert.equal(dragW.width, 520);
+  assert.equal(dragW.height, 300);
+  assert.equal(dragW.x, 300);
+  assert.equal(dragW.x + dragW.width, centered.x + centered.width);
+
+  const dragN = computeCornerResizedLayout(centered, 'n', 999, -80, 1440, 900);
+  assert.equal(dragN.width, 420);
+  assert.equal(dragN.height, 380);
+  assert.equal(dragN.x, 400);
+  assert.equal(dragN.y, 220);
+  assert.equal(dragN.y + dragN.height, centered.y + centered.height);
+
+  const dragS = computeCornerResizedLayout(centered, 's', 999, 90, 1440, 900);
+  assert.equal(dragS.width, 420);
+  assert.equal(dragS.height, 390);
+  assert.equal(dragS.x, 400);
+  assert.equal(dragS.y, 300);
+
+  const dragNw = computeCornerResizedLayout(centered, 'nw', -60, -50, 1440, 900);
+  assert.equal(dragNw.width, 480);
+  assert.equal(dragNw.height, 350);
+  assert.equal(dragNw.x, 340);
+  assert.equal(dragNw.y, 250);
+
+  const dragNe = computeCornerResizedLayout(centered, 'ne', 60, -50, 1440, 900);
+  assert.equal(dragNe.width, 480);
+  assert.equal(dragNe.height, 350);
+  assert.equal(dragNe.x, 400);
+  assert.equal(dragNe.y, 250);
+
+  const dragSw = computeCornerResizedLayout(centered, 'sw', -60, 50, 1440, 900);
+  assert.equal(dragSw.width, 480);
+  assert.equal(dragSw.height, 350);
+  assert.equal(dragSw.x, 340);
+  assert.equal(dragSw.y, 300);
+
   const clampedPos = clampPinnedCardPosition(-50, 2000, 400, 300, 1440, 900);
   assert.equal(clampedPos.x, 8);
   assert.equal(clampedPos.y, 900 - 300 - 8);
+});
+
+test('estimatePinnedCardSize tightly sizes short formulas and expands for multiline math and code blocks', () => {
+  const shortFormula = estimatePinnedCardSize({
+    rawLatex: 'v_k = v_s \\frac{R_k}{R_1 + R_2 + \\dots + R_n}',
+  });
+  assert.equal(shortFormula.height, 172);
+  assert.ok(shortFormula.width >= 360 && shortFormula.width <= 460);
+
+  const multiLineMath = estimatePinnedCardSize({
+    rawLatex: 'a = b \\\\ c = d \\\\ e = f',
+  });
+  assert.ok(multiLineMath.height > shortFormula.height);
+
+  const shortCode = estimatePinnedCardSize({
+    codeContent: 'int *p = a;\n*(p + i) == a[i];\nconst int *p1 = a;\nint *const p2 = a;',
+  });
+  assert.ok(shortCode.width >= 480);
+  assert.ok(shortCode.height >= 196 && shortCode.height <= 260);
+
+  const longCode = estimatePinnedCardSize({
+    codeContent: Array.from({ length: 18 }, (_, i) => `int x${i} = ${i};`).join('\n'),
+  });
+  assert.ok(longCode.height >= 400 && longCode.height <= 480);
 });
 

@@ -381,25 +381,25 @@ export function sanitizeContextText(
 
   // 4. Remove parenthetical textbook / section / page / problem citations e.g. "(Sadiku Prob. 6.57)", "(pp. 7–9)", "(Sec. 4.1)"
   text = text.replace(
-    /\(\s*(?:[^()]*\b(?:Sadiku|Boylestad|Alexander|Grewal|Kreyszig|Schaum(?:'s)?|Kernighan|Ritchie|Balagurusamy|Herbert\s+Schildt|Schildt|Sec(?:t|tion)?s?\.?|Ch(?:ap(?:ter)?)?\.?|pp\.?|Pages?|Lec(?:ture)?s?\.?|Slides?|Prob(?:lem)?s?\.?)\b[^()]*)\)/gi,
+    /\(\s*(?:[^()]*\b(?:Sadiku|Boylestad|Alexander|Grewal|Kreyszig|Schaum(?:'s)?|Kernighan|Ritchie|Balagurusamy|Herbert\s+Schildt|Schildt|(?<!\\)Sec(?:t|tion)?s?\.?\s*\d|(?<!\\)Ch(?:ap(?:ter)?)?\.?\s*\d|pp\.?\s*\d|Pages?\s*\d|Lec(?:ture)?s?\.?\s*\d|Slides?\s*\d|Prob(?:lem)?s?\.?\s*\d)[^()]*)\)/gi,
     ''
   );
 
   // 5. Remove inline textbook author + section/chapter/problem citations
   text = text.replace(
-    /\b(?:Sadiku|Boylestad|Alexander|Grewal|Kreyszig|Schaum(?:'s)?|Kernighan(?:\s*&(?:amp;)?\s*Ritchie)?|Ritchie|Balagurusamy|Herbert\s+Schildt|Schildt)(?:\s*,\s*Teach\s+Yourself\s+C(?:\+\+)?)?(?:\s*\([^)]*\))?\s*(?:[,:]?\s*(?:Sec(?:t|tion)?s?\.?|Ch(?:ap(?:ter)?)?\.?|Prob(?:lem)?s?\.?|Ex(?:ample)?s?\.?)\s*\d+(?:\.\d+)*(?:\s*[–,-]\s*\d+(?:\.\d+)*)*)*/gi,
+    /\b(?:Sadiku|Boylestad|Alexander|Grewal|Kreyszig|Schaum(?:'s)?|Kernighan(?:\s*&(?:amp;)?\s*Ritchie)?|Ritchie|Balagurusamy|Herbert\s+Schildt|Schildt)(?:\s*,\s*Teach\s+Yourself\s+C(?:\+\+)?)?(?:\s*\([^)]*\))?\s*(?:[,:]?\s*(?:(?<!\\)Sec(?:t|tion)?s?\.?|(?<!\\)Ch(?:ap(?:ter)?)?\.?|Prob(?:lem)?s?\.?|Ex(?:ample)?s?\.?)\s*\d+(?:\.\d+)*(?:\s*[–,-]\s*\d+(?:\.\d+)*)*)*/gi,
     ''
   );
 
   // 6. Remove standalone Section / Chapter / Page number references
   text = text.replace(
-    /\b(?:Sec(?:t|tion)?s?\.?|Ch(?:ap(?:ter)?)?\.?|Pages?|pp\.?)\s*\d+(?:\.\d+)*(?:\s*(?:&|and|[–,-])\s*(?:Sec(?:t|tion)?s?\.?\s*|Pages?\s*|pp\.?\s*)?\d+(?:\.\d+)*)*(?:\s*\([^)]*\))?/gi,
+    /(?<!\\)\b(?:Sec(?:t|tion)?s?\.?|Ch(?:ap(?:ter)?)?\.?|Pages?|pp\.?)\s*\d+(?:\.\d+)*(?:\s*(?:&|and|[–,-])\s*(?:Sec(?:t|tion)?s?\.?\s*|Pages?\s*|pp\.?\s*)?\d+(?:\.\d+)*)*(?:\s*\([^)]*\))?/gi,
     ''
   );
 
   // 7. Clean leftover empty parens, dangling connectors, and duplicate spaces without corrupting C++ :: or ...
   text = text
-    .replace(/\(\s*\)/g, '')
+    .replace(/(?<![A-Za-z0-9_~])\(\s*\)/g, '')
     .replace(/\s+([,.;])/g, '$1')
     .replace(/([,;])\s*[,;]+/g, '$1')
     .replace(/^\s*(?:[,;:.–—-]|and|&|&amp;)\s*/i, '')
@@ -446,9 +446,9 @@ export function sanitizeHtmlContentArtifacts(html?: string): string | undefined 
     '$1'
   );
 
-  // Strip parenthetical textbook / Sec. / Rev. Guide tags inside .fmhtml headings
+  // Strip parenthetical textbook / Sec. / Rev. Guide tags inside .fmhtml headings without touching math like \sec or chemistry like CH_4
   out = out.replace(
-    /\s*\((?:[^()]*\b(?:Schildt|Sadiku|Rev\.?\s*Guide|Revision\s+Guide|Sec(?:t|tion)?s?\.?|Ch(?:ap)?\.?)\b[^()]*)\)/gi,
+    /\s*\((?:[^()]*\b(?:Schildt|Sadiku|Rev\.?\s*Guide|Revision\s+Guide|(?<!\\)Sec(?:t|tion)?s?\.?\s*\d|(?<!\\)Ch(?:ap(?:ter)?)?\.?\s*\d)[^()]*)\)/gi,
     ''
   );
 
@@ -711,6 +711,13 @@ function unpackCrammedCseLine(line: string): string[] {
         hasTrailingCloseBraceAfterStmt ||
         hasMultipleCloseBraces
       ) {
+        // Attach an immediately following inline /* ... */ comment to this statement instead of gluing it to the next line
+        const restAfterSemi = trimmed.slice(i + 1);
+        const trailingBlockMatch = restAfterSemi.match(/^(\s*)(\/\*[^*]*\*\/)/);
+        if (trailingBlockMatch) {
+          buf += ` ${trailingBlockMatch[2]}`;
+          i += trailingBlockMatch[0].length;
+        }
         flush();
       }
       continue;
@@ -736,13 +743,29 @@ export function formatCseCodeBlock(rawCode: string): string {
   const cleaned = rawCode
     .replace(/\r\n?/g, '\n')
     .replace(/(\/\*\s*)\d+\.\d+(?:\.\d+)?\s+(?=[A-Za-z])/g, '$1')
+    .replace(/(\/\*[^\n]*?&\s*)\d+\.\d+(?:\.\d+)?\s+(?=[A-Za-z])/g, '$1')
     .replace(/\s*\((?:Rev\.?\s*Guide\s*)?Sec(?:t|tion)?s?\.?\s*[\d.,\s–&-]+\)/gi, '')
     .trim();
 
   const rawLines = cleaned.split('\n');
   const unpackedLines: string[] = [];
+  let unpackInBlockComment = false;
 
   for (const rawLine of rawLines) {
+    const trimmedRaw = rawLine.trim();
+    if (unpackInBlockComment) {
+      unpackedLines.push(trimmedRaw);
+      if (trimmedRaw.includes('*/')) {
+        unpackInBlockComment = false;
+      }
+      continue;
+    }
+    if (trimmedRaw.startsWith('/*') && !trimmedRaw.includes('*/')) {
+      unpackedLines.push(trimmedRaw);
+      unpackInBlockComment = true;
+      continue;
+    }
+
     // Normalize excessive whitespace before `{` in function signatures: `int fn(char *s)        {` -> `int fn(char *s) {`
     const normalizedSig = rawLine.replace(/^(\s*[^/\n]+?\))\s{2,}\{/g, '$1 {');
     const pieces = unpackCrammedCseLine(normalizedSig);

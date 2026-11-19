@@ -66,15 +66,14 @@ import {
   clampPinnedCardPosition,
   computeCornerResizedLayout,
   createInitialPinnedLayout,
+  estimatePinnedCardSize,
   getPinnedCardSizeMode,
-  PINNED_DEFAULT_HEIGHT,
-  PINNED_DEFAULT_WIDTH,
   PINNED_MIN_HEIGHT,
   PINNED_MIN_WIDTH,
   type CourseCode,
   type PersistedAppState,
   type PinnedCardLayout,
-  type ResizeCorner,
+  type ResizeDirection,
   type StatusFilter,
   type TabMode,
 } from './utils/storageSafety';
@@ -343,8 +342,26 @@ export const DoomsdayDrawerClock = memo(function DoomsdayDrawerClock({
   return (
     <span id="cdt" className="is-static">
       <span className="doomsday-tag">{parts.prefix}</span>
-      <span className="ntype-badge">
-        {parts.days}D : {parts.hrs}H : {parts.mins}M : {parts.secs}S
+      <span className="doomsday-segments">
+        <span className="dd-seg">
+          <span className="dd-val">{parts.days}</span>
+          <span className="dd-unit">D</span>
+        </span>
+        <span className="dd-sep">:</span>
+        <span className="dd-seg">
+          <span className="dd-val">{parts.hrs}</span>
+          <span className="dd-unit">H</span>
+        </span>
+        <span className="dd-sep">:</span>
+        <span className="dd-seg">
+          <span className="dd-val">{parts.mins}</span>
+          <span className="dd-unit">M</span>
+        </span>
+        <span className="dd-sep">:</span>
+        <span className="dd-seg">
+          <span className="dd-val">{parts.secs}</span>
+          <span className="dd-unit">S</span>
+        </span>
       </span>
     </span>
   );
@@ -457,6 +474,7 @@ export interface FormulaCardViewProps {
   onPeekTopic?: (topicId: string) => void;
   onPinCard?: (card: FormulaCardRecord) => void;
   isPinned?: boolean;
+  hideContext?: boolean;
   topicTitle?: string;
   highlightTokens?: readonly string[];
 }
@@ -476,6 +494,7 @@ export const FormulaCardView = memo(function FormulaCardView({
   onPeekTopic,
   onPinCard,
   isPinned = false,
+  hideContext = false,
   topicTitle,
   highlightTokens,
 }: FormulaCardViewProps) {
@@ -663,14 +682,14 @@ export const FormulaCardView = memo(function FormulaCardView({
             />
           </pre>
         ) : null}
-        {card.note ? (
+        {!hideContext && card.note ? (
           <SecondaryMathText
             className="fmnote"
             content={card.note}
             highlightTokens={activeHighlightTokens}
           />
         ) : null}
-        {card.seeAlso ? (
+        {!hideContext && card.seeAlso ? (
           <SecondaryMathText
             className="thsee"
             content={card.seeAlso}
@@ -711,7 +730,7 @@ export const FormulaCardView = memo(function FormulaCardView({
             </div>
           </details>
         ) : null}
-        {card.bodyText || card.useText ? (
+        {!hideContext && (card.bodyText || card.useText) ? (
           <div className="fmdet">
             {card.bodyText ? (
               <div className="fm-spec-pod fmw-pod">
@@ -1001,7 +1020,7 @@ export default function App() {
   const [pinInteraction, setPinInteraction] = useState<{
     type: 'drag' | 'resize';
     cardId: string;
-    corner?: ResizeCorner;
+    direction?: ResizeDirection;
     startX: number;
     startY: number;
     startLayout: PinnedCardLayout;
@@ -1160,7 +1179,7 @@ export default function App() {
     };
     window.addEventListener('resize', handleResize, { passive: true });
     return () => window.removeEventListener('resize', handleResize);
-  }, [updateChromeHeight, persisted.goalOpen, persisted.tab, persisted.courseBarCollapsed]);
+  }, [updateChromeHeight, persisted.goalOpen, persisted.tab]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -1469,28 +1488,63 @@ export default function App() {
     return set;
   }, [allSections]);
 
-  // Per-course breakdown for the Bento Overview Command Deck
+  // Per-course breakdown for the Bento Overview Command Deck (including ALL & GEN MATH)
   const courseMasteryBreakdown = useMemo(() => {
     const allCourseCards = [...fmCardsWithIndex, ...thmCardsWithIndex].map((x) => x.card);
-    return courseOptions
-      .filter((c) => c.code !== 'ALL' && c.code !== 'GEN')
-      .map((c) => {
-        const cards = allCourseCards.filter((card) => card.course === c.code);
-        const total = cards.length;
+    return courseOptions.map((c) => {
+      if (c.code === 'ALL') {
+        const total = allCourseCards.length;
         let learned = 0;
-        for (const card of cards) {
+        for (const card of allCourseCards) {
           if (persisted.learned[card.id]) learned++;
         }
         const pct = total > 0 ? Math.round((learned / total) * 100) : 0;
         return {
           code: c.code,
           badge: c.badge,
+          displayLabel: 'ALL',
+          statLabel: `${pct}%`,
+          title: `Show all courses (${learned}/${total} learned)`,
           total,
           learned,
           pct,
+          isReference: false,
         };
-      });
-  }, [courseOptions, fmCardsWithIndex, thmCardsWithIndex, persisted.learned]);
+      }
+      if (c.code === 'GEN') {
+        const total = genCardsWithIndex.length;
+        return {
+          code: c.code,
+          badge: c.badge,
+          displayLabel: 'GEN MATH',
+          statLabel: `${total} REF`,
+          title: `Filter by ${c.badge} ${c.label} (${total} reference cards)`,
+          total,
+          learned: total,
+          pct: 100,
+          isReference: true,
+        };
+      }
+      const cards = allCourseCards.filter((card) => card.course === c.code);
+      const total = cards.length;
+      let learned = 0;
+      for (const card of cards) {
+        if (persisted.learned[card.id]) learned++;
+      }
+      const pct = total > 0 ? Math.round((learned / total) * 100) : 0;
+      return {
+        code: c.code,
+        badge: c.badge,
+        displayLabel: c.code,
+        statLabel: `${pct}%`,
+        title: `Filter by ${c.badge} (${learned}/${total} learned)`,
+        total,
+        learned,
+        pct,
+        isReference: false,
+      };
+    });
+  }, [courseOptions, fmCardsWithIndex, thmCardsWithIndex, genCardsWithIndex, persisted.learned]);
 
   const deferredTokens = useMemo(
     () => tokenizeSearchQuery(deferredQuery),
@@ -1805,13 +1859,6 @@ export default function App() {
     },
     [genSections]
   );
-
-  const handleToggleCourseBar = useCallback(() => {
-    setPersisted((prev) => ({
-      ...prev,
-      courseBarCollapsed: !prev.courseBarCollapsed,
-    }));
-  }, []);
 
   const handleStatusChange = useCallback((status: StatusFilter) => {
     setPersisted((prev) => ({ ...prev, status }));
@@ -2520,6 +2567,13 @@ export default function App() {
 
   const handlePinCard = useCallback(
     (card: FormulaCardRecord) => {
+      const fittedSize = estimatePinnedCardSize({
+        rawLatex: card.rawLatex,
+        codeContent: card.codeContent,
+        htmlContent: card.htmlContent,
+        hasSteps: Boolean(card.steps && card.steps.length > 0),
+        isWide: Boolean(cardLayoutMetaById.get(card.id)?.isWide),
+      });
       setPinnedCards((prev) => {
         const without = prev.filter((c) => c.id !== card.id);
         const nextList = [card, ...without].slice(0, 4);
@@ -2539,14 +2593,13 @@ export default function App() {
           const initial = createInitialPinnedLayout(
             idx,
             window.innerWidth,
-            window.innerHeight
+            window.innerHeight,
+            topPinZIndexRef.current,
+            fittedSize
           );
           return {
             ...prevLayouts,
-            [card.id]: {
-              ...initial,
-              zIndex: topPinZIndexRef.current,
-            },
+            [card.id]: initial,
           };
         });
         return nextList;
@@ -2558,7 +2611,7 @@ export default function App() {
       });
       retractHud();
     },
-    [retractHud]
+    [retractHud, cardLayoutMetaById]
   );
 
   const handleUnpinCard = useCallback((cardId: string) => {
@@ -2575,44 +2628,66 @@ export default function App() {
     });
   }, []);
 
-  const handleToggleMinimizePin = useCallback((cardId: string) => {
-    setPinnedLayouts((prev) => {
-      const cur =
-        prev[cardId] ??
-        createInitialPinnedLayout(0, window.innerWidth, window.innerHeight);
-      const currentMode = getPinnedCardSizeMode(
-        cur.width,
-        cur.height,
-        Boolean(minimizedPinnedIds[cardId])
-      );
-      const nextIsFormulaOnly = currentMode !== 'formula-only';
-      const targetW = nextIsFormulaOnly ? PINNED_MIN_WIDTH : PINNED_DEFAULT_WIDTH;
-      const targetH = nextIsFormulaOnly ? PINNED_MIN_HEIGHT : PINNED_DEFAULT_HEIGHT;
-      const clampedPos = clampPinnedCardPosition(
-        cur.x,
-        cur.y,
-        targetW,
-        targetH,
-        window.innerWidth,
-        window.innerHeight
-      );
-      topPinZIndexRef.current += 1;
-      setMinimizedPinnedIds((prevMin) => ({
-        ...prevMin,
-        [cardId]: nextIsFormulaOnly,
-      }));
-      return {
-        ...prev,
-        [cardId]: {
-          x: clampedPos.x,
-          y: clampedPos.y,
-          width: targetW,
-          height: targetH,
-          zIndex: topPinZIndexRef.current,
-        },
-      };
-    });
-  }, [minimizedPinnedIds]);
+  const handleUnpinAll = useCallback(() => {
+    setPinnedCards([]);
+    setMinimizedPinnedIds({});
+    setPinnedLayouts({});
+    setPinInteraction(null);
+  }, []);
+
+  const handleToggleMinimizePin = useCallback(
+    (cardId: string) => {
+      const targetCard = pinnedCards.find((c) => c.id === cardId);
+      const fittedSize = estimatePinnedCardSize({
+        rawLatex: targetCard?.rawLatex,
+        codeContent: targetCard?.codeContent,
+        htmlContent: targetCard?.htmlContent,
+        hasSteps: Boolean(targetCard?.steps && targetCard.steps.length > 0),
+        isWide: Boolean(cardLayoutMetaById.get(cardId)?.isWide),
+      });
+      setPinnedLayouts((prev) => {
+        const cur =
+          prev[cardId] ??
+          createInitialPinnedLayout(0, window.innerWidth, window.innerHeight, 10010, fittedSize);
+        const currentMode = getPinnedCardSizeMode(
+          cur.width,
+          cur.height,
+          Boolean(minimizedPinnedIds[cardId])
+        );
+        const nextIsFormulaOnly = currentMode !== 'formula-only';
+        const targetW = nextIsFormulaOnly
+          ? PINNED_MIN_WIDTH
+          : Math.min(fittedSize.width, Math.max(PINNED_MIN_WIDTH, window.innerWidth - 32));
+        const targetH = nextIsFormulaOnly
+          ? PINNED_MIN_HEIGHT
+          : Math.min(fittedSize.height, Math.max(PINNED_MIN_HEIGHT, window.innerHeight - 100));
+        const clampedPos = clampPinnedCardPosition(
+          cur.x,
+          cur.y,
+          targetW,
+          targetH,
+          window.innerWidth,
+          window.innerHeight
+        );
+        topPinZIndexRef.current += 1;
+        setMinimizedPinnedIds((prevMin) => ({
+          ...prevMin,
+          [cardId]: nextIsFormulaOnly,
+        }));
+        return {
+          ...prev,
+          [cardId]: {
+            x: clampedPos.x,
+            y: clampedPos.y,
+            width: targetW,
+            height: targetH,
+            zIndex: topPinZIndexRef.current,
+          },
+        };
+      });
+    },
+    [minimizedPinnedIds, pinnedCards, cardLayoutMetaById]
+  );
 
   const startDragPin = useCallback(
     (e: React.MouseEvent, cardId: string, layout: PinnedCardLayout) => {
@@ -2637,7 +2712,7 @@ export default function App() {
     (
       e: React.MouseEvent,
       cardId: string,
-      corner: ResizeCorner,
+      direction: ResizeDirection,
       layout: PinnedCardLayout
     ) => {
       e.preventDefault();
@@ -2654,7 +2729,7 @@ export default function App() {
       setPinInteraction({
         type: 'resize',
         cardId,
-        corner,
+        direction,
         startX: e.clientX,
         startY: e.clientY,
         startLayout: nextLayout,
@@ -2663,10 +2738,24 @@ export default function App() {
     []
   );
 
-  // Compositor-only rAF drag (translate3d) & corner resize (translate3d + scale) with single state commit on mouseup
+  // Compositor-only rAF drag (translate3d) & 8-way resize (translate3d + scale) with single state commit on mouseup
   useEffect(() => {
     if (!pinInteraction || typeof window === 'undefined') return;
     const cardEl = pinnedCardDomRefs.current[pinInteraction.cardId] ?? null;
+    const prevBodyCursor = document.body.style.cursor;
+    const dir = pinInteraction.direction ?? 'se';
+    const cursorMap: Record<ResizeDirection, string> = {
+      n: 'ns-resize',
+      s: 'ns-resize',
+      e: 'ew-resize',
+      w: 'ew-resize',
+      nw: 'nwse-resize',
+      se: 'nwse-resize',
+      ne: 'nesw-resize',
+      sw: 'nesw-resize',
+    };
+    document.body.style.cursor = pinInteraction.type === 'drag' ? 'move' : cursorMap[dir];
+
     let rafId: number | null = null;
     let latestClientX = pinInteraction.startX;
     let latestClientY = pinInteraction.startY;
@@ -2699,7 +2788,7 @@ export default function App() {
 
       const resized = computeCornerResizedLayout(
         pinInteraction.startLayout,
-        pinInteraction.corner ?? 'se',
+        dir,
         dx,
         dy,
         window.innerWidth,
@@ -2747,6 +2836,7 @@ export default function App() {
     window.addEventListener('mousemove', handleMouseMove, { passive: true });
     window.addEventListener('mouseup', handleMouseUp);
     return () => {
+      document.body.style.cursor = prevBodyCursor;
       if (rafId !== null) {
         window.cancelAnimationFrame(rafId);
       }
@@ -3015,15 +3105,6 @@ export default function App() {
                   <span>Self-Test Blur Mode</span>
                   <span className="ntype-badge">{persisted.selfTest ? 'ON' : 'OFF'}</span>
                 </button>
-                <button
-                  type="button"
-                  className={`dropdown-item${persisted.courseBarCollapsed ? ' active' : ''}`}
-                  role="menuitem"
-                  onClick={handleToggleCourseBar}
-                >
-                  <span>Compact Course Header</span>
-                  <span className="ntype-badge">{persisted.courseBarCollapsed ? 'ON' : 'OFF'}</span>
-                </button>
                 <div className="dropdown-divider" />
                 <div className="dropdown-sec-label">DATA &amp; BACKUP</div>
                 <button
@@ -3136,51 +3217,8 @@ export default function App() {
         <span className="sb-detached-grip" aria-hidden="true" />
       </button>
 
-      <section id="fmbar" ref={fmbarRef} aria-label="Course Selector and Study Controls">
-        <div className={`fmbar-inner${persisted.courseBarCollapsed ? ' merged-single-row' : ''}`}>
-          <div className="course-selector-row course-bar">
-            <button
-              type="button"
-              id="courseBarToggleBtn"
-              className={`course-selector-toggle${persisted.courseBarCollapsed ? ' collapsed' : ''}`}
-              aria-expanded={!persisted.courseBarCollapsed}
-              aria-controls="fmchips"
-              title={
-                persisted.courseBarCollapsed
-                  ? 'Expand Course Selector Bar'
-                  : 'Collapse Course Selector into Single Bar'
-              }
-              onClick={handleToggleCourseBar}
-            >
-              {persisted.courseBarCollapsed
-                ? `COURSE // ${activeCourseBadge} [+]`
-                : 'COURSE SELECT [-]'}
-            </button>
-            <div
-              id="fmchips"
-              className={`chip-group${persisted.courseBarCollapsed ? ' is-collapsed' : ''}`}
-              role="toolbar"
-              aria-label="Filter by Course"
-              aria-hidden={Boolean(persisted.courseBarCollapsed)}
-            >
-              {courseOptions.map((c) => (
-                <button
-                  key={c.code}
-                  type="button"
-                  className={`course-pill${persisted.course === c.code ? ' active' : ''}`}
-                  data-course={c.code}
-                  data-c={c.code}
-                  aria-pressed={persisted.course === c.code}
-                  aria-label={`Filter by ${c.badge} ${c.label}`}
-                  onClick={() => handleCourseChange(c.code)}
-                >
-                  <span className="course-code">{c.badge}</span>
-                  <span>{c.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
+      <section id="fmbar" ref={fmbarRef} aria-label="Search and Study Controls">
+        <div className="fmbar-inner">
           <div className="controls-utility-row">
             <div
               className={`search-wrap${hasQuery ? ' has-query' : ''}${isZeroMatch ? ' zero-match' : ''}`}
@@ -3470,6 +3508,7 @@ export default function App() {
                     <button
                       key={c.code}
                       type="button"
+                      data-c={c.code}
                       className={`sb-phone-course-btn${isActive ? ' active' : ''}${c.code === 'ALL' ? ' is-all' : ''}`}
                       aria-pressed={isActive}
                       onClick={() => handleCourseChange(c.code)}
@@ -3711,17 +3750,22 @@ export default function App() {
                               key={item.code}
                               type="button"
                               data-c={item.code}
-                              className={`bento-course-cell${isSelected ? ' active' : ''}`}
-                              title={`Filter by ${item.badge} (${item.learned}/${item.total} learned)`}
+                              className={`bento-course-cell${isSelected ? ' active' : ''}${item.code === 'GEN' ? ' is-gen' : ''}${item.isReference ? ' is-ref' : ''}`}
+                              aria-pressed={isSelected}
+                              title={item.title}
                               onClick={() =>
                                 handleCourseChange(
-                                  isSelected ? 'ALL' : (item.code as CourseCode)
+                                  item.code === 'ALL'
+                                    ? 'ALL'
+                                    : isSelected
+                                    ? 'ALL'
+                                    : (item.code as CourseCode)
                                 )
                               }
                             >
                               <div className="bento-course-top">
-                                <span className="bento-course-code">{item.code}</span>
-                                <span className="bento-course-pct">{item.pct}%</span>
+                                <span className="bento-course-code">{item.displayLabel}</span>
+                                <span className="bento-course-pct">{item.statLabel}</span>
                               </div>
                               <div className="bento-course-bar">
                                 <div
@@ -3936,11 +3980,33 @@ export default function App() {
                       <div
                         className="fs-top-hover-sensor"
                         id="fsTopHoverSensor"
-                        aria-hidden="true"
                         onMouseEnter={() => {
                           if (!fsHudPointerTop) setFsHudPointerTop(true);
                         }}
-                      />
+                      >
+                        {!fsHudOpen ? (
+                          <button
+                            type="button"
+                            id="fsHudPullTab"
+                            className="fs-hud-pull-tab"
+                            aria-label="Open Fullscreen Formula Search HUD"
+                            onClick={() => {
+                              setFsHudPointerTop(true);
+                              window.requestAnimationFrame(() => {
+                                fsSearchInputRef.current?.focus();
+                              });
+                            }}
+                          >
+                            <span>SEARCH HUD</span>
+                            <span className="fs-hud-pull-key">/</span>
+                            {pinnedCards.length > 0 ? (
+                              <span className="fs-hud-pull-pins">
+                                {pinnedCards.length} PINNED
+                              </span>
+                            ) : null}
+                          </button>
+                        ) : null}
+                      </div>
                     ) : null}
 
                     <div
@@ -4028,6 +4094,16 @@ export default function App() {
                               {sc}
                             </button>
                           ))}
+                          {pinnedCards.length > 0 ? (
+                            <button
+                              type="button"
+                              id="fsUnpinAllBtn"
+                              className="sb-btn fm-unpin-btn"
+                              onClick={handleUnpinAll}
+                            >
+                              [UNPIN ALL ({pinnedCards.length})]
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             className="sb-btn"
@@ -4204,6 +4280,7 @@ export default function App() {
                                 isStarred={Boolean(persisted.starred[card.id])}
                                 isHidden={false}
                                 selfTest={Boolean(persisted.selfTest)}
+                                hideContext={true}
                                 onToggleStar={handleToggleStar}
                                 onToggleLearned={handleToggleLearned}
                                 onCopyLatex={handleCopyLatex}
@@ -4271,7 +4348,15 @@ export default function App() {
                             createInitialPinnedLayout(
                               pIdx,
                               typeof window !== 'undefined' ? window.innerWidth : 1440,
-                              typeof window !== 'undefined' ? window.innerHeight : 900
+                              typeof window !== 'undefined' ? window.innerHeight : 900,
+                              10010,
+                              estimatePinnedCardSize({
+                                rawLatex: pCard.rawLatex,
+                                codeContent: pCard.codeContent,
+                                htmlContent: pCard.htmlContent,
+                                hasSteps: Boolean(pCard.steps && pCard.steps.length > 0),
+                                isWide: Boolean(cardLayoutMetaById.get(pCard.id)?.isWide),
+                              })
                             );
                           const isMin = Boolean(minimizedPinnedIds[pCard.id]);
                           const sizeMode = getPinnedCardSizeMode(
@@ -4281,13 +4366,34 @@ export default function App() {
                           );
                           const isInteractingThis =
                             pinInteraction?.cardId === pCard.id;
+                          const isPureFormulaPin = Boolean(
+                            pCard.rawLatex && !pCard.codeContent && !pCard.htmlContent
+                          );
+                          const isDenseFormulaPin = Boolean(
+                            isPureFormulaPin &&
+                              ((pCard.rawLatex?.length ?? 0) > 85 ||
+                                /\\\\|\\begin\{(cases|aligned|align|matrix|pmatrix|bmatrix|vmatrix|array)\}/.test(
+                                  pCard.rawLatex ?? ''
+                                ))
+                          );
+                          const isCodeStagePin = Boolean(
+                            pCard.codeContent && !pCard.rawLatex && !pCard.htmlContent
+                          );
+                          const pinCopyPayload =
+                            pCard.copyText ??
+                            (pCard.rawLatex || pCard.codeContent || pCard.title);
                           return (
                             <div
                               key={`pin-${pCard.id}`}
                               ref={(el) => {
                                 pinnedCardDomRefs.current[pCard.id] = el;
                               }}
-                              className={`fs-pinned-card mode-${sizeMode}${isInteractingThis ? ' is-interacting' : ''}`}
+                              className={`fs-pinned-card mode-${sizeMode}${
+                                isPureFormulaPin ? ' is-formula-stage' : ''
+                              }${isDenseFormulaPin ? ' is-dense-formula' : ''}${
+                                isCodeStagePin ? ' is-code-stage' : ''
+                              }${isInteractingThis ? ' is-interacting' : ''}`}
+                              data-c={pCard.course}
                               data-pinned-id={pCard.id}
                               data-size-mode={sizeMode}
                               onMouseDown={() => bringPinnedCardToFront(pCard.id)}
@@ -4305,13 +4411,14 @@ export default function App() {
                                 <div
                                   className="fs-pinned-header"
                                   onMouseDown={(e) => startDragPin(e, pCard.id, layout)}
-                                  title="Drag to move pinned card"
+                                  onDoubleClick={(e) => {
+                                    if ((e.target as HTMLElement).closest('button')) return;
+                                    handleToggleMinimizePin(pCard.id);
+                                  }}
+                                  title="Drag to move · Double-click to toggle compact mode"
                                 >
                                   <div className="fs-pinned-title">
-                                    <span
-                                      className="ntype-badge"
-                                      style={{ color: 'var(--accent)' }}
-                                    >
+                                    <span className="ntype-badge fs-pinned-course-badge">
                                       [{pCard.course}]
                                     </span>
                                     <SecondaryMathText
@@ -4327,8 +4434,17 @@ export default function App() {
                                     <button
                                       type="button"
                                       className="fm-hud-btn"
-                                      aria-label={`Formula-only mode for ${pCard.title}`}
-                                      title="Collapse to formula only"
+                                      aria-label={`Copy ${pCard.title}`}
+                                      title="Copy formula or code"
+                                      onClick={() => handleCopyLatex(pinCopyPayload)}
+                                    >
+                                      [CPY]
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="fm-hud-btn"
+                                      aria-label={`Compact mode for ${pCard.title}`}
+                                      title="Collapse to compact formula view"
                                       onClick={() => handleToggleMinimizePin(pCard.id)}
                                     >
                                       [_]
@@ -4349,7 +4465,7 @@ export default function App() {
                                     type="button"
                                     className="fm-hud-btn"
                                     aria-label={`Expand pinned card ${pCard.title}`}
-                                    title="Expand to full card"
+                                    title="Expand pinned card"
                                     onClick={() => handleToggleMinimizePin(pCard.id)}
                                   >
                                     [+]
@@ -4374,7 +4490,7 @@ export default function App() {
                                 }
                                 title={
                                   sizeMode === 'formula-only'
-                                    ? `${pCard.title} — Drag to move or drag corner to resize`
+                                    ? `${pCard.title} — Drag to move or drag any edge/corner to resize`
                                     : undefined
                                 }
                               >
@@ -4408,87 +4524,66 @@ export default function App() {
                                     />
                                   </pre>
                                 ) : null}
-
-                                {sizeMode === 'full' ? (
-                                  <>
-                                    {pCard.bodyText ? (
+                                {sizeMode !== 'formula-only' &&
+                                pCard.steps &&
+                                pCard.steps.length > 0 ? (
+                                  <details className="fmd" style={{ marginTop: '4px' }}>
+                                    <summary>
                                       <SecondaryMathText
-                                        className="fmw"
-                                        content={pCard.bodyText}
+                                        as="span"
+                                        className=""
+                                        content={
+                                          pCard.stepsSummary ||
+                                          'Proof & derivation steps'
+                                        }
                                         highlightTokens={
                                           hudTokens.length > 0 ? hudTokens : undefined
                                         }
                                       />
-                                    ) : null}
-                                    {pCard.useText ? (
-                                      <SecondaryMathText
-                                        className="fmu"
-                                        content={pCard.useText}
-                                        highlightTokens={
-                                          hudTokens.length > 0 ? hudTokens : undefined
-                                        }
-                                      />
-                                    ) : null}
-                                    {pCard.note ? (
-                                      <SecondaryMathText
-                                        className="fmnote"
-                                        content={pCard.note}
-                                        highlightTokens={
-                                          hudTokens.length > 0 ? hudTokens : undefined
-                                        }
-                                      />
-                                    ) : null}
-                                    {pCard.seeAlso ? (
-                                      <SecondaryMathText
-                                        className="thsee"
-                                        content={pCard.seeAlso}
-                                        highlightTokens={
-                                          hudTokens.length > 0 ? hudTokens : undefined
-                                        }
-                                      />
-                                    ) : null}
-                                    {pCard.steps && pCard.steps.length > 0 ? (
-                                      <details className="fmd" open style={{ marginTop: '4px' }}>
-                                        <summary>
-                                          <SecondaryMathText
-                                            as="span"
-                                            className=""
-                                            content={
-                                              pCard.stepsSummary ||
-                                              'Proof & derivation steps'
-                                            }
-                                            highlightTokens={
-                                              hudTokens.length > 0 ? hudTokens : undefined
-                                            }
-                                          />
-                                        </summary>
-                                        <ol className="fmsteps">
-                                          {pCard.steps.map((stepHtml, sIdx) => (
-                                            <SecondaryMathText
-                                              key={`${pCard.id}-pin-step-${sIdx}`}
-                                              as="li"
-                                              className=""
-                                              content={stepHtml}
-                                              highlightTokens={
-                                                hudTokens.length > 0 ? hudTokens : undefined
-                                              }
-                                            />
-                                          ))}
-                                        </ol>
-                                      </details>
-                                    ) : null}
-                                  </>
+                                    </summary>
+                                    <ol className="fmsteps">
+                                      {pCard.steps.map((stepHtml, sIdx) => (
+                                        <SecondaryMathText
+                                          key={`${pCard.id}-pin-step-${sIdx}`}
+                                          as="li"
+                                          className=""
+                                          content={stepHtml}
+                                          highlightTokens={
+                                            hudTokens.length > 0 ? hudTokens : undefined
+                                          }
+                                        />
+                                      ))}
+                                    </ol>
+                                  </details>
                                 ) : null}
                               </div>
+
+                              {(['n', 's', 'e', 'w'] as const).map((edge) => (
+                                <div
+                                  key={edge}
+                                  className={`fs-pin-resize-edge edge-${edge}`}
+                                  data-resize-dir={edge}
+                                  role="separator"
+                                  aria-orientation={
+                                    edge === 'n' || edge === 's' ? 'horizontal' : 'vertical'
+                                  }
+                                  aria-label={`Resize ${pCard.title} from ${edge.toUpperCase()} edge`}
+                                  title="Drag edge to resize"
+                                  onMouseDown={(e) =>
+                                    startResizePin(e, pCard.id, edge, layout)
+                                  }
+                                />
+                              ))}
 
                               {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
                                 <div
                                   key={corner}
                                   className={`fs-pin-resize-corner corner-${corner}`}
                                   data-corner={corner}
+                                  data-resize-dir={corner}
                                   role="separator"
                                   aria-label={`Resize ${pCard.title} from ${corner.toUpperCase()} corner`}
-                                  title="Drag corner to resize card (shrink to formula only or expand to full card)"
+                                  title="Drag corner to resize in any direction"
                                   onMouseDown={(e) =>
                                     startResizePin(e, pCard.id, corner, layout)
                                   }
