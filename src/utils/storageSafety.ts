@@ -469,16 +469,20 @@ export function computeCornerResizedLayout(
   const resizesNorth = direction === 'n' || direction === 'nw' || direction === 'ne';
 
   if (resizesEast) {
-    nextWidth = Math.min(maxWidth, Math.max(PINNED_MIN_WIDTH, Math.round(start.width + deltaX)));
+    const eastMaxW = Math.max(PINNED_MIN_WIDTH, Math.min(maxWidth, safeVw - 8 - start.x));
+    nextWidth = Math.min(eastMaxW, Math.max(PINNED_MIN_WIDTH, Math.round(start.width + deltaX)));
   } else if (resizesWest) {
-    nextWidth = Math.min(maxWidth, Math.max(PINNED_MIN_WIDTH, Math.round(start.width - deltaX)));
+    const westMaxW = Math.max(PINNED_MIN_WIDTH, Math.min(maxWidth, rightEdge - 8));
+    nextWidth = Math.min(westMaxW, Math.max(PINNED_MIN_WIDTH, Math.round(start.width - deltaX)));
     nextX = rightEdge - nextWidth;
   }
 
   if (resizesSouth) {
-    nextHeight = Math.min(maxHeight, Math.max(PINNED_MIN_HEIGHT, Math.round(start.height + deltaY)));
+    const southMaxH = Math.max(PINNED_MIN_HEIGHT, Math.min(maxHeight, safeVh - 8 - start.y));
+    nextHeight = Math.min(southMaxH, Math.max(PINNED_MIN_HEIGHT, Math.round(start.height + deltaY)));
   } else if (resizesNorth) {
-    nextHeight = Math.min(maxHeight, Math.max(PINNED_MIN_HEIGHT, Math.round(start.height - deltaY)));
+    const northMaxH = Math.max(PINNED_MIN_HEIGHT, Math.min(maxHeight, bottomEdge - 8));
+    nextHeight = Math.min(northMaxH, Math.max(PINNED_MIN_HEIGHT, Math.round(start.height - deltaY)));
     nextY = bottomEdge - nextHeight;
   }
 

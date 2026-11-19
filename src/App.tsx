@@ -1174,7 +1174,9 @@ export default function App() {
       const isNowMobileTablet = window.innerWidth <= 1024;
       if (isNowMobileTablet !== prevIsMobileTabletRef.current) {
         prevIsMobileTabletRef.current = isNowMobileTablet;
-        setSidebarOpen(!isNowMobileTablet);
+        if (isNowMobileTablet) {
+          setSidebarOpen(false);
+        }
       }
     };
     window.addEventListener('resize', handleResize, { passive: true });
@@ -3915,7 +3917,47 @@ export default function App() {
               className="practice-workspace"
               hidden={persisted.tab !== 'prac' || isGenSelected}
             >
-              {persisted.course !== 'ALL' && practiceModules.length > 0 ? (
+              <div
+                className="practice-course-bar"
+                id="practiceCourseBar"
+                role="group"
+                aria-label="Practice Course Filter"
+              >
+                <span className="practice-course-label">COURSE</span>
+                <button
+                  type="button"
+                  data-c="ALL"
+                  aria-pressed={persisted.course === 'ALL'}
+                  className={`practice-course-btn${persisted.course === 'ALL' ? ' active' : ''}`}
+                  onClick={() => {
+                    setPersisted((prev) => ({ ...prev, course: 'ALL' }));
+                  }}
+                >
+                  <span>ALL COURSES</span>
+                  <span className="practice-course-count">
+                    {PRACTICE_CATALOG.reduce((sum, g) => sum + g.modules.length, 0)}
+                  </span>
+                </button>
+                {PRACTICE_CATALOG.map((group) => {
+                  const isCourseActive = persisted.course === group.course;
+                  return (
+                    <button
+                      key={group.course}
+                      type="button"
+                      data-c={group.course}
+                      aria-pressed={isCourseActive}
+                      className={`practice-course-btn${isCourseActive ? ' active' : ''}`}
+                      onClick={() => {
+                        setPersisted((prev) => ({ ...prev, course: group.course }));
+                      }}
+                    >
+                      <span>{group.badge}</span>
+                      <span className="practice-course-count">{group.modules.length}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {practiceModules.length > 0 ? (
                 <div
                   className="practice-module-bar"
                   id="practiceModuleBar"

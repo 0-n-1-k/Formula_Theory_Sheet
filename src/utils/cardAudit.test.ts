@@ -108,6 +108,14 @@ test('auditCard detects commented-out single-line code, double // comments, glue
     0,
     'Must not false-positive on explanatory comments or valid C++ catch (...)'
   );
+
+  const starGluedCard = makeCard({
+    codeContent: '/* char *p */ int x = 1;',
+  });
+  assert.ok(
+    auditCard(starGluedCard, defaultMeta).some((i) => i.category === 'glued-block-comment'),
+    'Should detect glued block comment containing pointer asterisk *'
+  );
 });
 
 test('auditCard detects KaTeX errors, unescaped %, raw LaTeX outside math, broken entities, and unbalanced HTML', () => {
@@ -124,6 +132,19 @@ test('auditCard detects KaTeX errors, unescaped %, raw LaTeX outside math, broke
   assert.ok(cats.has('raw-latex-outside-math'));
   assert.ok(cats.has('double-escaped-entity'));
   assert.ok(cats.has('unbalanced-html-tags'));
+
+  const headerAngleIssues = auditCard(
+    makeCard({
+      course: 'CSE',
+      htmlContent: '<p>Include <stdio.h> and <math.h> for standard functions.</p>',
+    }),
+    defaultMeta
+  );
+  assert.equal(
+    headerAngleIssues.filter((i) => i.category === 'unbalanced-html-tags').length,
+    0,
+    'Must ignore C/C++ header angle brackets like <stdio.h> in HTML balance check'
+  );
 });
 
 test('parseTopicSections preserves LaTeX \\sec, chemical CH_4, and C parameter (ch) while stripping Sec. 4.2 citations', () => {

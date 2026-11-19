@@ -116,7 +116,10 @@ async function main() {
       Array.isArray(prev.vector) &&
       prev.vector.length === EMBEDDING_DIM
     ) {
-      nextCards[card.id] = prev;
+      nextCards[card.id] = {
+        hash,
+        vector: prev.vector.map((v) => Number(v.toFixed(4))),
+      };
       reusedCount++;
     } else {
       cardsToEmbed.push({ id: card.id, semanticText, hash });
@@ -132,8 +135,8 @@ async function main() {
     for (let i = 0; i < cardsToEmbed.length; i++) {
       const { id, semanticText, hash } = cardsToEmbed[i];
       const output = await extractor(semanticText, { pooling: 'mean', normalize: true });
-      // Round to 6 decimal places to keep JSON compact while preserving full cosine accuracy
-      const vector = Array.from(output.data, (v) => Number(v.toFixed(6)));
+      // Round to 4 decimal places to minimize bundle payload while preserving cosine ranking
+      const vector = Array.from(output.data, (v) => Number(v.toFixed(4)));
       nextCards[id] = { hash, vector };
       if ((i + 1) % 100 === 0 || i + 1 === cardsToEmbed.length) {
         console.log(`[embeddings:build] Embedded ${i + 1}/${cardsToEmbed.length} cards...`);
@@ -156,7 +159,7 @@ async function main() {
     generatedAt: new Date().toISOString(),
     cards: orderedCards,
   };
-  fs.writeFileSync(OUTPUT_PATH, JSON.stringify(payload, null, 2) + '\n', 'utf8');
+  fs.writeFileSync(OUTPUT_PATH, JSON.stringify(payload), 'utf8');
   console.log(`[embeddings:build] Wrote ${Object.keys(orderedCards).length} card vectors to ${OUTPUT_PATH}`);
 }
 

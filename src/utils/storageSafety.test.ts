@@ -206,9 +206,12 @@ test('pinned card position, 8-way omnidirectional resizing, and size modes clamp
   assert.equal(shrunkSe.height, PINNED_MIN_HEIGHT);
   assert.equal(getPinnedCardSizeMode(shrunkSe.width, shrunkSe.height, false), 'formula-only');
 
-  const expandedSe = computeCornerResizedLayout(initial, 'se', 900, 700, 1440, 900);
+  const topLeft = { x: 20, y: 20, width: 420, height: 330, zIndex: 10010 };
+  const expandedSe = computeCornerResizedLayout(topLeft, 'se', 900, 700, 1440, 900);
   assert.equal(expandedSe.width, PINNED_MAX_WIDTH);
   assert.equal(expandedSe.height, PINNED_MAX_HEIGHT);
+  assert.equal(expandedSe.x, topLeft.x);
+  assert.equal(expandedSe.y, topLeft.y);
   assert.equal(getPinnedCardSizeMode(expandedSe.width, expandedSe.height, false), 'full');
 
   const centered = { x: 400, y: 300, width: 420, height: 300, zIndex: 10010 };
@@ -254,6 +257,29 @@ test('pinned card position, 8-way omnidirectional resizing, and size modes clamp
   assert.equal(dragSw.height, 350);
   assert.equal(dragSw.x, 340);
   assert.equal(dragSw.y, 300);
+
+  // Overshooting viewport boundaries must stop cleanly at 8px margin without drifting opposite anchored edge
+  const overshootW = computeCornerResizedLayout(centered, 'w', -900, 0, 1440, 900);
+  assert.equal(overshootW.x, 8);
+  assert.equal(overshootW.x + overshootW.width, centered.x + centered.width);
+
+  const overshootN = computeCornerResizedLayout(centered, 'n', 0, -900, 1440, 900);
+  assert.equal(overshootN.y, 8);
+  assert.equal(overshootN.y + overshootN.height, centered.y + centered.height);
+
+  const overshootE = computeCornerResizedLayout(centered, 'e', 2000, 0, 1440, 900);
+  assert.equal(overshootE.x, centered.x);
+  assert.equal(overshootE.x + overshootE.width, 1440 - 8);
+
+  const overshootS = computeCornerResizedLayout(centered, 's', 0, 2000, 1440, 900);
+  assert.equal(overshootS.y, centered.y);
+  assert.equal(overshootS.y + overshootS.height, 900 - 8);
+
+  const overshootNw = computeCornerResizedLayout(centered, 'nw', -900, -900, 1440, 900);
+  assert.equal(overshootNw.x, 8);
+  assert.equal(overshootNw.y, 8);
+  assert.equal(overshootNw.x + overshootNw.width, centered.x + centered.width);
+  assert.equal(overshootNw.y + overshootNw.height, centered.y + centered.height);
 
   const clampedPos = clampPinnedCardPosition(-50, 2000, 400, 300, 1440, 900);
   assert.equal(clampedPos.x, 8);

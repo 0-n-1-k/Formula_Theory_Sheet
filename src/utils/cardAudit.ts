@@ -159,7 +159,7 @@ function checkHtmlTagBalance(html: string): string | null {
     .replace(/\\\([\s\S]+?\\\)/g, '');
 
   const stack: string[] = [];
-  const tagRe = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b[^>]*?(\/?)>/g;
+  const tagRe = /<(\/?)([a-zA-Z][a-zA-Z0-9.]*)\b[^>]*?(\/?)>/g;
   let m: RegExpExecArray | null;
   while ((m = tagRe.exec(withoutMath)) !== null) {
     const isClose = m[1] === '/';
@@ -688,8 +688,8 @@ export function auditCard(
 
       // Glued block comment before active code on the same line: "/* 6 bytes */ char *p = ..." or ";/* ... */ code"
       if (
-        /;\s*\/\*[^*]*\*\/\s*\S/.test(trimmed) ||
-        /^\/\*[^*]*\*\/\s+[a-zA-Z_]\w*/.test(trimmed)
+        /;\s*\/\*(?:[^*]|\*(?!\/))*\*\/\s*\S/.test(trimmed) ||
+        /^\/\*(?:[^*]|\*(?!\/))*\*\/\s+[a-zA-Z_]\w*/.test(trimmed)
       ) {
         push(
           'glued-block-comment',

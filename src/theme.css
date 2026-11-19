@@ -2077,8 +2077,10 @@ details.fmd > summary::after {
   font-size: var(--fs-2xs);
 }
 
-details.fmd[open] > summary::after {
+details.fmd.is-open > summary::after,
+details.fmd[open]:not(:has(.fmd-collapse)) > summary::after {
   content: "[STEPS -]";
+  color: var(--text-primary);
 }
 
 .fmsteps {
@@ -2114,6 +2116,70 @@ details.fmd[open] > summary::after {
 
 .practice-workspace[hidden] {
   display: none !important;
+}
+
+.practice-course-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: var(--radius-card);
+  background: rgba(16, 16, 22, 0.9);
+  border: 1px solid var(--border-crisp);
+  box-shadow: var(--shadow-card);
+}
+
+.practice-course-label {
+  font-family: var(--font-dot);
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+
+.practice-course-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-ctl);
+  border: 1px solid var(--border-crisp);
+  background: rgba(24, 24, 34, 0.68);
+  color: var(--text-secondary);
+  font-family: var(--font-dot);
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.practice-course-btn:hover {
+  border-color: var(--course-signal, var(--accent));
+  color: var(--text-primary);
+  background: rgba(34, 34, 46, 0.88);
+}
+
+.practice-course-btn.active {
+  border-color: var(--course-signal, var(--accent));
+  background: var(--course-signal-soft, rgba(41, 151, 255, 0.16));
+  color: #ffffff;
+  box-shadow:
+    inset 0 0 0 1px var(--course-signal-border, rgba(41, 151, 255, 0.35)),
+    0 0 14px var(--course-signal-soft, rgba(41, 151, 255, 0.2));
+}
+
+.practice-course-count {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.practice-course-btn.active .practice-course-count {
+  color: var(--course-signal, var(--accent));
 }
 
 .practice-module-bar {
@@ -3078,8 +3144,7 @@ details.fmd[open] > summary::after {
   transition: opacity var(--dur-fast) var(--ease-out);
 }
 
-.fcm.open,
-.fcm:not([hidden]) {
+.fcm.open {
   opacity: 1;
   pointer-events: auto;
 }
@@ -3101,8 +3166,7 @@ details.fmd[open] > summary::after {
   transition: transform var(--dur-fast) var(--ease-out);
 }
 
-.fcm.open .fcb,
-.fcm:not([hidden]) .fcb {
+.fcm.open .fcb {
   transform: scale(1);
 }
 
@@ -3822,7 +3886,7 @@ details.fmd[open] > summary::after {
 
 .bento-radar-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1.32fr) minmax(0, 0.88fr);
+  grid-template-columns: 1fr;
   gap: 8px;
   min-width: 0;
 }
@@ -5826,7 +5890,8 @@ details.fmd > summary::after {
   transition: transform 0.32s var(--ease-glide), color 0.25s ease;
 }
 
-details.fmd.is-open > summary::after {
+details.fmd.is-open > summary::after,
+details.fmd[open]:not(:has(.fmd-collapse)) > summary::after {
   content: "[STEPS -]";
   color: var(--text-primary);
 }
@@ -5873,10 +5938,11 @@ details.fmt,
 .goal,
 .search-empty-state,
 .topic-Pager,
+.practice-course-bar,
+.practice-module-bar,
 .practice-slot-card,
-.practice-hub-card,
+.practice-viewer-shell,
 .fs-pinned-card,
-.pdf-reader-shell,
 .fcb,
 .search-history-dropdown,
 .tools-dropdown,
@@ -5903,14 +5969,15 @@ table.mini,
 .fmst,
 .fmcp,
 .fml,
-.sb-phone-controls,
+.sidebar-phone-controls,
 .sb-phone-course-btn,
 .sb-phone-term-btn.ntype-emblem,
 .sb-phone-term-list,
 .sh-item,
 .dropdown-item,
-.practice-mod-pill,
-.hud-btn,
+.practice-course-btn,
+.practice-mod-btn,
+.fm-hud-btn,
 .pdf-ctrl-btn {
   border-radius: var(--radius-ctl);
 }
@@ -5925,7 +5992,7 @@ table.mini,
 .sidebar-close-btn,
 .term-status-badge,
 .sb-phone-sec-val,
-#qcnt {
+.fmstat {
   border-radius: var(--radius-badge);
 }
 
