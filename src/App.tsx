@@ -3188,37 +3188,6 @@ export default function App() {
         </div>
       </header>
 
-      <button
-        type="button"
-        id="sbDetachedTab"
-        className={`sb-detached-tab${indexDetached && !isPdfFullscreen && !sidebarOpen ? ' visible' : ''}${sidebarOpen ? ' active' : ''}`}
-        aria-label="Toggle Topic Index Sidebar"
-        aria-expanded={sidebarOpen}
-        title={sidebarOpen ? 'Hide Topic Index' : 'Pull out Topic Index'}
-        onClick={toggleNavDrawer}
-      >
-        <span className="sb-detached-shape" aria-hidden="true">
-          <svg viewBox="0 0 30 148" preserveAspectRatio="none" className="sb-detached-svg">
-            <path
-              d="M 0,0 L 24,18 Q 29,22 29,29 L 29,119 Q 29,126 24,130 L 0,148 Z"
-              className="sb-detached-fill"
-            />
-            <path
-              d="M 0.5,0 L 24,18 Q 28.5,22 28.5,29 L 28.5,119 Q 28.5,126 24,130 L 0.5,148"
-              className="sb-detached-stroke"
-            />
-          </svg>
-        </span>
-        <span className="sb-detached-letters" aria-hidden="true">
-          <span>I</span>
-          <span>N</span>
-          <span>D</span>
-          <span>E</span>
-          <span>X</span>
-        </span>
-        <span className="sb-detached-grip" aria-hidden="true" />
-      </button>
-
       <section id="fmbar" ref={fmbarRef} aria-label="Search and Study Controls">
         <div className="fmbar-inner">
           <div className="controls-utility-row">
@@ -4881,15 +4850,61 @@ export default function App() {
         </div>
       </div>
 
-      <button
-        id="totop"
-        type="button"
-        className={showTopBtn ? 'vis' : ''}
-        aria-label="Scroll back to top"
-        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-      >
-        [TOP]
-      </button>
+      <div className="floating-nav-dock" role="navigation" aria-label="Quick Navigation Controls">
+        <button
+          id="totop"
+          type="button"
+          className={`floating-keycap floating-top-btn${showTopBtn && !isPdfFullscreen ? ' vis' : ''}`}
+          aria-label="Scroll back to top"
+          title="Back to top"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        >
+          <svg
+            className="fk-icon"
+            viewBox="0 0 12 12"
+            width="12"
+            height="12"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M2.25 2.5H9.75M6 10V4.5M3.25 7.25L6 4.5L8.75 7.25"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="square"
+              strokeLinejoin="miter"
+            />
+          </svg>
+          <span className="fk-label">TOP</span>
+        </button>
+
+        <button
+          type="button"
+          id="sbDetachedTab"
+          className={`floating-keycap sb-detached-tab${indexDetached && !isPdfFullscreen && !sidebarOpen ? ' visible' : ''}${sidebarOpen ? ' active' : ''}`}
+          aria-label="Toggle Topic Index Sidebar"
+          aria-expanded={sidebarOpen}
+          title={sidebarOpen ? 'Hide Topic Index' : 'Open Topic Index'}
+          onClick={toggleNavDrawer}
+        >
+          <svg
+            className="fk-icon"
+            viewBox="0 0 12 12"
+            width="12"
+            height="12"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M2 2.75H3.25M5 2.75H10M2 6H3.25M5 6H9.25M2 9.25H3.25M5 9.25H8.5"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="square"
+            />
+          </svg>
+          <span className="fk-label">INDEX</span>
+        </button>
+      </div>
 
       <div id="toast" className={toastMsg ? 'show' : ''} role="status" aria-live="polite">
         {toastMsg || 'READY'}
