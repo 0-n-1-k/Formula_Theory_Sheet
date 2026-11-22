@@ -287,6 +287,33 @@ test('parseTopicSections decodes residual HTML entities in copyText and rawLatex
   }
 });
 
+test('parseTopicSections strips exam-year citations from bold definition headings and derivation summaries while keeping examTag searchable', () => {
+  const allCards = [
+    ...parseTopicSections(fmCourseHtml).flatMap((s) => s.cards),
+    ...parseTopicSections(thmHtml).flatMap((s) => s.cards),
+  ];
+  const cardById = new Map(allCards.map((c) => [c.id, c]));
+
+  const slidingCard = cardById.get('eee-delta:6');
+  assert.equal(slidingCard?.examTag, '2018–19 Q.1c', 'examTag must remain on record for search indexing');
+
+  const thmWorked = cardById.get('t-eee1:11');
+  assert.ok(thmWorked, 'Expected t-eee1:11 to exist');
+  assert.equal(
+    thmWorked.stepsSummary,
+    'Proof & Worked Exam Problems',
+    'stepsSummary must strip parenthetical exam-year/question lists'
+  );
+  assert.ok(
+    thmWorked.htmlContent && !/\(2018[–-]19\s*Q\.1c\)/.test(thmWorked.htmlContent),
+    'Bold definition headings inside htmlContent must not display parenthetical exam-year citations'
+  );
+  assert.ok(
+    thmWorked.htmlContent && thmWorked.htmlContent.includes('<b>Sliding Load Between Two Sources:</b>'),
+    'Trailing colons inside bold definition headings must be preserved cleanly'
+  );
+});
+
 
 
 

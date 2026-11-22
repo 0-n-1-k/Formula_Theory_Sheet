@@ -452,6 +452,23 @@ export function sanitizeHtmlContentArtifacts(html?: string): string | undefined 
     ''
   );
 
+  // Strip exam-year/question citations inside bold definition sub-headings
+  // e.g. "<b>Sliding Load Between Two Sources (2018–19 Q.1c):</b>" -> "<b>Sliding Load Between Two Sources:</b>"
+  out = out.replace(
+    /(<(?:b|strong)>)([\s\S]*?)(<\/(?:b|strong)>)/gi,
+    (_, openTag: string, inner: string, closeTag: string) => {
+      const cleanedInner = inner
+        .replace(
+          /\s*\(\s*(?:BUET\s+)?(?:(?:19|20)\d{2}\s*[–-]\s*(?:\d{2}|\d{4})|Q\.?\s*\d+[a-z]?)[^()]*\)/gi,
+          ''
+        )
+        .replace(/\s+:/g, ':')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      return `${openTag}${cleanedInner}${closeTag}`;
+    }
+  );
+
   return out;
 }
 
@@ -1055,7 +1072,13 @@ export function parseTopicSections(html: string): TopicSectionRecord[] {
       let stepsSummary: string | undefined;
       let steps: string[] | undefined;
       if (fmdMatch) {
-        stepsSummary = decodeHtmlEntities(fmdMatch[1]).trim();
+        stepsSummary = decodeHtmlEntities(fmdMatch[1])
+          .replace(
+            /\s*\(\s*(?:BUET\s+)?(?:(?:19|20)\d{2}\s*[–-]\s*(?:\d{2}|\d{4})|Q\.?\s*\d+[a-z]?)[^()]*\)/gi,
+            ''
+          )
+          .replace(/\s{2,}/g, ' ')
+          .trim();
         const stepsListHtml = fmdMatch[2];
         const liMatches = [...stepsListHtml.matchAll(/<li>([\s\S]*?)<\/li>/g)];
         steps = liMatches.map((m) => m[1].trim());

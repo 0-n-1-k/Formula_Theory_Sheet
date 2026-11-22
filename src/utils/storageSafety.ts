@@ -5,6 +5,15 @@ export type CourseCode = string;
 export type StatusFilter = 'all' | 'starred' | 'unlearned';
 
 export const MAX_SEARCH_HISTORY = 8;
+export const MAX_IMPORT_PAYLOAD_BYTES = 500 * 1024;
+
+export function getTermStorageKey(termId: string = CURRENT_TERM_CONFIG.termId): string {
+  return `buet_eee_${termId}_v2_state`;
+}
+
+export const ACTIVE_STORAGE_KEY = getTermStorageKey(CURRENT_TERM_CONFIG.termId);
+
+export const MAX_CARD_NOTE_LENGTH = 2000;
 
 export interface PersistedAppState {
   tab: TabMode;
@@ -17,6 +26,7 @@ export interface PersistedAppState {
   examDate: string;
   learned: Record<string, boolean>;
   starred: Record<string, boolean>;
+  notes?: Record<string, string>;
   searchHistory?: string[];
   courseBarCollapsed?: boolean;
 }
@@ -50,6 +60,7 @@ export const DEFAULT_APP_STATE: PersistedAppState = {
   examDate: '2026-11-15',
   learned: {},
   starred: {},
+  notes: {},
   searchHistory: [],
   courseBarCollapsed: false,
 };
@@ -88,6 +99,22 @@ export function sanitizeBooleanMap(input: unknown): Record<string, boolean> {
     if (typeof key === 'string' && key.trim().length > 0 && Boolean(val)) {
       out[key] = true;
     }
+  }
+  return out;
+}
+
+export function sanitizeNotesMap(
+  input: unknown,
+  maxLength: number = MAX_CARD_NOTE_LENGTH
+): Record<string, string> {
+  if (!isPlainRecord(input)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, val] of Object.entries(input)) {
+    if (typeof key !== 'string' || key.trim().length === 0) continue;
+    if (typeof val !== 'string') continue;
+    const trimmed = val.trim();
+    if (!trimmed) continue;
+    out[key] = trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed;
   }
   return out;
 }
@@ -155,6 +182,7 @@ export function sanitizePersistedState(
       ...defaults,
       learned: { ...defaults.learned },
       starred: { ...defaults.starred },
+      notes: { ...(defaults.notes || {}) },
       searchHistory: [...(defaults.searchHistory || [])],
       courseBarCollapsed: Boolean(defaults.courseBarCollapsed),
     };
@@ -181,6 +209,7 @@ export function sanitizePersistedState(
     examDate: sanitizeExamDate(raw.examDate, defaults.examDate),
     learned: sanitizeBooleanMap(raw.learned),
     starred: sanitizeBooleanMap(raw.starred),
+    notes: sanitizeNotesMap(raw.notes),
     searchHistory:
       raw.searchHistory !== undefined
         ? sanitizeSearchHistory(raw.searchHistory)
@@ -231,19 +260,44 @@ export function safeWriteStorage(
   }
 }
 
+export interface JsonImportStats {
+  learnedCount: number;
+  starredCount: number;
+  notesCount: number;
+  ignoredLearnedCount: number;
+  ignoredStarredCount: number;
+  ignoredNotesCount: number;
+}
+
 export interface JsonImportValidationResult {
   ok: boolean;
   error?: string;
   data?: {
     learned: Record<string, boolean>;
     starred: Record<string, boolean>;
+    notes?: Record<string, string>;
     examDate?: string;
   };
+  stats?: JsonImportStats;
 }
 
-export function validateJsonImportPayload(rawText: string): JsonImportValidationResult {
+function getUtf8ByteLength(text: string): number {
+  if (typeof TextEncoder !== 'undefined') {
+    return new TextEncoder().encode(text).byteLength;
+  }
+  return text.length * 2;
+}
+
+export function validateJsonImportPayload(
+  rawText: string,
+  knownCardIds?: ReadonlySet<string>
+): JsonImportValidationResult {
   if (typeof rawText !== 'string' || rawText.trim().length === 0) {
     return { ok: false, error: 'EMPTY JSON INPUT' };
+  }
+
+  if (getUtf8ByteLength(rawText) > MAX_IMPORT_PAYLOAD_BYTES) {
+    return { ok: false, error: 'IMPORT TOO LARGE (MAX 500 KB)' };
   }
 
   let parsed: unknown;
@@ -260,6 +314,7 @@ export function validateJsonImportPayload(rawText: string): JsonImportValidation
   const hasRecognizedKey =
     'learned' in parsed ||
     'starred' in parsed ||
+    'notes' in parsed ||
     'examDate' in parsed;
 
   if (!hasRecognizedKey) {
@@ -274,23 +329,181 @@ export function validateJsonImportPayload(rawText: string): JsonImportValidation
     return { ok: false, error: 'INVALID BACKUP: STARRED MUST BE AN OBJECT' };
   }
 
+  if ('notes' in parsed && parsed.notes !== undefined && !isPlainRecord(parsed.notes)) {
+    return { ok: false, error: 'INVALID BACKUP: NOTES MUST BE AN OBJECT' };
+  }
+
   if ('examDate' in parsed && parsed.examDate !== undefined && parsed.examDate !== '') {
     if (typeof parsed.examDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(parsed.examDate.trim())) {
       return { ok: false, error: 'INVALID BACKUP: EXAM DATE FORMAT' };
     }
   }
 
+  const rawLearned = sanitizeBooleanMap(parsed.learned);
+  const rawStarred = sanitizeBooleanMap(parsed.starred);
+  const hasNotesField = 'notes' in parsed && parsed.notes !== undefined;
+  const rawNotes = hasNotesField ? sanitizeNotesMap(parsed.notes) : undefined;
+
+  let learned: Record<string, boolean> = rawLearned;
+  let starred: Record<string, boolean> = rawStarred;
+  let notes: Record<string, string> | undefined = rawNotes;
+  let ignoredLearnedCount = 0;
+  let ignoredStarredCount = 0;
+  let ignoredNotesCount = 0;
+
+  if (knownCardIds && knownCardIds.size > 0) {
+    learned = {};
+    for (const key of Object.keys(rawLearned)) {
+      if (knownCardIds.has(key)) {
+        learned[key] = true;
+      } else {
+        ignoredLearnedCount++;
+      }
+    }
+    starred = {};
+    for (const key of Object.keys(rawStarred)) {
+      if (knownCardIds.has(key)) {
+        starred[key] = true;
+      } else {
+        ignoredStarredCount++;
+      }
+    }
+    if (rawNotes) {
+      notes = {};
+      for (const [key, val] of Object.entries(rawNotes)) {
+        if (knownCardIds.has(key)) {
+          notes[key] = val;
+        } else {
+          ignoredNotesCount++;
+        }
+      }
+    }
+  }
+
   return {
     ok: true,
     data: {
-      learned: sanitizeBooleanMap(parsed.learned),
-      starred: sanitizeBooleanMap(parsed.starred),
+      learned,
+      starred,
+      notes,
       examDate:
         typeof parsed.examDate === 'string'
           ? sanitizeExamDate(parsed.examDate, DEFAULT_APP_STATE.examDate)
           : undefined,
     },
+    stats: {
+      learnedCount: Object.keys(learned).length,
+      starredCount: Object.keys(starred).length,
+      notesCount: notes ? Object.keys(notes).length : 0,
+      ignoredLearnedCount,
+      ignoredStarredCount,
+      ignoredNotesCount,
+    },
   };
+}
+
+export async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall through to legacy textarea copy fallback
+    }
+  }
+
+  if (typeof document === 'undefined' || !document.body) {
+    return false;
+  }
+
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-9999px';
+    textarea.style.left = '-9999px';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    const copied = typeof document.execCommand === 'function' ? document.execCommand('copy') : false;
+    document.body.removeChild(textarea);
+    return Boolean(copied);
+  } catch {
+    return false;
+  }
+}
+
+export interface HashTargetSectionRef {
+  id: string;
+  course: string;
+  sourceTab: 'fm' | 'thm' | 'gen';
+}
+
+export type ResolvedHashTarget =
+  | { found: true; id: string; course: string; sourceTab: 'fm' | 'thm' | 'gen' }
+  | { found: false; rawId: string };
+
+export function resolveHashTarget(
+  rawHash: string,
+  sections: ReadonlyArray<HashTargetSectionRef>
+): ResolvedHashTarget | null {
+  if (typeof rawHash !== 'string') return null;
+  const stripped = rawHash.replace(/^#/, '').trim();
+  if (!stripped) return null;
+
+  let decoded = stripped;
+  try {
+    decoded = decodeURIComponent(stripped);
+  } catch {
+    decoded = stripped;
+  }
+
+  const exact = sections.find((s) => s.id === decoded);
+  if (exact) {
+    return {
+      found: true,
+      id: exact.id,
+      course: exact.course,
+      sourceTab: exact.sourceTab,
+    };
+  }
+
+  const lower = decoded.toLowerCase();
+  const ciMatch = sections.find((s) => s.id.toLowerCase() === lower);
+  if (ciMatch) {
+    return {
+      found: true,
+      id: ciMatch.id,
+      course: ciMatch.course,
+      sourceTab: ciMatch.sourceTab,
+    };
+  }
+
+  return { found: false, rawId: decoded };
+}
+
+export interface SafeSectionParseResult<T> {
+  sections: T[];
+  error: string | null;
+}
+
+export function safeParseSectionGroup<T>(
+  label: string,
+  rawHtml: string,
+  parser: (html: string) => T[]
+): SafeSectionParseResult<T> {
+  try {
+    return { sections: parser(rawHtml), error: null };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return {
+      sections: [],
+      error: `${label}: ${detail}`,
+    };
+  }
 }
 
 export const MIN_HUD_HEIGHT_PX = 210;
@@ -514,4 +727,54 @@ export function getPinnedCardSizeMode(
     return 'compact';
   }
   return 'full';
+}
+
+export function clampPinnedLayoutsToViewport(
+  layouts: Record<string, PinnedCardLayout>,
+  viewportWidth: number,
+  viewportHeight: number
+): Record<string, PinnedCardLayout> {
+  const entries = Object.entries(layouts);
+  if (entries.length === 0) return layouts;
+
+  const safeVw = Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : 1440;
+  const safeVh = Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : 900;
+  const maxAllowedWidth = Math.max(PINNED_MIN_WIDTH, Math.min(PINNED_MAX_WIDTH, safeVw - 16));
+  const maxAllowedHeight = Math.max(PINNED_MIN_HEIGHT, Math.min(PINNED_MAX_HEIGHT, safeVh - 16));
+
+  let changed = false;
+  const next: Record<string, PinnedCardLayout> = {};
+
+  for (const [cardId, layout] of entries) {
+    const nextWidth = Math.min(maxAllowedWidth, Math.max(PINNED_MIN_WIDTH, layout.width));
+    const nextHeight = Math.min(maxAllowedHeight, Math.max(PINNED_MIN_HEIGHT, layout.height));
+    const clampedPos = clampPinnedCardPosition(
+      layout.x,
+      layout.y,
+      nextWidth,
+      nextHeight,
+      safeVw,
+      safeVh
+    );
+
+    if (
+      clampedPos.x !== layout.x ||
+      clampedPos.y !== layout.y ||
+      nextWidth !== layout.width ||
+      nextHeight !== layout.height
+    ) {
+      changed = true;
+      next[cardId] = {
+        ...layout,
+        x: clampedPos.x,
+        y: clampedPos.y,
+        width: nextWidth,
+        height: nextHeight,
+      };
+    } else {
+      next[cardId] = layout;
+    }
+  }
+
+  return changed ? next : layouts;
 }

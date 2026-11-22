@@ -1,6 +1,13 @@
 import React, { memo, useCallback, useDeferredValue, useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import {
+  cachePdfOffline,
+  fetchPdfArrayBufferWithOfflineFallback,
+  isCacheApiSupported,
+  isPdfCachedOffline,
+  removeCachedPdfOffline,
+} from '../utils/pdfOfflineCache';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -147,9 +154,12 @@ export const PdfCanvasReader = memo(function PdfCanvasReader({
   const deferredScale = useDeferredValue(scale);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [retryNonce, setRetryNonce] = useState<number>(0);
   const [jumpPage, setJumpPage] = useState<string>('1');
   const [pageInputFocused, setPageInputFocused] = useState<boolean>(false);
   const [zoomMenuOpen, setZoomMenuOpen] = useState<boolean>(false);
+  const [offlineState, setOfflineState] = useState<'idle' | 'saving' | 'cached'>('idle');
+  const cacheSupported = isCacheApiSupported();
 
   const stageRef = useRef<HTMLDivElement | null>(null);
   const basePageWidthRef = useRef<number>(612);
@@ -186,6 +196,30 @@ export const PdfCanvasReader = memo(function PdfCanvasReader({
   }, [zoomMenuOpen]);
 
   useEffect(() => {
+    let active = true;
+    isPdfCachedOffline(pdfUrl).then((cached) => {
+      if (active) {
+        setOfflineState(cached ? 'cached' : 'idle');
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [pdfUrl]);
+
+  const handleToggleOfflineCache = useCallback(async () => {
+    if (!cacheSupported || offlineState === 'saving') return;
+    if (offlineState === 'cached') {
+      await removeCachedPdfOffline(pdfUrl);
+      setOfflineState('idle');
+      return;
+    }
+    setOfflineState('saving');
+    const ok = await cachePdfOffline(pdfUrl);
+    setOfflineState(ok ? 'cached' : 'idle');
+  }, [cacheSupported, offlineState, pdfUrl]);
+
+  useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setErrorMsg('');
@@ -196,11 +230,7 @@ export const PdfCanvasReader = memo(function PdfCanvasReader({
 
     (async () => {
       try {
-        const res = await fetch(pdfUrl);
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-        const buffer = await res.arrayBuffer();
+        const buffer = await fetchPdfArrayBufferWithOfflineFallback(pdfUrl);
         if (cancelled) return;
         const loadingTask = pdfjsLib.getDocument({ data: buffer });
         const doc = await loadingTask.promise;
@@ -238,7 +268,7 @@ export const PdfCanvasReader = memo(function PdfCanvasReader({
     return () => {
       cancelled = true;
     };
-  }, [pdfUrl]);
+  }, [pdfUrl, retryNonce]);
 
   // Adjust to fit-width when entering or exiting fullscreen so there is zero wasted side space
   useEffect(() => {
@@ -304,8 +334,31 @@ export const PdfCanvasReader = memo(function PdfCanvasReader({
             <span className="ntype-badge">[RENDERING PDF DOCUMENT // PLEASE WAIT...]</span>
           </div>
         ) : errorMsg ? (
-          <div className="workspace-error-fallback">
-            <span>PDF Load Error: {errorMsg}</span>
+          <div className="pdf-error-panel" role="alert">
+            <div className="pdf-error-badge">[:: PDF ENGINE ERROR ::]</div>
+            <p className="pdf-error-title">Unable to render this PDF in the canvas reader.</p>
+            <p className="pdf-error-detail">{errorMsg}</p>
+            <div className="pdf-error-actions">
+              <button
+                type="button"
+                className="pdf-ctrl-btn pdf-error-retry-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRetryNonce((n) => n + 1);
+                }}
+              >
+                [RETRY]
+              </button>
+              <a
+                href={pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="pdf-ctrl-btn pdf-error-open-link"
+                onClick={(e) => e.stopPropagation()}
+              >
+                [OPEN PDF DIRECTLY]
+              </a>
+            </div>
           </div>
         ) : pdfDoc ? (
           Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => (
@@ -458,6 +511,35 @@ export const PdfCanvasReader = memo(function PdfCanvasReader({
               <span>Search</span>
             </button>
             <span className="pdf-ctrl-divider pdf-mobile-search-divider" aria-hidden="true" />
+          </>
+        ) : null}
+
+        {cacheSupported ? (
+          <>
+            <button
+              type="button"
+              className={`pdf-ctrl-btn pdf-offline-btn${offlineState === 'cached' ? ' active' : ''}`}
+              id="pdfOfflineCacheBtn"
+              aria-label={
+                offlineState === 'cached'
+                  ? `Remove offline cached copy of ${title}`
+                  : `Download ${title} PDF for offline use`
+              }
+              title={
+                offlineState === 'cached'
+                  ? 'Saved for offline reading (click to remove cached copy)'
+                  : 'Download PDF into local offline cache'
+              }
+              disabled={offlineState === 'saving'}
+              onClick={handleToggleOfflineCache}
+            >
+              {offlineState === 'saving'
+                ? '[CACHING...]'
+                : offlineState === 'cached'
+                ? '[OFFLINE READY]'
+                : '[SAVE OFFLINE]'}
+            </button>
+            <span className="pdf-ctrl-divider" aria-hidden="true" />
           </>
         ) : null}
 

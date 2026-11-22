@@ -37,8 +37,9 @@ import {
   type FormulaCardRecord,
   type TheoremCategoryFilter,
 } from './utils/formulaSearch';
-import { warmUpEmbeddingModel } from './utils/embeddingModel';
+import { isEmbeddingModelLoaded } from './utils/embeddingModel';
 import {
+  CONFIDENT_LEXICAL_THRESHOLD,
   computeHybridCardScore,
   computeLexicalConfidence,
   getSearchDebugMode,
@@ -55,15 +56,31 @@ import {
 } from './utils/mathParser';
 import { extractValidExamTag } from './utils/titleCleaner';
 import {
+  buildCardDeepLinkUrl,
+  buildReportTypoUrl,
+  createFlashcardQueue,
+  gradeFlashcardQueue,
+  resolveCardDeepLink,
+  type CardDeepLinkRef,
+  type FlashcardQueueState,
+} from './utils/activeRecall';
+import {
+  ACTIVE_STORAGE_KEY,
   BUET_LOGO_ASCII_ART,
   DEFAULT_APP_STATE,
+  MAX_CARD_NOTE_LENGTH,
   resetToHomeFormulasState,
   safeReadStorage,
   safeWriteStorage,
+  sanitizePersistedState,
   updateSearchHistoryList,
   validateJsonImportPayload,
+  copyTextToClipboard,
+  resolveHashTarget,
+  safeParseSectionGroup,
   clampHudHeightPx,
   clampPinnedCardPosition,
+  clampPinnedLayoutsToViewport,
   computeCornerResizedLayout,
   createInitialPinnedLayout,
   estimatePinnedCardSize,
@@ -71,6 +88,7 @@ import {
   PINNED_MIN_HEIGHT,
   PINNED_MIN_WIDTH,
   type CourseCode,
+  type HashTargetSectionRef,
   type PersistedAppState,
   type PinnedCardLayout,
   type ResizeDirection,
@@ -82,10 +100,27 @@ import {
   getPracticeModulesForCourse,
 } from './utils/practiceCatalog';
 import { PdfCanvasReader } from './components/PdfCanvasReader';
+import {
+  OfflineIndicator,
+  PWAInstallHeaderBtn,
+  PWAInstallMenuItem,
+} from './components/PWAControls';
+import { ShortcutsModal } from './components/ShortcutsModal';
 
-const STORAGE_KEY = 'buet_eee_' + CURRENT_TERM_CONFIG.termId + '_v2_state';
+const STORAGE_KEY = ACTIVE_STORAGE_KEY;
 const QUICK_SHORTCUTS = ['cif', 'divergence theorem', 'thevenin', 'mvt', 'shm', 'leibnitz'] as const;
 const TOTAL_PRACTICE_MODULES = PRACTICE_CATALOG.reduce((acc, g) => acc + g.modules.length, 0);
+
+function canAutoLoadSemanticModel(): boolean {
+  if (typeof navigator === 'undefined') return true;
+  const conn = (navigator as Navigator & {
+    connection?: { saveData?: boolean; effectiveType?: string };
+  }).connection;
+  if (!conn) return true;
+  if (conn.saveData) return false;
+  if (conn.effectiveType === 'slow-2g' || conn.effectiveType === '2g') return false;
+  return true;
+}
 
 interface ErrorBoundaryProps {
   fallbackLabel?: string;
@@ -273,6 +308,7 @@ export const DoomsdayToggleButton = memo(function DoomsdayToggleButton({
       id="goalToggleBtn"
       aria-label="Toggle Study Progress and Exam Countdown Drawer"
       aria-expanded={goalOpen}
+      title={goalOpen ? 'Hide exam countdown' : 'Set your exam date'}
       onClick={onToggle}
     >
       {!goalOpen && parts ? (
@@ -466,16 +502,22 @@ export interface FormulaCardViewProps {
   isWide?: boolean;
   isLearned: boolean;
   isStarred: boolean;
+  noteText?: string;
   isHidden?: boolean;
   selfTest?: boolean;
+  isDeepLinkFlash?: boolean;
+  isKeyboardActive?: boolean;
   onToggleStar: (id: string) => void;
   onToggleLearned: (id: string, checked: boolean) => void;
   onCopyLatex: (latex: string) => void;
+  onSaveNote?: (id: string, note: string) => void;
+  onCopyDeepLink?: (card: FormulaCardRecord) => void;
   onPeekTopic?: (topicId: string) => void;
   onPinCard?: (card: FormulaCardRecord) => void;
   isPinned?: boolean;
   hideContext?: boolean;
   topicTitle?: string;
+  showTopicTag?: boolean;
   highlightTokens?: readonly string[];
 }
 
@@ -486,31 +528,55 @@ export const FormulaCardView = memo(function FormulaCardView({
   isWide = false,
   isLearned,
   isStarred,
+  noteText = '',
   isHidden = false,
   selfTest = false,
+  isDeepLinkFlash = false,
+  isKeyboardActive = false,
   onToggleStar,
   onToggleLearned,
   onCopyLatex,
+  onSaveNote,
+  onCopyDeepLink,
   onPeekTopic,
   onPinCard,
   isPinned = false,
   hideContext = false,
   topicTitle,
+  showTopicTag = false,
   highlightTokens,
 }: FormulaCardViewProps) {
   const [isRevealed, setIsRevealed] = useState<boolean>(false);
   const [stepsOpen, setStepsOpen] = useState<boolean>(false);
+  const [noteOpen, setNoteOpen] = useState<boolean>(false);
+  const [noteDraft, setNoteDraft] = useState<string>(noteText);
   const copyPayload = card.copyText ?? (card.rawLatex || card.codeContent || card.title);
   const typeCls = card.cardTypeClass || 'tex';
   const hasHighlight = Boolean(highlightTokens && highlightTokens.length > 0);
   const activeHighlightTokens = hasHighlight ? highlightTokens : undefined;
+  const hasSavedNote = noteText.trim().length > 0;
 
-  const { mainTitle, metaTag } = useMemo(() => {
+  useEffect(() => {
+    setNoteDraft(noteText);
+  }, [noteText]);
+
+  const mainTitle = useMemo(() => {
     if (card.examTag) {
-      return { mainTitle: card.title, metaTag: card.examTag };
+      return card.title;
     }
-    return splitCardTitleAndMeta(card.title);
+    return splitCardTitleAndMeta(card.title).mainTitle;
   }, [card.title, card.examTag]);
+
+  const reportTypoHref = useMemo(
+    () =>
+      buildReportTypoUrl({
+        cardId: card.id,
+        course: card.course,
+        topicTitle: topicTitle || card.topicTitle,
+        cardTitle: card.title,
+      }),
+    [card.id, card.course, topicTitle, card.topicTitle, card.title]
+  );
 
   useEffect(() => {
     if (!selfTest) {
@@ -553,7 +619,7 @@ export const FormulaCardView = memo(function FormulaCardView({
 
   return (
     <div
-      className={`fmi ${typeCls}${isWide ? ' is-wide' : ''}${isStarred ? ' starred' : ''}${isLearned ? ' learned' : ''}${isRevealed ? ' revealed' : ''}${isHidden ? ' hidden' : ''}`}
+      className={`fmi ${typeCls}${isWide ? ' is-wide' : ''}${isStarred ? ' starred' : ''}${isLearned ? ' learned' : ''}${isRevealed ? ' revealed' : ''}${isHidden ? ' hidden' : ''}${isDeepLinkFlash ? ' deep-link-flash' : ''}${isKeyboardActive ? ' kb-active' : ''}`}
       data-k={card.id}
       data-s={card.keywords}
       hidden={isHidden}
@@ -565,7 +631,7 @@ export const FormulaCardView = memo(function FormulaCardView({
       onClick={handleCardClick}
     >
       <div className="fmh">
-        <span className="fmn" title={card.fullTitle || card.title}>
+        <span className="fmn">
           {cardIndex !== undefined ? (
             <span className="fm-idx-badge">
               #{String(cardIndex).padStart(2, '0')}
@@ -577,16 +643,9 @@ export const FormulaCardView = memo(function FormulaCardView({
             content={mainTitle}
             highlightTokens={activeHighlightTokens}
           />
-          {metaTag ? (
-            <span className="fm-year-tag" title={metaTag}>
-              {metaTag}
-            </span>
-          ) : null}
           {card.badge ? <span className="thty">{card.badge}</span> : null}
-          {topicTitle ? (
-            <span className="fm-card-topic-tag" title={`Topic: ${topicTitle}`}>
-              {topicTitle}
-            </span>
+          {showTopicTag && topicTitle ? (
+            <span className="fm-card-topic-tag">{topicTitle}</span>
           ) : null}
         </span>
         <span className="fmb">
@@ -595,6 +654,7 @@ export const FormulaCardView = memo(function FormulaCardView({
               type="button"
               className="fm-hud-btn fm-peek-btn"
               aria-label={`Peek full topic for ${card.title}`}
+              title="View all cards in this topic"
               onClick={(e) => {
                 e.stopPropagation();
                 onPeekTopic(card.topicId);
@@ -608,6 +668,7 @@ export const FormulaCardView = memo(function FormulaCardView({
               type="button"
               className={`fm-hud-btn fm-pin-btn${isPinned ? ' on' : ''}`}
               aria-label={`Pin ${card.title} to fullscreen corner dock`}
+              title={isPinned ? 'Pinned to your screen' : 'Pin this card while you practice'}
               onClick={(e) => {
                 e.stopPropagation();
                 onPinCard(card);
@@ -616,11 +677,52 @@ export const FormulaCardView = memo(function FormulaCardView({
               {isPinned ? '[PINNED]' : '[PIN]'}
             </button>
           ) : null}
+          {onSaveNote ? (
+            <button
+              type="button"
+              className={`fmnote-btn${hasSavedNote ? ' on' : ''}`}
+              aria-label={hasSavedNote ? `Edit personal note for ${card.title}` : `Add personal note for ${card.title}`}
+              aria-expanded={noteOpen}
+              title={hasSavedNote ? 'Edit your note' : 'Add a personal note'}
+              onClick={(e) => {
+                e.stopPropagation();
+                setNoteOpen((prev) => !prev);
+              }}
+            >
+              {hasSavedNote ? 'NOTE •' : 'NOTE'}
+            </button>
+          ) : null}
+          {onCopyDeepLink ? (
+            <button
+              type="button"
+              className="fmlink-btn"
+              aria-label={`Copy direct link to ${card.title}`}
+              title="Copy direct link to this card"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCopyDeepLink(card);
+              }}
+            >
+              LINK
+            </button>
+          ) : null}
+          <a
+            href={reportTypoHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="fmtypo"
+            aria-label={`Report typo in ${card.title} on GitHub`}
+            title="Spotted a mistake? Report it"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Typo
+          </a>
           <button
             type="button"
             className={`fmst${isStarred ? ' on' : ''}`}
             aria-label={isStarred ? `Remove star from ${card.title}` : `Star ${card.title}`}
             aria-pressed={isStarred}
+            title={isStarred ? 'Remove star' : 'Star for later'}
             onClick={(e) => {
               e.stopPropagation();
               onToggleStar(card.id);
@@ -632,6 +734,7 @@ export const FormulaCardView = memo(function FormulaCardView({
             type="button"
             className="fmcp"
             aria-label={`Copy LaTeX for ${card.title}`}
+            title="Copy to clipboard"
             data-t={copyPayload}
             onClick={(e) => {
               e.stopPropagation();
@@ -644,6 +747,7 @@ export const FormulaCardView = memo(function FormulaCardView({
             <label
               className="fml"
               aria-label={`Mark ${card.title} as learned`}
+              title={isLearned ? 'Mark as not learned yet' : 'Mark as learned'}
               onClick={(e) => e.stopPropagation()}
             >
               <input
@@ -682,6 +786,100 @@ export const FormulaCardView = memo(function FormulaCardView({
             />
           </pre>
         ) : null}
+        {hasSavedNote && !noteOpen ? (
+          <div
+            className="fm-personal-note"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onSaveNote) setNoteOpen(true);
+            }}
+          >
+            <div className="fm-personal-note-head">
+              <span className="fm-personal-note-label">MY MARGIN NOTE</span>
+              {onSaveNote ? (
+                <button
+                  type="button"
+                  className="fm-note-edit-trigger"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setNoteOpen(true);
+                  }}
+                >
+                  [EDIT]
+                </button>
+              ) : null}
+            </div>
+            <p className="fm-personal-note-body">{noteText}</p>
+          </div>
+        ) : null}
+        {noteOpen && onSaveNote ? (
+          <div
+            className="fm-note-editor"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="fm-note-editor-head">
+              <span className="fm-personal-note-label">PERSONAL MARGIN NOTE</span>
+              <span className="fm-note-char-count">
+                {noteDraft.length}/{MAX_CARD_NOTE_LENGTH}
+              </span>
+            </div>
+            <textarea
+              className="fm-note-textarea"
+              rows={3}
+              maxLength={MAX_CARD_NOTE_LENGTH}
+              placeholder="Jot down professor hints, sign-convention traps, or a quick mnemonic..."
+              aria-label={`Personal margin note for ${card.title}`}
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                  e.preventDefault();
+                  onSaveNote(card.id, noteDraft);
+                  setNoteOpen(false);
+                } else if (e.key === 'Escape') {
+                  e.stopPropagation();
+                  setNoteDraft(noteText);
+                  setNoteOpen(false);
+                }
+              }}
+            />
+            <div className="fm-note-editor-actions">
+              {hasSavedNote ? (
+                <button
+                  type="button"
+                  className="fm-note-btn danger"
+                  onClick={() => {
+                    setNoteDraft('');
+                    onSaveNote(card.id, '');
+                    setNoteOpen(false);
+                  }}
+                >
+                  [CLEAR]
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="fm-note-btn"
+                onClick={() => {
+                  setNoteDraft(noteText);
+                  setNoteOpen(false);
+                }}
+              >
+                [CANCEL]
+              </button>
+              <button
+                type="button"
+                className="fm-note-btn primary"
+                onClick={() => {
+                  onSaveNote(card.id, noteDraft);
+                  setNoteOpen(false);
+                }}
+              >
+                [SAVE NOTE]
+              </button>
+            </div>
+          </div>
+        ) : null}
         {!hideContext && card.note ? (
           <SecondaryMathText
             className="fmnote"
@@ -713,7 +911,11 @@ export const FormulaCardView = memo(function FormulaCardView({
                 highlightTokens={activeHighlightTokens}
               />
             </summary>
-            <div className={`fmd-collapse${stepsOpen ? ' is-open' : ''}`} aria-hidden={!stepsOpen}>
+            <div
+              className={`fmd-collapse${stepsOpen ? ' is-open' : ''}`}
+              aria-hidden={!stepsOpen}
+              inert={!stepsOpen}
+            >
               <div className="fmd-collapse-inner">
                 <ol className="fmsteps">
                   {card.steps.map((step, idx) => (
@@ -809,11 +1011,16 @@ export interface TopicSectionAccordionProps {
   domId: string;
   keyPrefix: string;
   selfTest: boolean;
+  notesMap?: Record<string, string>;
+  deepLinkFlashCardId?: string;
+  activeNavCardId?: string;
   highlightTokens?: readonly string[];
   onToggleTopic: (topicId: string) => void;
   onToggleStar: (id: string) => void;
   onToggleLearned: (id: string, checked: boolean) => void;
   onCopyLatex: (latex: string) => void;
+  onSaveNote: (id: string, note: string) => void;
+  onCopyDeepLink: (card: FormulaCardRecord) => void;
 }
 
 export const TopicSectionAccordion = memo(function TopicSectionAccordion({
@@ -826,11 +1033,16 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
   domId,
   keyPrefix,
   selfTest,
+  notesMap,
+  deepLinkFlashCardId,
+  activeNavCardId,
   highlightTokens,
   onToggleTopic,
   onToggleStar,
   onToggleLearned,
   onCopyLatex,
+  onSaveNote,
+  onCopyDeepLink,
 }: TopicSectionAccordionProps) {
   const freqScore = useMemo(() => parseFreqScore(section.freqBadge), [section.freqBadge]);
   const totalCards = section.cards.length;
@@ -861,7 +1073,7 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
           {section.freqBadge ? (
             <span
               className={`fmfreq freq-${freqScore}`}
-              title="How often this topic appeared in the 2010–2025 papers"
+              title="How often this shows up in finals (2010–2025)"
             >
               {freqScore > 0 ? (
                 <span className="freq-dots" aria-hidden="true">
@@ -904,11 +1116,16 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
                 isWide={effectiveIsWide}
                 isLearned={isLearned}
                 isStarred={isStarred}
+                noteText={notesMap?.[card.id] || ''}
+                isDeepLinkFlash={deepLinkFlashCardId === card.id}
+                isKeyboardActive={activeNavCardId === card.id}
                 isHidden={false}
                 selfTest={selfTest}
                 onToggleStar={onToggleStar}
                 onToggleLearned={onToggleLearned}
                 onCopyLatex={onCopyLatex}
+                onSaveNote={onSaveNote}
+                onCopyDeepLink={onCopyDeepLink}
                 highlightTokens={highlightTokens}
               />
             );
@@ -920,13 +1137,82 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
 });
 
 export default function App() {
-  const fmSections = useMemo(() => parseTopicSections(fmrootRawHtml), []);
-  const thmSections = useMemo(() => parseTopicSections(thmrootRawHtml), []);
-  const genSections = useMemo(() => parseTopicSections(genRawHtml), []);
+  const fmParseResult = useMemo(
+    () => safeParseSectionGroup('Formulas (fmroot)', fmrootRawHtml, parseTopicSections),
+    []
+  );
+  const thmParseResult = useMemo(
+    () => safeParseSectionGroup('Theorems (thmroot)', thmrootRawHtml, parseTopicSections),
+    []
+  );
+  const genParseResult = useMemo(
+    () => safeParseSectionGroup('General Math (gen)', genRawHtml, parseTopicSections),
+    []
+  );
+  const fmSections = fmParseResult.sections;
+  const thmSections = thmParseResult.sections;
+  const genSections = genParseResult.sections;
+  const parseErrors = useMemo(
+    () =>
+      [fmParseResult.error, thmParseResult.error, genParseResult.error].filter(
+        (err): err is string => Boolean(err)
+      ),
+    [fmParseResult.error, thmParseResult.error, genParseResult.error]
+  );
   const allSections = useMemo(
     () => [...fmSections, ...thmSections, ...genSections],
     [fmSections, thmSections, genSections]
   );
+  const allKnownCardIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const sec of allSections) {
+      for (const card of sec.cards) {
+        ids.add(card.id);
+      }
+    }
+    return ids;
+  }, [allSections]);
+  const cardById = useMemo(() => {
+    const map = new Map<string, FormulaCardRecord>();
+    for (const sec of allSections) {
+      for (const card of sec.cards) {
+        map.set(card.id, card);
+      }
+    }
+    return map;
+  }, [allSections]);
+  const allCardDeepLinkRefs = useMemo<CardDeepLinkRef[]>(() => {
+    const refs: CardDeepLinkRef[] = [];
+    for (const sec of fmSections) {
+      for (const card of sec.cards) {
+        refs.push({ id: card.id, topicId: sec.id, course: sec.course, sourceTab: 'fm' });
+      }
+    }
+    for (const sec of thmSections) {
+      for (const card of sec.cards) {
+        refs.push({ id: card.id, topicId: sec.id, course: sec.course, sourceTab: 'thm' });
+      }
+    }
+    for (const sec of genSections) {
+      for (const card of sec.cards) {
+        refs.push({ id: card.id, topicId: sec.id, course: sec.course, sourceTab: 'gen' });
+      }
+    }
+    return refs;
+  }, [fmSections, thmSections, genSections]);
+  const hashTargetSections = useMemo<HashTargetSectionRef[]>(() => {
+    const refs: HashTargetSectionRef[] = [];
+    for (const sec of fmSections) {
+      refs.push({ id: sec.id, course: sec.course, sourceTab: 'fm' });
+    }
+    for (const sec of thmSections) {
+      refs.push({ id: sec.id, course: sec.course, sourceTab: 'thm' });
+    }
+    for (const sec of genSections) {
+      refs.push({ id: sec.id, course: sec.course, sourceTab: 'gen' });
+    }
+    return refs;
+  }, [fmSections, thmSections, genSections]);
 
   // Auto-detect course pills: combine CURRENT_TERM_CONFIG.courses with any data-c codes found in fmSections/thmSections
   const courseOptions = useMemo(() => {
@@ -986,6 +1272,17 @@ export default function App() {
   const [modalOpen, setModalOpen] = useState<boolean>(false);
   const [modalMode, setModalMode] = useState<'flashcard' | 'io'>('io');
   const [activeFlashcard, setActiveFlashcard] = useState<FormulaCardRecord | null>(null);
+  const [flashcardQueue, setFlashcardQueue] = useState<FlashcardQueueState>({
+    queue: [],
+    reviewedCount: 0,
+    gotItCount: 0,
+    requeuedIds: {},
+  });
+  const [flashcardRevealed, setFlashcardRevealed] = useState<boolean>(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState<boolean>(false);
+  const [deepLinkFlashCardId, setDeepLinkFlashCardId] = useState<string>('');
+  const [activeNavCardId, setActiveNavCardId] = useState<string>('');
+  const [activeHudNavIndex, setActiveHudNavIndex] = useState<number>(-1);
   const [importJsonText, setImportJsonText] = useState<string>('');
   const [toastMsg, setToastMsg] = useState<string>('');
   const [showTopBtn, setShowTopBtn] = useState<boolean>(false);
@@ -993,6 +1290,8 @@ export default function App() {
   const [selectedTopicId, setSelectedTopicId] = useState<string>('');
   const [bentoOpen, setBentoOpen] = useState<boolean>(true);
   const [highYieldOnly, setHighYieldOnly] = useState<boolean>(false);
+  const selectedTopicTimerRef = useRef<number | null>(null);
+  const deepLinkFlashTimerRef = useRef<number | null>(null);
 
   const [searchFocused, setSearchFocused] = useState<boolean>(false);
   const [selectedPracticeModuleId, setSelectedPracticeModuleId] = useState<string>('m159-complex');
@@ -1110,17 +1409,217 @@ export default function App() {
     }));
   }, []);
 
+  const storageWarnedRef = useRef<boolean>(false);
+  const suppressNextStorageWriteRef = useRef<boolean>(false);
+
   useEffect(() => {
+    if (suppressNextStorageWriteRef.current) {
+      suppressNextStorageWriteRef.current = false;
+      return;
+    }
     const timer = window.setTimeout(() => {
-      safeWriteStorage(
+      const saved = safeWriteStorage(
         STORAGE_KEY,
         persisted,
         undefined,
         courseOptions.map((c) => c.code)
       );
+      if (!saved && !storageWarnedRef.current) {
+        storageWarnedRef.current = true;
+        showToast('STORAGE FULL OR PRIVATE MODE — PROGRESS NOT SAVED');
+      }
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [persisted, courseOptions]);
+  }, [persisted, courseOptions, showToast]);
+
+  // Multi-tab progress sync via storage event
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const allowedCodes = courseOptions.map((c) => c.code);
+    const handleStorageSync = (e: StorageEvent) => {
+      if (e.key !== STORAGE_KEY || !e.newValue) return;
+      try {
+        const parsed = JSON.parse(e.newValue);
+        const incoming = sanitizePersistedState(parsed, DEFAULT_APP_STATE, allowedCodes);
+        suppressNextStorageWriteRef.current = true;
+        setPersisted((prev) => ({
+          ...prev,
+          learned: incoming.learned,
+          starred: incoming.starred,
+          notes: incoming.notes,
+          examDate: incoming.examDate,
+          searchHistory: incoming.searchHistory,
+        }));
+      } catch {
+        // Ignore malformed cross-tab storage payloads
+      }
+    };
+    window.addEventListener('storage', handleStorageSync);
+    return () => window.removeEventListener('storage', handleStorageSync);
+  }, [courseOptions]);
+
+  // Lock background page scroll while modal dialog or shortcuts overlay is open
+  useEffect(() => {
+    if (typeof document === 'undefined' || (!modalOpen && !shortcutsOpen)) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [modalOpen, shortcutsOpen]);
+
+  // Briefly highlight a jumped-to topic and clear it automatically so it never stays stuck
+  const pulseSelectedTopic = useCallback((topicId: string) => {
+    if (selectedTopicTimerRef.current !== null) {
+      window.clearTimeout(selectedTopicTimerRef.current);
+      selectedTopicTimerRef.current = null;
+    }
+    setSelectedTopicId(topicId);
+    if (topicId && typeof window !== 'undefined') {
+      selectedTopicTimerRef.current = window.setTimeout(() => {
+        setSelectedTopicId((current) => (current === topicId ? '' : current));
+        selectedTopicTimerRef.current = null;
+      }, 1800);
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (selectedTopicTimerRef.current !== null) {
+        window.clearTimeout(selectedTopicTimerRef.current);
+      }
+      if (deepLinkFlashTimerRef.current !== null) {
+        window.clearTimeout(deepLinkFlashTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Resolve ?card=<id> direct deep-links on load and browser history navigation
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const applyCardDeepLink = () => {
+      const resolved = resolveCardDeepLink(window.location.search, allCardDeepLinkRefs);
+      if (!resolved) return;
+      if (!resolved.found) {
+        showToast(`CARD NOT FOUND: ${resolved.rawId}`);
+        return;
+      }
+
+      setPersisted((prev) => {
+        const nextTab: TabMode =
+          resolved.sourceTab === 'gen'
+            ? prev.tab === 'prac'
+              ? 'fm'
+              : prev.tab
+            : resolved.sourceTab;
+        const nextCourse: CourseCode =
+          resolved.sourceTab === 'gen'
+            ? 'GEN'
+            : prev.course === 'ALL' || prev.course === resolved.course
+            ? prev.course
+            : (resolved.course as CourseCode);
+        return {
+          ...prev,
+          tab: nextTab,
+          course: nextCourse,
+          status: 'all',
+        };
+      });
+      setHighYieldOnly(false);
+      setThmFilter('all');
+      setSearchInput('');
+      setBentoOpen(false);
+      setOpenTopics((prev) => ({ ...prev, [resolved.topicId]: true }));
+      pulseSelectedTopic(resolved.topicId);
+
+      if (deepLinkFlashTimerRef.current !== null) {
+        window.clearTimeout(deepLinkFlashTimerRef.current);
+      }
+      setDeepLinkFlashCardId(resolved.id);
+      deepLinkFlashTimerRef.current = window.setTimeout(() => {
+        setDeepLinkFlashCardId((cur) => (cur === resolved.id ? '' : cur));
+        deepLinkFlashTimerRef.current = null;
+      }, 5000);
+
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const cardEl = document.querySelector<HTMLElement>(
+            `.fmi[data-k="${CSS.escape(resolved.id)}"]`
+          );
+          if (cardEl) {
+            cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } else {
+            const topicEl = document.getElementById(resolved.topicId);
+            topicEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
+      });
+    };
+
+    applyCardDeepLink();
+    window.addEventListener('popstate', applyCardDeepLink);
+    return () => window.removeEventListener('popstate', applyCardDeepLink);
+  }, [allCardDeepLinkRefs, pulseSelectedTopic, showToast]);
+
+  // Resolve initial and subsequent #hash topic URLs cleanly
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const applyHashNavigation = () => {
+      const resolved = resolveHashTarget(window.location.hash, hashTargetSections);
+      if (!resolved) return;
+
+      if (!resolved.found) {
+        showToast('TOPIC NOT FOUND');
+        if (window.history?.replaceState) {
+          window.history.replaceState(
+            null,
+            '',
+            window.location.pathname + window.location.search
+          );
+        }
+        return;
+      }
+
+      setPersisted((prev) => {
+        const nextTab: TabMode =
+          resolved.sourceTab === 'gen'
+            ? prev.tab === 'prac'
+              ? 'fm'
+              : prev.tab
+            : resolved.sourceTab;
+        const nextCourse =
+          resolved.sourceTab === 'gen'
+            ? 'GEN'
+            : prev.course === 'ALL' || prev.course === resolved.course
+            ? prev.course
+            : resolved.course;
+        if (prev.tab === nextTab && prev.course === nextCourse && prev.status === 'all') {
+          return prev;
+        }
+        return {
+          ...prev,
+          tab: nextTab,
+          course: nextCourse,
+          status: 'all',
+        };
+      });
+      setHighYieldOnly(false);
+      pulseSelectedTopic(resolved.id);
+      setOpenTopics((prev) => ({ ...prev, [resolved.id]: true }));
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const el = document.getElementById(resolved.id);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
+      });
+    };
+
+    applyHashNavigation();
+    window.addEventListener('hashchange', applyHashNavigation);
+    return () => window.removeEventListener('hashchange', applyHashNavigation);
+  }, [hashTargetSections, pulseSelectedTopic, showToast]);
 
   // Sync body classes for Self-Test, Hide Details, and Single-Column Layout
   useEffect(() => {
@@ -1171,13 +1670,22 @@ export default function App() {
     updateChromeHeight();
     const handleResize = () => {
       updateChromeHeight();
-      const isNowMobileTablet = window.innerWidth <= 1024;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const isNowMobileTablet = vw <= 1024;
       if (isNowMobileTablet !== prevIsMobileTabletRef.current) {
         prevIsMobileTabletRef.current = isNowMobileTablet;
         if (isNowMobileTablet) {
           setSidebarOpen(false);
         }
       }
+      setPinnedLayouts((prev) => clampPinnedLayoutsToViewport(prev, vw, vh));
+      setHudHeightPx((prev) => {
+        if (prev === null) return null;
+        const clamped = clampHudHeightPx(prev, vh);
+        hudHeightRef.current = clamped;
+        return clamped;
+      });
     };
     window.addEventListener('resize', handleResize, { passive: true });
     return () => window.removeEventListener('resize', handleResize);
@@ -1337,10 +1845,23 @@ export default function App() {
         (document.activeElement as HTMLElement | null)?.isContentEditable;
 
       if (
+        e.key === '?' &&
+        !isInputFocused &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        e.preventDefault();
+        setShortcutsOpen((prev) => !prev);
+        return;
+      }
+
+      if (
         (e.key === '/' && !isInputFocused) ||
         ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')
       ) {
         e.preventDefault();
+        setShortcutsOpen(false);
         if (isPdfFullscreen) {
           setFsHudPointerTop(true);
           window.requestAnimationFrame(() => {
@@ -1352,6 +1873,10 @@ export default function App() {
           searchInputRef.current?.select();
         }
       } else if (e.key === 'Escape') {
+        if (shortcutsOpen) {
+          setShortcutsOpen(false);
+          return;
+        }
         if (isPdfFullscreen) {
           const hudCurrentlyOpen = fsHudPointerTop || fsHudHovered || fsSearchFocused;
           if (hudCurrentlyOpen) {
@@ -1368,6 +1893,7 @@ export default function App() {
         setToolsOpen(false);
         setTermMenuOpen(false);
         setModalOpen(false);
+        setActiveNavCardId('');
         if (typeof window !== 'undefined' && window.innerWidth <= 1024) {
           setSidebarOpen(false);
         }
@@ -1399,6 +1925,7 @@ export default function App() {
     };
   }, [
     searchInput,
+    shortcutsOpen,
     isPdfFullscreen,
     persisted.tab,
     fsHudPointerTop,
@@ -1506,7 +2033,7 @@ export default function App() {
           badge: c.badge,
           displayLabel: 'ALL',
           statLabel: `${pct}%`,
-          title: `Show all courses (${learned}/${total} learned)`,
+          title: `Show all courses · ${learned}/${total} done`,
           total,
           learned,
           pct,
@@ -1520,7 +2047,7 @@ export default function App() {
           badge: c.badge,
           displayLabel: 'GEN MATH',
           statLabel: `${total} REF`,
-          title: `Filter by ${c.badge} ${c.label} (${total} reference cards)`,
+          title: `Open general math reference (${total} cards)`,
           total,
           learned: total,
           pct: 100,
@@ -1539,7 +2066,7 @@ export default function App() {
         badge: c.badge,
         displayLabel: c.code,
         statLabel: `${pct}%`,
-        title: `Filter by ${c.badge} (${learned}/${total} learned)`,
+        title: `Focus on ${c.badge} · ${learned}/${total} done`,
         total,
         learned,
         pct,
@@ -1552,51 +2079,6 @@ export default function App() {
     () => tokenizeSearchQuery(deferredQuery),
     [deferredQuery]
   );
-
-  // Debounced semantic similarity scoring (180ms) with cancellation flag
-  useEffect(() => {
-    const trimmed = deferredQuery.trim();
-    if (!trimmed || searchDebugMode === 'lexical') {
-      setSemanticResult(null);
-      return;
-    }
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      rankBySemanticSimilarity(trimmed)
-        .then((scores) => {
-          if (!cancelled) {
-            setSemanticResult({ query: trimmed, scores });
-          }
-        })
-        .catch(() => {});
-    }, 180);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [deferredQuery, searchDebugMode]);
-
-  useEffect(() => {
-    const trimmed = deferredHudQuery.trim();
-    if (!trimmed || searchDebugMode === 'lexical') {
-      setHudSemanticResult(null);
-      return;
-    }
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      rankBySemanticSimilarity(trimmed)
-        .then((scores) => {
-          if (!cancelled) {
-            setHudSemanticResult({ query: trimmed, scores });
-          }
-        })
-        .catch(() => {});
-    }, 180);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [deferredHudQuery, searchDebugMode]);
 
   const semanticScores = useMemo(
     () =>
@@ -1674,6 +2156,37 @@ export default function App() {
     genCardsWithIndex,
   ]);
 
+  // Debounced semantic similarity scoring (220ms) — auto-activates only when lexical confidence is low
+  useEffect(() => {
+    const trimmed = deferredQuery.trim();
+    if (
+      trimmed.length < 3 ||
+      searchDebugMode === 'lexical' ||
+      (searchDebugMode !== 'semantic' &&
+        bestTabLexicalConfidence >= CONFIDENT_LEXICAL_THRESHOLD) ||
+      (!canAutoLoadSemanticModel() && !isEmbeddingModelLoaded())
+    ) {
+      if (trimmed.length < 3 || searchDebugMode === 'lexical') {
+        setSemanticResult(null);
+      }
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      rankBySemanticSimilarity(trimmed)
+        .then((scores) => {
+          if (!cancelled) {
+            setSemanticResult({ query: trimmed, scores });
+          }
+        })
+        .catch(() => {});
+    }, 220);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [deferredQuery, searchDebugMode, bestTabLexicalConfidence]);
+
   const useTabSemantic = useMemo(
     () =>
       deferredTokens.length > 0 &&
@@ -1690,6 +2203,7 @@ export default function App() {
     let totalCardsInScope = 0;
     let visibleCards = 0;
     let highYieldCountInScope = 0;
+    let cramSprintRemainingCount = 0;
     let starredCountInScope = 0;
     const visibleIds: string[] = [];
 
@@ -1699,10 +2213,14 @@ export default function App() {
       if (!courseMatch || !thmMatch) continue;
 
       const isHighYield = highYieldTopicIds.has(card.topicId);
-      if (isHighYield) highYieldCountInScope++;
-
       const isLearned = Boolean(persisted.learned[card.id]);
       const isStarred = Boolean(persisted.starred[card.id]);
+      if (isHighYield) {
+        highYieldCountInScope++;
+        if (card.course !== 'GEN' && !isLearned) {
+          cramSprintRemainingCount++;
+        }
+      }
       if (isStarred) starredCountInScope++;
 
       if (highYieldOnly && !isHighYield) continue;
@@ -1739,6 +2257,7 @@ export default function App() {
       visibleCards,
       visibleIds,
       highYieldCountInScope,
+      cramSprintRemainingCount,
       starredCountInScope,
     };
   }, [
@@ -1888,6 +2407,7 @@ export default function App() {
 
   const handleToggleTopic = useCallback(
     (topicId: string) => {
+      setSelectedTopicId((cur) => (cur === topicId ? '' : cur));
       if (deferredTokens.length > 0) {
         setSearchToggledTopics((prev) => ({
           ...prev,
@@ -1903,22 +2423,25 @@ export default function App() {
     [deferredTokens.length]
   );
 
-  const handleSelectTopicFromNav = useCallback((targetId: string, href: string) => {
-    setSelectedTopicId(targetId);
-    setOpenTopics((prev) => ({ ...prev, [targetId]: true }));
-    setSidebarOpen(false);
-    if (typeof window !== 'undefined') {
-      window.requestAnimationFrame(() => {
-        const el = document.getElementById(targetId);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const handleSelectTopicFromNav = useCallback(
+    (targetId: string, href: string) => {
+      pulseSelectedTopic(targetId);
+      setOpenTopics((prev) => ({ ...prev, [targetId]: true }));
+      setSidebarOpen(false);
+      if (typeof window !== 'undefined') {
+        window.requestAnimationFrame(() => {
+          const el = document.getElementById(targetId);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
+        if (window.history?.replaceState) {
+          window.history.replaceState(null, '', href);
         }
-      });
-      if (window.history?.replaceState) {
-        window.history.replaceState(null, '', href);
       }
-    }
-  }, []);
+    },
+    [pulseSelectedTopic]
+  );
 
   const handleBrandReset = useCallback(() => {
     setPersisted((prev) => resetToHomeFormulasState(prev));
@@ -1969,13 +2492,122 @@ export default function App() {
   }, []);
 
   const handleCopyLatex = useCallback(
-    (latex: string) => {
-      if (navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(latex).catch(() => {});
-      }
-      showToast('COPIED TO CLIPBOARD');
+    async (latex: string) => {
+      const ok = await copyTextToClipboard(latex);
+      showToast(ok ? 'COPIED TO CLIPBOARD' : 'COPY FAILED — SELECT MANUALLY');
     },
     [showToast]
+  );
+
+  const handleSaveNote = useCallback(
+    (id: string, rawNote: string) => {
+      const trimmed = rawNote.trim().slice(0, MAX_CARD_NOTE_LENGTH);
+      setPersisted((prev) => {
+        const nextNotes = { ...(prev.notes || {}) };
+        if (trimmed.length === 0) {
+          delete nextNotes[id];
+        } else {
+          nextNotes[id] = trimmed;
+        }
+        return { ...prev, notes: nextNotes };
+      });
+      showToast(trimmed.length > 0 ? 'MARGIN NOTE SAVED' : 'MARGIN NOTE CLEARED');
+    },
+    [showToast]
+  );
+
+  const handleCopyDeepLink = useCallback(
+    async (card: FormulaCardRecord) => {
+      const pathname =
+        typeof window !== 'undefined' && window.location?.pathname
+          ? window.location.pathname
+          : '/';
+      const url = buildCardDeepLinkUrl(card.id, undefined, pathname);
+      if (typeof window !== 'undefined' && window.history?.replaceState) {
+        window.history.replaceState(null, '', `${pathname}?card=${encodeURIComponent(card.id)}`);
+      }
+      const ok = await copyTextToClipboard(url);
+      showToast(ok ? `COPIED LINK // ?card=${card.id}` : 'LINK UPDATED IN ADDRESS BAR');
+    },
+    [showToast]
+  );
+
+  const isCramSprintActive = highYieldOnly && persisted.status === 'unlearned';
+
+  const handleCramSprintToggle = useCallback(() => {
+    if (isCramSprintActive) {
+      setHighYieldOnly(false);
+      setPersisted((prev) => ({ ...prev, status: 'all' }));
+      showToast('CRAM SPRINT ENDED — SHOWING ALL CARDS');
+      return;
+    }
+    setHighYieldOnly(true);
+    setPersisted((prev) => ({
+      ...prev,
+      status: 'unlearned',
+      tab: prev.tab === 'prac' ? 'fm' : prev.tab,
+    }));
+    showToast('LAST-NIGHT SPRINT ACTIVE // 5/5 HIGH-YIELD UNLEARNED');
+  }, [isCramSprintActive, showToast]);
+
+  const handlePrintSheet = useCallback(
+    (mode: 'starred' | 'unlearned' | 'current') => {
+      setToolsOpen(false);
+      if (typeof window === 'undefined') return;
+
+      if (mode === 'starred') {
+        const starredTotal = Object.keys(persisted.starred).length;
+        if (starredTotal === 0) {
+          showToast('NO STARRED CARDS TO PRINT');
+          return;
+        }
+        setPersisted((prev) => ({
+          ...prev,
+          status: 'starred',
+          tab: prev.tab === 'prac' ? 'fm' : prev.tab,
+        }));
+      } else if (mode === 'unlearned') {
+        setPersisted((prev) => ({
+          ...prev,
+          status: 'unlearned',
+          tab: prev.tab === 'prac' ? 'fm' : prev.tab,
+        }));
+      }
+
+      const targetSections = isGenSelected
+        ? genSections
+        : persisted.tab === 'thm'
+        ? [...thmSections, ...genSections]
+        : [...fmSections, ...genSections];
+
+      setOpenTopics((prev) => {
+        const next = { ...prev };
+        const anyOpen = targetSections.some((sec) => Boolean(prev[sec.id]));
+        if (mode !== 'current' || !anyOpen) {
+          for (const sec of targetSections) {
+            next[sec.id] = true;
+          }
+        }
+        return next;
+      });
+
+      showToast(
+        mode === 'starred'
+          ? 'PREPARING A4 PRINT // STARRED SHEET'
+          : mode === 'unlearned'
+          ? 'PREPARING A4 PRINT // UNLEARNED SHEET'
+          : 'PREPARING A4 PRINT // CURRENT VIEW'
+      );
+
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          window.setTimeout(() => {
+            window.print();
+          }, 120);
+        });
+      });
+    },
+    [persisted.starred, persisted.tab, isGenSelected, fmSections, thmSections, genSections, showToast]
   );
 
   // Study Tools Handlers
@@ -2021,16 +2653,63 @@ export default function App() {
       showToast('NO VISIBLE CARDS IN CURRENT FILTER');
       return;
     }
-    const candidates =
-      pool.length > 1 && activeFlashcard
-        ? pool.filter((c) => c.id !== activeFlashcard.id)
-        : pool;
-    const chosen = candidates[Math.floor(Math.random() * candidates.length)];
-    setActiveFlashcard(chosen);
+    const nextQueue = createFlashcardQueue(
+      pool.map((c) => c.id),
+      { currentCardId: activeFlashcard?.id ?? null }
+    );
+    const firstCard = nextQueue.queue[0] ? cardById.get(nextQueue.queue[0]) || pool[0] : pool[0];
+    setFlashcardQueue(nextQueue);
+    setActiveFlashcard(firstCard);
+    setFlashcardRevealed(false);
     setModalMode('flashcard');
     setToolsOpen(false);
     setModalOpen(true);
-  }, [filterSummary.visibleIds, activeIndexedPool, activeFlashcard, showToast]);
+  }, [filterSummary.visibleIds, activeIndexedPool, activeFlashcard, cardById, showToast]);
+
+  const handleGradeFlashcard = useCallback(
+    (grade: 'review' | 'got-it') => {
+      if (!activeFlashcard) return;
+      const result = gradeFlashcardQueue(flashcardQueue, grade);
+      const gradedCard = result.gradedCardId ? cardById.get(result.gradedCardId) : activeFlashcard;
+
+      if (result.gradedCardId) {
+        if (grade === 'review') {
+          setPersisted((prev) => ({
+            ...prev,
+            starred: { ...prev.starred, [result.gradedCardId!]: true },
+          }));
+          showToast('STARRED & RE-QUEUED FOR SOONER REVIEW');
+        } else {
+          if (gradedCard?.course !== 'GEN') {
+            setPersisted((prev) => ({
+              ...prev,
+              learned: { ...prev.learned, [result.gradedCardId!]: true },
+            }));
+          }
+          showToast(
+            result.nextCardId ? 'MARKED LEARNED — NEXT CARD' : 'DECK COMPLETE — ALL CARDS MASTERED'
+          );
+        }
+      }
+
+      setFlashcardQueue(result.nextState);
+      setFlashcardRevealed(false);
+      setActiveFlashcard(result.nextCardId ? cardById.get(result.nextCardId) || null : null);
+    },
+    [activeFlashcard, flashcardQueue, cardById, showToast]
+  );
+
+  const handleSkipFlashcard = useCallback(() => {
+    if (flashcardQueue.queue.length <= 1) {
+      setFlashcardRevealed(false);
+      return;
+    }
+    const [current, ...rest] = flashcardQueue.queue;
+    const rotated = [...rest, current];
+    setFlashcardQueue((prev) => ({ ...prev, queue: rotated }));
+    setFlashcardRevealed(false);
+    setActiveFlashcard(cardById.get(rotated[0]) || null);
+  }, [flashcardQueue.queue, cardById]);
 
   const handleExpandCollapseAll = useCallback(
     (expand: boolean) => {
@@ -2073,7 +2752,7 @@ export default function App() {
   }, [showToast]);
 
   const handleImportSubmit = useCallback(() => {
-    const validation = validateJsonImportPayload(importJsonText);
+    const validation = validateJsonImportPayload(importJsonText, allKnownCardIds);
     if (!validation.ok || !validation.data) {
       showToast(validation.error || 'INVALID JSON FORMAT');
       return;
@@ -2082,11 +2761,21 @@ export default function App() {
       ...prev,
       learned: validation.data!.learned,
       starred: validation.data!.starred,
+      notes: validation.data!.notes ?? prev.notes,
       examDate: validation.data!.examDate ?? prev.examDate,
     }));
     setModalOpen(false);
-    showToast('PROGRESS RESTORED');
-  }, [importJsonText, showToast]);
+    const stats = validation.stats;
+    if (stats) {
+      const ignoredTotal =
+        stats.ignoredLearnedCount + stats.ignoredStarredCount + stats.ignoredNotesCount;
+      const notesSuffix = stats.notesCount > 0 ? `, ${stats.notesCount} NOTES` : '';
+      const baseMsg = `RESTORED ${stats.learnedCount} LEARNED, ${stats.starredCount} STARRED${notesSuffix}`;
+      showToast(ignoredTotal > 0 ? `${baseMsg} (${ignoredTotal} IGNORED)` : baseMsg);
+    } else {
+      showToast('PROGRESS RESTORED');
+    }
+  }, [importJsonText, allKnownCardIds, showToast]);
 
   const hasQuery = searchInput.trim().length > 0;
   const isZeroMatch =
@@ -2298,11 +2987,16 @@ export default function App() {
           domId={item.section.id}
           keyPrefix="fm-"
           selfTest={Boolean(persisted.selfTest)}
+          notesMap={persisted.notes}
+          deepLinkFlashCardId={deepLinkFlashCardId}
+          activeNavCardId={activeNavCardId}
           highlightTokens={activeHighlightTokensForTab}
           onToggleTopic={handleToggleTopic}
           onToggleStar={handleToggleStar}
           onToggleLearned={handleToggleLearned}
           onCopyLatex={handleCopyLatex}
+          onSaveNote={handleSaveNote}
+          onCopyDeepLink={handleCopyDeepLink}
         />
       );
     });
@@ -2314,11 +3008,16 @@ export default function App() {
     openTopics,
     selectedTopicId,
     persisted.selfTest,
+    persisted.notes,
+    deepLinkFlashCardId,
+    activeNavCardId,
     activeHighlightTokensForTab,
     handleToggleTopic,
     handleToggleStar,
     handleToggleLearned,
     handleCopyLatex,
+    handleSaveNote,
+    handleCopyDeepLink,
   ]);
 
   const renderedThmSections = useMemo(() => {
@@ -2344,11 +3043,16 @@ export default function App() {
           domId={item.section.id}
           keyPrefix="thm-"
           selfTest={Boolean(persisted.selfTest)}
+          notesMap={persisted.notes}
+          deepLinkFlashCardId={deepLinkFlashCardId}
+          activeNavCardId={activeNavCardId}
           highlightTokens={activeHighlightTokensForTab}
           onToggleTopic={handleToggleTopic}
           onToggleStar={handleToggleStar}
           onToggleLearned={handleToggleLearned}
           onCopyLatex={handleCopyLatex}
+          onSaveNote={handleSaveNote}
+          onCopyDeepLink={handleCopyDeepLink}
         />
       );
     });
@@ -2360,11 +3064,16 @@ export default function App() {
     openTopics,
     selectedTopicId,
     persisted.selfTest,
+    persisted.notes,
+    deepLinkFlashCardId,
+    activeNavCardId,
     activeHighlightTokensForTab,
     handleToggleTopic,
     handleToggleStar,
     handleToggleLearned,
     handleCopyLatex,
+    handleSaveNote,
+    handleCopyDeepLink,
   ]);
 
   const hudTokens = useMemo(
@@ -2419,6 +3128,67 @@ export default function App() {
     [peekTopicId, allSections]
   );
 
+  const hudPool = useMemo(
+    () =>
+      hudScope === 'FM'
+        ? [...fmCardsWithIndex, ...genCardsWithIndex]
+        : hudScope === 'THM'
+        ? thmCardsWithIndex
+        : [...fmCardsWithIndex, ...thmCardsWithIndex, ...genCardsWithIndex],
+    [hudScope, fmCardsWithIndex, thmCardsWithIndex, genCardsWithIndex]
+  );
+
+  const hudLexicalPass = useMemo(() => {
+    if (hudTokens.length === 0) {
+      return { lexByIndex: [] as number[], bestHudLexicalConfidence: 0 };
+    }
+    let bestHudRawLexicalScore = 0;
+    const lexByIndex = new Array<number>(hudPool.length);
+    for (let i = 0; i < hudPool.length; i++) {
+      const { card, searchIndex } = hudPool[i];
+      const lex = scoreFormulaCardSearch(card, hudTokens, deferredHudQuery, searchIndex);
+      lexByIndex[i] = lex;
+      if (lex > bestHudRawLexicalScore) {
+        bestHudRawLexicalScore = lex;
+      }
+    }
+    return {
+      lexByIndex,
+      bestHudLexicalConfidence: computeLexicalConfidence(bestHudRawLexicalScore, hudTokens),
+    };
+  }, [hudPool, hudTokens, deferredHudQuery]);
+
+  // Debounced fullscreen HUD semantic similarity scoring (220ms) — auto-activates only when lexical confidence is low
+  useEffect(() => {
+    const trimmed = deferredHudQuery.trim();
+    if (
+      trimmed.length < 3 ||
+      searchDebugMode === 'lexical' ||
+      (searchDebugMode !== 'semantic' &&
+        hudLexicalPass.bestHudLexicalConfidence >= CONFIDENT_LEXICAL_THRESHOLD) ||
+      (!canAutoLoadSemanticModel() && !isEmbeddingModelLoaded())
+    ) {
+      if (trimmed.length < 3 || searchDebugMode === 'lexical') {
+        setHudSemanticResult(null);
+      }
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      rankBySemanticSimilarity(trimmed)
+        .then((scores) => {
+          if (!cancelled) {
+            setHudSemanticResult({ query: trimmed, scores });
+          }
+        })
+        .catch(() => {});
+    }, 220);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [deferredHudQuery, searchDebugMode, hudLexicalPass.bestHudLexicalConfidence]);
+
   // Fullscreen Practice HUD in-place search & topic peek across ALL Formulas, Theorems, and GEN (no artificial slice truncation)
   const hudDisplayedCards = useMemo(() => {
     const sortCardsShortToLong = (cards: FormulaCardRecord[]) =>
@@ -2437,13 +3207,6 @@ export default function App() {
         })
         .map((item) => item.card);
 
-    const pool =
-      hudScope === 'FM'
-        ? [...fmCardsWithIndex, ...genCardsWithIndex]
-        : hudScope === 'THM'
-        ? thmCardsWithIndex
-        : [...fmCardsWithIndex, ...thmCardsWithIndex, ...genCardsWithIndex];
-
     // If the user explicitly clicked [PEEK TOPIC] on a search result card or selected a topic pill, show that topic
     if (peekedSection) {
       return sortCardsShortToLong(peekedSection.cards);
@@ -2452,19 +3215,8 @@ export default function App() {
     // When a search query is entered, always search across all cards in the pool
     if (hudTokens.length > 0) {
       const targetCourse = activePracticeModule?.course || 'M159';
-      let bestHudRawLexicalScore = 0;
-      const lexByIndex = new Array<number>(pool.length);
-      for (let i = 0; i < pool.length; i++) {
-        const { card, searchIndex } = pool[i];
-        const lex = scoreFormulaCardSearch(card, hudTokens, deferredHudQuery, searchIndex);
-        lexByIndex[i] = lex;
-        if (lex > bestHudRawLexicalScore) {
-          bestHudRawLexicalScore = lex;
-        }
-      }
-      const bestHudConfidence = computeLexicalConfidence(bestHudRawLexicalScore, hudTokens);
       const useHudSemantic = shouldUseSemanticRanking(
-        bestHudConfidence,
+        hudLexicalPass.bestHudLexicalConfidence,
         hudSemanticScores,
         searchDebugMode
       );
@@ -2476,11 +3228,11 @@ export default function App() {
         lengthScore: number;
         order: number;
       }> = [];
-      for (let i = 0; i < pool.length; i++) {
-        const { card, searchIndex } = pool[i];
+      for (let i = 0; i < hudPool.length; i++) {
+        const { card, searchIndex } = hudPool[i];
         const score = computeHybridCardScore(
           card.id,
-          lexByIndex[i],
+          hudLexicalPass.lexByIndex[i] ?? 0,
           hudSemanticScores,
           useHudSemantic,
           MIN_SEMANTIC_SIMILARITY,
@@ -2514,13 +3266,10 @@ export default function App() {
     return hudCourseSections.flatMap((sec) => sortCardsShortToLong(sec.cards));
   }, [
     peekedSection,
-    hudScope,
+    hudPool,
+    hudLexicalPass,
     hudCourseSections,
-    fmCardsWithIndex,
-    thmCardsWithIndex,
-    genCardsWithIndex,
     hudTokens,
-    deferredHudQuery,
     hudSemanticScores,
     searchDebugMode,
     activePracticeModule,
@@ -2853,6 +3602,167 @@ export default function App() {
     isPdfFullscreen &&
     (fsHudPointerTop || fsHudHovered || fsSearchFocused || isResizingHud);
 
+  // Flattened ordered list of visible cards for j/k and ArrowUp/ArrowDown keyboard navigation
+  const visibleNavCards = useMemo(() => {
+    if (persisted.tab === 'prac' && !isGenSelected) return [] as Array<{ id: string; topicId: string }>;
+    const activeDescriptors =
+      persisted.tab === 'thm' && !isGenSelected ? computedThmSections : computedFmSections;
+    const list: Array<{ id: string; topicId: string }> = [];
+    for (const desc of activeDescriptors) {
+      if (desc.sectionHidden) continue;
+      for (const item of desc.visibleCards) {
+        list.push({ id: item.card.id, topicId: desc.section.id });
+      }
+    }
+    return list;
+  }, [persisted.tab, isGenSelected, computedFmSections, computedThmSections]);
+
+  useEffect(() => {
+    setActiveHudNavIndex(-1);
+  }, [hudQuery, hudScope, hudCourseScope, peekTopicId, isPdfFullscreen]);
+
+  // Keyboard-first power flow: Flashcard recall (Space/1/2) + j/k/Arrow/Enter navigation
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handlePowerKeys = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      const activeEl = document.activeElement as HTMLElement | null;
+      const activeTag = activeEl?.tagName || '';
+      const isTextInput =
+        activeTag === 'INPUT' || activeTag === 'TEXTAREA' || Boolean(activeEl?.isContentEditable);
+
+      // 1. Two-sided Flashcard Active Recall shortcuts
+      if (modalOpen && modalMode === 'flashcard' && !isTextInput) {
+        if ((e.key === ' ' || e.code === 'Space') && activeFlashcard && !flashcardRevealed) {
+          e.preventDefault();
+          setFlashcardRevealed(true);
+          return;
+        }
+        if (e.key === '1' && activeFlashcard && flashcardRevealed) {
+          e.preventDefault();
+          handleGradeFlashcard('review');
+          return;
+        }
+        if (e.key === '2' && activeFlashcard && flashcardRevealed) {
+          e.preventDefault();
+          handleGradeFlashcard('got-it');
+          return;
+        }
+        return;
+      }
+
+      if (modalOpen || shortcutsOpen) return;
+
+      const isArrowDown = e.key === 'ArrowDown';
+      const isArrowUp = e.key === 'ArrowUp';
+      const isNextKey = isArrowDown || (!isTextInput && e.key === 'j');
+      const isPrevKey = isArrowUp || (!isTextInput && e.key === 'k');
+
+      // 2. Fullscreen HUD card navigation
+      if (isPdfFullscreen && fsHudOpen) {
+        const isHudInput = activeEl === fsSearchInputRef.current;
+        if (isTextInput && !isHudInput) return;
+        if ((isNextKey || isPrevKey) && hudVisibleCards.length > 0) {
+          e.preventDefault();
+          setActiveHudNavIndex((prev) => {
+            const next = isNextKey
+              ? prev < hudVisibleCards.length - 1
+                ? prev + 1
+                : 0
+              : prev > 0
+              ? prev - 1
+              : hudVisibleCards.length - 1;
+            const targetCard = hudVisibleCards[next];
+            if (targetCard && fsHudResultsRef.current) {
+              window.requestAnimationFrame(() => {
+                const el = fsHudResultsRef.current?.querySelector<HTMLElement>(
+                  `.fmi[data-k="${CSS.escape(targetCard.id)}"]`
+                );
+                el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              });
+            }
+            return next;
+          });
+          return;
+        }
+        if (e.key === 'Enter' && activeHudNavIndex >= 0 && hudVisibleCards[activeHudNavIndex]) {
+          e.preventDefault();
+          handlePinCard(hudVisibleCards[activeHudNavIndex]);
+          return;
+        }
+        return;
+      }
+
+      // 3. Main workspace search & card navigation
+      const isMainSearchInput = activeEl === searchInputRef.current;
+      if (isTextInput && !isMainSearchInput) return;
+
+      if ((isNextKey || isPrevKey) && visibleNavCards.length > 0) {
+        e.preventDefault();
+        const currentIdx = visibleNavCards.findIndex((c) => c.id === activeNavCardId);
+        const nextIdx = isNextKey
+          ? currentIdx < visibleNavCards.length - 1
+            ? currentIdx + 1
+            : 0
+          : currentIdx > 0
+          ? currentIdx - 1
+          : visibleNavCards.length - 1;
+        const target = visibleNavCards[nextIdx];
+        if (!target) return;
+
+        setActiveNavCardId(target.id);
+        setOpenTopics((prev) => (prev[target.topicId] ? prev : { ...prev, [target.topicId]: true }));
+        if (deferredTokens.length > 0) {
+          setSearchToggledTopics((prev) => ({ ...prev, [target.topicId]: true }));
+        }
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            const cardEl = document.querySelector<HTMLElement>(
+              `.fmi[data-k="${CSS.escape(target.id)}"]`
+            );
+            cardEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
+        });
+        return;
+      }
+
+      if (e.key === 'Enter' && activeNavCardId && !isTextInput) {
+        const cardEl = document.querySelector<HTMLElement>(
+          `.fmi[data-k="${CSS.escape(activeNavCardId)}"]`
+        );
+        if (cardEl) {
+          e.preventDefault();
+          cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          if (persisted.selfTest) {
+            cardEl.click();
+          } else {
+            cardEl.focus?.();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handlePowerKeys);
+    return () => window.removeEventListener('keydown', handlePowerKeys);
+  }, [
+    modalOpen,
+    modalMode,
+    shortcutsOpen,
+    activeFlashcard,
+    flashcardRevealed,
+    handleGradeFlashcard,
+    isPdfFullscreen,
+    fsHudOpen,
+    hudVisibleCards,
+    activeHudNavIndex,
+    handlePinCard,
+    visibleNavCards,
+    activeNavCardId,
+    deferredTokens.length,
+    persisted.selfTest,
+  ]);
+
   return (
     <WorkspaceErrorBoundary fallbackLabel={CURRENT_TERM_CONFIG.brandTitle}>
       <header className="top-chrome" ref={topChromeRef}>
@@ -2866,6 +3776,7 @@ export default function App() {
               aria-expanded={sidebarOpen}
               aria-hidden={sidebarOpen}
               tabIndex={sidebarOpen ? -1 : 0}
+              title="Browse all topics"
               onClick={toggleNavDrawer}
             >
               [INDEX]
@@ -2879,7 +3790,7 @@ export default function App() {
                   aria-label="Open BUET EEE Term Archive Switcher"
                   aria-expanded={termMenuOpen}
                   aria-haspopup="menu"
-                  title="Switch BUET EEE Term Archive"
+                  title="Switch semester"
                   onClick={() => setTermMenuOpen((open) => !open)}
                 >
                   {CURRENT_TERM_CONFIG.emblemText}
@@ -2890,6 +3801,7 @@ export default function App() {
                   role="menu"
                   aria-label="BUET EEE Term Archive"
                   aria-hidden={!termMenuOpen}
+                  inert={!termMenuOpen}
                 >
                   <div className="term-archive-header">
                     <span className="sh-label">BUET EEE TERM ARCHIVE</span>
@@ -2950,7 +3862,7 @@ export default function App() {
                 className="buet-ascii-link"
                 id="buetAsciiLink"
                 aria-label="Official BUET Website (buet.ac.bd)"
-                title="Official BUET Website — https://www.buet.ac.bd/web/#/"
+                title="Visit BUET's official website"
               >
                 <pre
                   className="buet-ascii-art"
@@ -2965,7 +3877,7 @@ export default function App() {
                 id="brandResetBtn"
                 role="button"
                 tabIndex={0}
-                title="Return to Formulas (All Courses) and retract all sections"
+                title="Return home"
                 aria-label={`${CURRENT_TERM_CONFIG.brandTitle}: Return to Formulas for all courses and retract all sections`}
                 onClick={handleBrandReset}
                 onKeyDown={(e) => {
@@ -3030,6 +3942,9 @@ export default function App() {
               goalOpen={persisted.goalOpen}
               onToggle={handleToggleGoal}
             />
+            <PWAInstallHeaderBtn
+              onInstalled={() => showToast('APP INSTALLED FOR OFFLINE REVISION')}
+            />
             <div
               ref={toolsWrapRef}
               className={`tools-menu-wrap${toolsOpen ? ' open' : ''}`}
@@ -3040,7 +3955,7 @@ export default function App() {
                 className={`settings-icon-btn${toolsOpen ? ' active' : ''}`}
                 aria-label="Open Settings Menu"
                 aria-expanded={toolsOpen}
-                title="Workspace Settings & Data"
+                title="Settings"
                 onClick={() => setToolsOpen((o) => !o)}
               >
                 <svg
@@ -3058,7 +3973,12 @@ export default function App() {
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
               </button>
-              <div className={`tools-dropdown${toolsOpen ? ' open' : ''}`} role="menu">
+              <div
+                className={`tools-dropdown${toolsOpen ? ' open' : ''}`}
+                role="menu"
+                aria-hidden={!toolsOpen}
+                inert={!toolsOpen}
+              >
                 <div className="dropdown-sec-label">TOPIC ACCORDIONS</div>
                 <button
                   type="button"
@@ -3107,8 +4027,57 @@ export default function App() {
                   <span>Self-Test Blur Mode</span>
                   <span className="ntype-badge">{persisted.selfTest ? 'ON' : 'OFF'}</span>
                 </button>
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  role="menuitem"
+                  id="shortcutsMenuBtn"
+                  onClick={() => {
+                    setToolsOpen(false);
+                    setShortcutsOpen(true);
+                  }}
+                >
+                  <span>Keyboard Shortcuts</span>
+                  <span className="ntype-badge">[?]</span>
+                </button>
                 <div className="dropdown-divider" />
-                <div className="dropdown-sec-label">DATA &amp; BACKUP</div>
+                <div className="dropdown-sec-label">EXAM PRINT &amp; OFFLINE</div>
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  role="menuitem"
+                  id="printStarredBtn"
+                  onClick={() => handlePrintSheet('starred')}
+                >
+                  <span>Print Starred Sheet (A4)</span>
+                  <span className="ntype-badge">A4</span>
+                </button>
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  role="menuitem"
+                  id="printUnlearnedBtn"
+                  onClick={() => handlePrintSheet('unlearned')}
+                >
+                  <span>Print Unlearned Sheet (A4)</span>
+                  <span className="ntype-badge">A4</span>
+                </button>
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  role="menuitem"
+                  id="printCurrentBtn"
+                  onClick={() => handlePrintSheet('current')}
+                >
+                  <span>Print Current View (A4)</span>
+                  <span className="ntype-badge">A4</span>
+                </button>
+                <PWAInstallMenuItem
+                  onCloseMenu={() => setToolsOpen(false)}
+                  onInstalled={() => showToast('APP INSTALLED FOR OFFLINE REVISION')}
+                />
+                <div className="dropdown-divider" />
+                <div className="dropdown-sec-label">DATA &amp; FEEDBACK</div>
                 <button
                   type="button"
                   className="dropdown-item"
@@ -3122,6 +4091,7 @@ export default function App() {
                         {
                           learned: persisted.learned,
                           starred: persisted.starred,
+                          notes: persisted.notes || {},
                           examDate: persisted.examDate,
                         },
                         null,
@@ -3135,6 +4105,17 @@ export default function App() {
                   <span>Export / Import JSON</span>
                   <span className="ntype-badge">IO</span>
                 </button>
+                <a
+                  href={buildReportTypoUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="dropdown-item"
+                  role="menuitem"
+                  onClick={() => setToolsOpen(false)}
+                >
+                  <span>Report Typo on GitHub</span>
+                  <span className="ntype-badge">GH</span>
+                </a>
                 <button
                   type="button"
                   className="dropdown-item danger"
@@ -3151,6 +4132,7 @@ export default function App() {
         <div
           className={`goal-collapse-shell${persisted.goalOpen ? ' is-open' : ''}`}
           aria-hidden={!persisted.goalOpen}
+          inert={!persisted.goalOpen}
         >
           <div className="goal-collapse-inner">
             <div className="goal">
@@ -3203,10 +4185,7 @@ export default function App() {
                 type="search"
                 id="fmq"
                 value={searchInput}
-                onFocus={() => {
-                  setSearchFocused(true);
-                  warmUpEmbeddingModel();
-                }}
+                onFocus={() => setSearchFocused(true)}
                 onBlur={() => setSearchFocused(false)}
                 onChange={(e) => {
                   const nextVal = e.target.value;
@@ -3251,6 +4230,7 @@ export default function App() {
                 role="listbox"
                 aria-label="Recent searches and quick shortcuts"
                 aria-hidden={!showSearchDropdown}
+                inert={!showSearchDropdown}
                 onMouseDown={(e) => e.preventDefault()}
               >
                 {(persisted.searchHistory?.length ?? 0) > 0 ? (
@@ -3399,7 +4379,7 @@ export default function App() {
                 rel="noopener noreferrer"
                 className="buet-ascii-link sb-phone-logo"
                 aria-label="Official BUET Website (buet.ac.bd)"
-                title="Official BUET Website — https://www.buet.ac.bd/web/#/"
+                title="Visit BUET's official website"
               >
                 <pre className="buet-ascii-art" aria-hidden="true">
                   {BUET_LOGO_ASCII_ART}
@@ -3640,32 +4620,49 @@ export default function App() {
                   <span className="command-deck-scope">
                     {persisted.course === 'ALL' ? 'ALL COURSES' : activeCourseBadge}
                   </span>
-                  {highYieldOnly ? (
+                  {isCramSprintActive ? (
                     <button
                       type="button"
-                      className="deck-active-pill high-yield"
+                      id="cramSprintActivePill"
+                      className="deck-active-pill cram-sprint-pill"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setHighYieldOnly(false);
+                        handleCramSprintToggle();
                       }}
-                      title="Clear 5/5 High-Yield filter"
+                      title="Exit last-night sprint"
                     >
-                      5/5 HIGH-YIELD ×
+                      CRAM SPRINT: {filterSummary.cramSprintRemainingCount} LEFT ×
                     </button>
-                  ) : null}
-                  {persisted.status !== 'all' ? (
-                    <button
-                      type="button"
-                      className="deck-active-pill status-pill"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleStatusChange('all');
-                      }}
-                      title="Reset status filter to All"
-                    >
-                      {persisted.status.toUpperCase()} ×
-                    </button>
-                  ) : null}
+                  ) : (
+                    <>
+                      {highYieldOnly ? (
+                        <button
+                          type="button"
+                          className="deck-active-pill high-yield"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setHighYieldOnly(false);
+                          }}
+                          title="Show all topics again"
+                        >
+                          5/5 HIGH-YIELD ×
+                        </button>
+                      ) : null}
+                      {persisted.status !== 'all' ? (
+                        <button
+                          type="button"
+                          className="deck-active-pill status-pill"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStatusChange('all');
+                          }}
+                          title="Show all cards again"
+                        >
+                          {persisted.status.toUpperCase()} ×
+                        </button>
+                      ) : null}
+                    </>
+                  )}
                 </div>
 
                 <div className="command-deck-Telemetry-right">
@@ -3688,6 +4685,7 @@ export default function App() {
               <div
                 className={`command-deck-collapse${bentoOpen ? ' is-open' : ''}`}
                 aria-hidden={!bentoOpen}
+                inert={!bentoOpen}
               >
                 <div className="command-deck-collapse-inner">
                   <div className="command-deck-grid">
@@ -3792,12 +4790,25 @@ export default function App() {
                           }}
                         >
                           <span className="bento-chip-label">
-                            {highYieldOnly
-                              ? '● 5/5 HIGH-YIELD TOPICS ACTIVE'
-                              : '○ ISOLATE 5/5 HIGH-YIELD TOPICS'}
+                            {highYieldOnly ? '● 5/5 HIGH-YIELD' : '○ 5/5 HIGH-YIELD'}
                           </span>
                           <span className="bento-chip-count">
                             {filterSummary.highYieldCountInScope}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          id="cramSprintBtn"
+                          className={`bento-action-chip cram-sprint${isCramSprintActive ? ' active' : ''}`}
+                          aria-pressed={isCramSprintActive}
+                          title="Focus on high-yield unlearned cards"
+                          onClick={handleCramSprintToggle}
+                        >
+                          <span className="bento-chip-label">
+                            {isCramSprintActive ? '● LAST-NIGHT SPRINT' : '○ LAST-NIGHT SPRINT'}
+                          </span>
+                          <span className="bento-chip-count">
+                            {filterSummary.cramSprintRemainingCount} LEFT
                           </span>
                         </button>
                       </div>
@@ -3867,6 +4878,20 @@ export default function App() {
               >
                 [RESET FILTERS]
               </button>
+            </div>
+          ) : null}
+
+          {parseErrors.length > 0 ? (
+            <div className="parser-diagnostic-banner" role="alert">
+              <div className="parser-diagnostic-head">
+                <span className="ntype-badge">[:: CONTENT PARSER DIAGNOSTIC ::]</span>
+                <span>Some section content failed to parse; remaining courses stay available.</span>
+              </div>
+              <ul className="parser-diagnostic-list">
+                {parseErrors.map((errMsg, idx) => (
+                  <li key={idx}>{errMsg}</li>
+                ))}
+              </ul>
             </div>
           ) : null}
 
@@ -4137,10 +5162,7 @@ export default function App() {
                           type="search"
                           id="fsFmq"
                           value={hudQuery}
-                          onFocus={() => {
-                            setFsSearchFocused(true);
-                            warmUpEmbeddingModel();
-                          }}
+                          onFocus={() => setFsSearchFocused(true)}
                           onBlur={() => setFsSearchFocused(false)}
                           onChange={(e) => {
                             setHudQuery(e.target.value);
@@ -4193,7 +5215,7 @@ export default function App() {
                             setHudCourseScope((prev) => (prev === 'COURSE' ? 'ALL' : 'COURSE'));
                             setPeekTopicId(null);
                           }}
-                          title="Switch between current course topics and all courses"
+                          title="Switch between this course and all courses"
                         >
                           {hudCourseScope === 'COURSE'
                             ? `[SCOPE: ${activePracticeModule.courseBadge} (${hudCourseSections.length} TOPICS)]`
@@ -4286,15 +5308,20 @@ export default function App() {
                                 card={card}
                                 cardIndex={idx + 1}
                                 isWide={effectiveIsWide}
+                                showTopicTag={isPdfFullscreen}
                                 topicTitle={topicTitleById.get(card.topicId)}
                                 isLearned={Boolean(persisted.learned[card.id])}
                                 isStarred={Boolean(persisted.starred[card.id])}
+                                noteText={persisted.notes?.[card.id] || ''}
+                                isKeyboardActive={idx === activeHudNavIndex}
                                 isHidden={false}
                                 selfTest={Boolean(persisted.selfTest)}
                                 hideContext={true}
                                 onToggleStar={handleToggleStar}
                                 onToggleLearned={handleToggleLearned}
                                 onCopyLatex={handleCopyLatex}
+                                onSaveNote={handleSaveNote}
+                                onCopyDeepLink={handleCopyDeepLink}
                                 onPeekTopic={(tId) => setPeekTopicId(tId)}
                                 onPinCard={handlePinCard}
                                 isPinned={pinnedCards.some((p) => p.id === card.id)}
@@ -4326,7 +5353,7 @@ export default function App() {
                         role="separator"
                         aria-orientation="horizontal"
                         aria-label="Drag bottom edge to increase or decrease HUD height (double-click to reset)"
-                        title="Drag bottom edge up/down to resize HUD · Double-click to reset height"
+                        title="Drag to resize · Double-click to reset"
                         onMouseDown={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -4426,7 +5453,7 @@ export default function App() {
                                     if ((e.target as HTMLElement).closest('button')) return;
                                     handleToggleMinimizePin(pCard.id);
                                   }}
-                                  title="Drag to move · Double-click to toggle compact mode"
+                                  title="Drag to move · Double-click to shrink"
                                 >
                                   <div className="fs-pinned-title">
                                     <span className="ntype-badge fs-pinned-course-badge">
@@ -4446,7 +5473,7 @@ export default function App() {
                                       type="button"
                                       className="fm-hud-btn"
                                       aria-label={`Copy ${pCard.title}`}
-                                      title="Copy formula or code"
+                                      title="Copy this card"
                                       onClick={() => handleCopyLatex(pinCopyPayload)}
                                     >
                                       [CPY]
@@ -4455,7 +5482,7 @@ export default function App() {
                                       type="button"
                                       className="fm-hud-btn"
                                       aria-label={`Compact mode for ${pCard.title}`}
-                                      title="Collapse to compact formula view"
+                                      title="Shrink to formula only"
                                       onClick={() => handleToggleMinimizePin(pCard.id)}
                                     >
                                       [_]
@@ -4464,6 +5491,7 @@ export default function App() {
                                       type="button"
                                       className="fm-hud-btn fm-unpin-btn"
                                       aria-label={`Unpin ${pCard.title}`}
+                                      title="Unpin card"
                                       onClick={() => handleUnpinCard(pCard.id)}
                                     >
                                       [X]
@@ -4476,7 +5504,7 @@ export default function App() {
                                     type="button"
                                     className="fm-hud-btn"
                                     aria-label={`Expand pinned card ${pCard.title}`}
-                                    title="Expand pinned card"
+                                    title="Expand card"
                                     onClick={() => handleToggleMinimizePin(pCard.id)}
                                   >
                                     [+]
@@ -4485,6 +5513,7 @@ export default function App() {
                                     type="button"
                                     className="fm-hud-btn fm-unpin-btn"
                                     aria-label={`Unpin ${pCard.title}`}
+                                    title="Unpin card"
                                     onClick={() => handleUnpinCard(pCard.id)}
                                   >
                                     [X]
@@ -4501,7 +5530,7 @@ export default function App() {
                                 }
                                 title={
                                   sizeMode === 'formula-only'
-                                    ? `${pCard.title} — Drag to move or drag any edge/corner to resize`
+                                    ? 'Drag to move, or pull any edge to resize'
                                     : undefined
                                 }
                               >
@@ -4579,7 +5608,7 @@ export default function App() {
                                     edge === 'n' || edge === 's' ? 'horizontal' : 'vertical'
                                   }
                                   aria-label={`Resize ${pCard.title} from ${edge.toUpperCase()} edge`}
-                                  title="Drag edge to resize"
+                                  title="Drag to resize"
                                   onMouseDown={(e) =>
                                     startResizePin(e, pCard.id, edge, layout)
                                   }
@@ -4594,7 +5623,7 @@ export default function App() {
                                   data-resize-dir={corner}
                                   role="separator"
                                   aria-label={`Resize ${pCard.title} from ${corner.toUpperCase()} corner`}
-                                  title="Drag corner to resize in any direction"
+                                  title="Drag to resize"
                                   onMouseDown={(e) =>
                                     startResizePin(e, pCard.id, corner, layout)
                                   }
@@ -4687,6 +5716,7 @@ export default function App() {
         aria-modal="true"
         aria-label="Study Tool Modal"
         aria-hidden={!modalOpen}
+        inert={!modalOpen}
         onClick={(e) => {
           if (e.target === e.currentTarget) {
             setModalOpen(false);
@@ -4694,22 +5724,21 @@ export default function App() {
         }}
       >
         <div className="fcb">
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px',
-              marginBottom: '14px',
-              paddingBottom: '10px',
-              borderBottom: '1px solid rgba(255,255,255,0.08)',
-            }}
-          >
-            <span className="ntype-badge">
-              {modalMode === 'flashcard' && activeFlashcard
-                ? `RANDOM FLASHCARD // ${activeFlashcard.course}`
-                : 'EXPORT / IMPORT PROGRESS JSON'}
-            </span>
+          <div className="fc-modal-head">
+            <div className="fc-modal-head-left">
+              <span className="ntype-badge">
+                {modalMode === 'flashcard'
+                  ? activeFlashcard
+                    ? `ACTIVE RECALL // ${activeFlashcard.course}`
+                    : 'ACTIVE RECALL // DECK COMPLETE'
+                  : 'EXPORT / IMPORT PROGRESS JSON'}
+              </span>
+              {modalMode === 'flashcard' ? (
+                <span className="fc-queue-stat">
+                  {flashcardQueue.queue.length} LEFT · {flashcardQueue.gotItCount} GOT IT
+                </span>
+              ) : null}
+            </div>
             <button
               type="button"
               className="sb-btn"
@@ -4721,90 +5750,172 @@ export default function App() {
             </button>
           </div>
 
-          {modalMode === 'flashcard' && activeFlashcard ? (
-            <div className="fcbody">
-              <div
-                style={{
-                  fontSize: 'var(--fs-md)',
-                  fontWeight: 600,
-                  marginBottom: '10px',
-                  color: 'var(--text-primary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <SecondaryMathText
-                  className=""
-                  as="span"
-                  content={activeFlashcard.title}
-                />
-                {activeFlashcard.badge ? (
-                  <span className="thty">{activeFlashcard.badge}</span>
-                ) : null}
-              </div>
-              {activeFlashcard.htmlContent ? (
-                <SecondaryMathText
-                  className="fmhtml"
-                  content={activeFlashcard.htmlContent}
-                />
-              ) : null}
-              {activeFlashcard.rawLatex ? (
-                <KatexMathBlock
-                  latex={activeFlashcard.rawLatex}
-                  displayMode={activeFlashcard.fmmDisplayMode ?? true}
-                />
-              ) : null}
-              {activeFlashcard.codeContent ? (
-                <pre className="fmcode">
-                  <code
-                    dangerouslySetInnerHTML={{
-                      __html: highlightCppCodeToHtml(activeFlashcard.codeContent),
-                    }}
-                  />
-                </pre>
-              ) : null}
-              {activeFlashcard.bodyText || activeFlashcard.useText ? (
-                <div className="fmdet" style={{ marginTop: '10px' }}>
-                  {activeFlashcard.bodyText ? (
-                    <SecondaryMathText
-                      className="fmw"
-                      content={activeFlashcard.bodyText}
-                    />
+          {modalMode === 'flashcard' ? (
+            activeFlashcard ? (
+              <div className="fcbody">
+                <div className="fc-meta-row">
+                  <span className="fc-topic-label" data-c={activeFlashcard.course}>
+                    {activeFlashcard.course} ·{' '}
+                    {activeFlashcard.topicTitle ||
+                      topicTitleById.get(activeFlashcard.topicId) ||
+                      activeFlashcard.topicId}
+                  </span>
+                  {activeFlashcard.badge ? (
+                    <span className="thty">{activeFlashcard.badge}</span>
                   ) : null}
-                  {activeFlashcard.useText ? (
-                    <SecondaryMathText
-                      className="fmu"
-                      content={activeFlashcard.useText}
-                    />
+                  {flashcardQueue.requeuedIds[activeFlashcard.id] ? (
+                    <span className="fc-requeue-badge">
+                      RETRY #{flashcardQueue.requeuedIds[activeFlashcard.id]}
+                    </span>
                   ) : null}
                 </div>
-              ) : null}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  gap: '10px',
-                  marginTop: '16px',
-                }}
-              >
-                <button
-                  type="button"
-                  className="sb-btn"
-                  onClick={() => setModalOpen(false)}
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  className="course-pill active"
-                  onClick={pickRandomFlashcard}
-                >
-                  Next Random Card
-                </button>
+
+                <div className="fc-card-title">
+                  <SecondaryMathText className="" as="span" content={activeFlashcard.title} />
+                </div>
+
+                {!flashcardRevealed ? (
+                  <div className="fc-front" id="fcFrontStage">
+                    <p className="fc-front-prompt">
+                      Recall the exact equation, sign conventions, and derivation before revealing.
+                    </p>
+                    <div className="fc-front-actions">
+                      <button
+                        type="button"
+                        id="fcRevealBtn"
+                        className="fc-reveal-btn"
+                        onClick={() => setFlashcardRevealed(true)}
+                      >
+                        <span>REVEAL ANSWER</span>
+                        <kbd className="shortcut-kbd">Space</kbd>
+                      </button>
+                      <button
+                        type="button"
+                        className="sb-btn"
+                        onClick={handleSkipFlashcard}
+                      >
+                        Skip
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="fc-back" id="fcBackStage">
+                    {activeFlashcard.htmlContent ? (
+                      <SecondaryMathText
+                        className="fmhtml"
+                        content={activeFlashcard.htmlContent}
+                      />
+                    ) : null}
+                    {activeFlashcard.rawLatex ? (
+                      <KatexMathBlock
+                        latex={activeFlashcard.rawLatex}
+                        displayMode={activeFlashcard.fmmDisplayMode ?? true}
+                      />
+                    ) : null}
+                    {activeFlashcard.codeContent ? (
+                      <pre className="fmcode">
+                        <code
+                          dangerouslySetInnerHTML={{
+                            __html: highlightCppCodeToHtml(activeFlashcard.codeContent),
+                          }}
+                        />
+                      </pre>
+                    ) : null}
+                    {activeFlashcard.steps && activeFlashcard.steps.length > 0 ? (
+                      <details className="fmd" open>
+                        <summary>{activeFlashcard.stepsSummary || 'Derivation & Steps'}</summary>
+                        <ol className="fmsteps">
+                          {activeFlashcard.steps.map((st, idx) => (
+                            <li key={idx}>
+                              <SecondaryMathText className="" as="span" content={st} />
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
+                    ) : null}
+                    {activeFlashcard.bodyText || activeFlashcard.useText ? (
+                      <div className="fmdet">
+                        {activeFlashcard.bodyText ? (
+                          <div className="fm-spec-pod fmw-pod">
+                            <span className="fm-spec-label">PARAMETERS // CONTEXT</span>
+                            <SecondaryMathText
+                              className="fmw"
+                              content={activeFlashcard.bodyText}
+                            />
+                          </div>
+                        ) : null}
+                        {activeFlashcard.useText ? (
+                          <div className="fm-spec-pod fmu-pod">
+                            <span className="fm-spec-label">APPLICATION // STRATEGY</span>
+                            <SecondaryMathText
+                              className="fmu"
+                              content={activeFlashcard.useText}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {persisted.notes?.[activeFlashcard.id] ? (
+                      <div className="fm-personal-note">
+                        <div className="fm-personal-note-head">
+                          <span className="fm-personal-note-label">MY MARGIN NOTE</span>
+                        </div>
+                        <p className="fm-personal-note-body">
+                          {persisted.notes[activeFlashcard.id]}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    <div className="fc-grade-bar">
+                      <button
+                        type="button"
+                        id="fcGradeReviewBtn"
+                        className="fc-grade-btn fc-grade-review"
+                        onClick={() => handleGradeFlashcard('review')}
+                      >
+                        <kbd className="shortcut-kbd">1</kbd>
+                        <span>Needs Review</span>
+                        <span className="fc-grade-sub">Auto-star &amp; re-queue</span>
+                      </button>
+                      <button
+                        type="button"
+                        id="fcGradeGotItBtn"
+                        className="fc-grade-btn fc-grade-gotit"
+                        onClick={() => handleGradeFlashcard('got-it')}
+                      >
+                        <kbd className="shortcut-kbd">2</kbd>
+                        <span>Got It</span>
+                        <span className="fc-grade-sub">Mark learned &amp; next</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
+            ) : (
+              <div className="fc-complete" id="fcDeckComplete">
+                <div className="ntype-badge">SESSION COMPLETE</div>
+                <p className="fc-complete-text">
+                  You cleared all cards in this active-recall deck ({flashcardQueue.gotItCount}{' '}
+                  mastered across {flashcardQueue.reviewedCount} checks).
+                </p>
+                <div className="fc-complete-actions">
+                  <button
+                    type="button"
+                    className="sb-btn"
+                    onClick={() => setModalOpen(false)}
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    className="fc-reveal-btn"
+                    onClick={pickRandomFlashcard}
+                  >
+                    Start Fresh Deck
+                  </button>
+                </div>
+              </div>
+            )
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <textarea
@@ -4827,11 +5938,9 @@ export default function App() {
                 <button
                   type="button"
                   className="sb-btn"
-                  onClick={() => {
-                    if (navigator.clipboard?.writeText) {
-                      navigator.clipboard.writeText(importJsonText).catch(() => {});
-                    }
-                    showToast('BACKUP JSON COPIED');
+                  onClick={async () => {
+                    const ok = await copyTextToClipboard(importJsonText);
+                    showToast(ok ? 'BACKUP JSON COPIED' : 'COPY FAILED — SELECT MANUALLY');
                   }}
                 >
                   COPY JSON
@@ -4849,6 +5958,9 @@ export default function App() {
           )}
         </div>
       </div>
+
+      <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <OfflineIndicator />
 
       <div className="floating-nav-dock" role="navigation" aria-label="Quick Navigation Controls">
         <button
@@ -4884,7 +5996,7 @@ export default function App() {
           className={`floating-keycap sb-detached-tab${indexDetached && !isPdfFullscreen && !sidebarOpen ? ' visible' : ''}${sidebarOpen ? ' active' : ''}`}
           aria-label="Toggle Topic Index Sidebar"
           aria-expanded={sidebarOpen}
-          title={sidebarOpen ? 'Hide Topic Index' : 'Open Topic Index'}
+          title={sidebarOpen ? 'Close topic index' : 'Open topic index'}
           onClick={toggleNavDrawer}
         >
           <svg

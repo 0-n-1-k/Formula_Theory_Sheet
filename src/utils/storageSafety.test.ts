@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  ACTIVE_STORAGE_KEY,
   BUET_LOGO_ASCII_ART,
   DEFAULT_APP_STATE,
+  MAX_IMPORT_PAYLOAD_BYTES,
   resetToHomeFormulasState,
   sanitizePersistedState,
   sanitizeSearchHistory,
@@ -10,11 +12,15 @@ import {
   safeReadStorage,
   safeWriteStorage,
   validateJsonImportPayload,
+  copyTextToClipboard,
+  resolveHashTarget,
+  safeParseSectionGroup,
   clampHudHeightPx,
   MIN_HUD_HEIGHT_PX,
   createInitialPinnedLayout,
   estimatePinnedCardSize,
   clampPinnedCardPosition,
+  clampPinnedLayoutsToViewport,
   computeCornerResizedLayout,
   getPinnedCardSizeMode,
   PINNED_MIN_WIDTH,
@@ -309,4 +315,127 @@ test('estimatePinnedCardSize tightly sizes short formulas and expands for multil
   });
   assert.ok(longCode.height >= 400 && longCode.height <= 480);
 });
+
+test('validateJsonImportPayload enforces 500 KB limit and filters unrecognized card keys with exact counts', () => {
+  assert.equal(ACTIVE_STORAGE_KEY, 'buet_eee_l1t1_v2_state');
+
+  const oversized = `{"learned":{"a":true},"pad":"${'x'.repeat(MAX_IMPORT_PAYLOAD_BYTES + 128)}"}`;
+  const oversizedResult = validateJsonImportPayload(oversized);
+  assert.equal(oversizedResult.ok, false);
+  assert.equal(oversizedResult.error, 'IMPORT TOO LARGE (MAX 500 KB)');
+
+  const known = new Set(['eee-basic:0', 'm157-limits:0', 'phy-shm:1']);
+  const mixedPayload = JSON.stringify({
+    learned: { 'eee-basic:0': true, 'l1t2-unknown:0': true, 'phy-shm:1': true },
+    starred: { 'm157-limits:0': true, 'stale-card:9': true },
+    examDate: '2026-12-10',
+  });
+  const filtered = validateJsonImportPayload(mixedPayload, known);
+  assert.equal(filtered.ok, true);
+  assert.deepEqual(filtered.data?.learned, { 'eee-basic:0': true, 'phy-shm:1': true });
+  assert.deepEqual(filtered.data?.starred, { 'm157-limits:0': true });
+  assert.deepEqual(filtered.stats, {
+    learnedCount: 2,
+    starredCount: 1,
+    notesCount: 0,
+    ignoredLearnedCount: 1,
+    ignoredStarredCount: 1,
+    ignoredNotesCount: 0,
+  });
+});
+
+test('clampPinnedLayoutsToViewport re-clamps offscreen or oversized pinned cards when viewport shrinks', () => {
+  const layouts = {
+    cardA: { x: 1050, y: 620, width: 520, height: 420, zIndex: 10010 },
+    cardB: { x: 20, y: 20, width: 300, height: 180, zIndex: 10011 },
+  };
+  const shrunk = clampPinnedLayoutsToViewport(layouts, 420, 500);
+  assert.notEqual(shrunk, layouts);
+  assert.ok(shrunk.cardA.width <= 420 - 16);
+  assert.ok(shrunk.cardA.x >= 8 && shrunk.cardA.x + shrunk.cardA.width <= 420 - 8);
+  assert.ok(shrunk.cardA.y >= 8 && shrunk.cardA.y + shrunk.cardA.height <= 500 - 8);
+  assert.deepEqual(shrunk.cardB, layouts.cardB);
+
+  // When already inside bounds, returns the same object reference to avoid unnecessary re-renders
+  const unchanged = clampPinnedLayoutsToViewport(shrunk, 1440, 900);
+  assert.equal(unchanged, shrunk);
+});
+
+test('resolveHashTarget resolves valid fm/thm/gen hashes and flags invalid hashes', () => {
+  const sections = [
+    { id: 'eee-thev', course: 'EEE', sourceTab: 'fm' as const },
+    { id: 'thm-m157-mvt', course: 'M157', sourceTab: 'thm' as const },
+    { id: 'gen-trig', course: 'GEN', sourceTab: 'gen' as const },
+  ];
+
+  assert.equal(resolveHashTarget('', sections), null);
+  assert.equal(resolveHashTarget('#', sections), null);
+  assert.deepEqual(resolveHashTarget('#eee-thev', sections), {
+    found: true,
+    id: 'eee-thev',
+    course: 'EEE',
+    sourceTab: 'fm',
+  });
+  assert.deepEqual(resolveHashTarget('#THM-M157-MVT', sections), {
+    found: true,
+    id: 'thm-m157-mvt',
+    course: 'M157',
+    sourceTab: 'thm',
+  });
+  assert.deepEqual(resolveHashTarget('#deleted-topic-99', sections), {
+    found: false,
+    rawId: 'deleted-topic-99',
+  });
+});
+
+test('safeParseSectionGroup isolates parser errors and copyTextToClipboard degrades safely in Node', async () => {
+  const broken = safeParseSectionGroup('Formulas', '<broken>', () => {
+    throw new Error('Duplicate data-k');
+  });
+  assert.deepEqual(broken.sections, []);
+  assert.equal(broken.error, 'Formulas: Duplicate data-k');
+
+  const ok = safeParseSectionGroup('Theorems', '<ok>', () => [{ id: 't1' }]);
+  assert.equal(ok.error, null);
+  assert.deepEqual(ok.sections, [{ id: 't1' }]);
+
+  const copied = await copyTextToClipboard('V = IR');
+  assert.equal(copied, false);
+});
+
+test('sanitizePersistedState and validateJsonImportPayload handle personal margin notes safely', () => {
+  const cleaned = sanitizePersistedState({
+    notes: {
+      'eee-basic:0': '  Watch sign convention on dependent sources!  ',
+      'eee-basic:1': '   ',
+      '': 'empty key ignored',
+      'eee-basic:2': 12345,
+    },
+  });
+  assert.deepEqual(cleaned.notes, {
+    'eee-basic:0': 'Watch sign convention on dependent sources!',
+  });
+
+  const knownIds = new Set(['eee-basic:0', 'eee-thev:2']);
+  const imported = validateJsonImportPayload(
+    JSON.stringify({
+      learned: { 'eee-basic:0': true },
+      starred: { 'eee-thev:2': true },
+      notes: {
+        'eee-thev:2': 'Always deactivate independent sources only.',
+        'stale-card:9': 'Old syllabus note',
+      },
+    }),
+    knownIds
+  );
+  assert.equal(imported.ok, true);
+  assert.deepEqual(imported.data?.notes, {
+    'eee-thev:2': 'Always deactivate independent sources only.',
+  });
+  assert.equal(imported.stats?.notesCount, 1);
+  assert.equal(imported.stats?.ignoredNotesCount, 1);
+
+  assert.equal(validateJsonImportPayload('{"notes": ["bad"]}').ok, false);
+});
+
 
