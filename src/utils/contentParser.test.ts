@@ -22,7 +22,7 @@ test('findOpeningTagEndIndex ignores > inside quoted attributes and prevents m15
   assert.equal(parsed[0].cards[0].keywords, 'gamma function ∫₀<sup>∞</sup> for n > 0');
 });
 
-test('parseTopicSections extracts all 66 formula sections (59 course + 7 GEN = 526 cards) and 13 theorem sections (161 cards)', () => {
+test('parseTopicSections extracts all 66 formula sections (59 course + 7 GEN = 535 cards) and 13 theorem sections (161 cards)', () => {
   const fmCourseSections = parseTopicSections(fmCourseHtml);
   const genSections = parseTopicSections(genHtml);
   const fmSections = [...fmCourseSections, ...genSections];
@@ -32,7 +32,7 @@ test('parseTopicSections extracts all 66 formula sections (59 course + 7 GEN = 5
   assert.equal(genSections.length, 7, 'Expected 7 GEN topic sections in content-gen.html');
   assert.equal(fmSections.length, 66, 'Expected 66 total formula topic sections');
   const totalFmCards = fmSections.reduce((acc, s) => acc + s.cards.length, 0);
-  assert.equal(totalFmCards, 526, 'Expected 526 formula cards');
+  assert.equal(totalFmCards, 535, 'Expected 535 formula cards');
 
   assert.equal(thmSections.length, 13, 'Expected 13 theorem topic sections');
   const totalThmCards = thmSections.reduce((acc, s) => acc + s.cards.length, 0);

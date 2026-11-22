@@ -87,11 +87,19 @@ test('Task 1 & 6: GEN module is cleanly extracted into src/content-gen.html and 
   );
 });
 
-test('Zero data loss: all original 32 theorem data-k keys and all 526 formula cards (482 course + 44 GEN cards) and 161 theorem cards are preserved', () => {
+test('Zero data loss: all original 32 theorem data-k keys and all 535 formula cards (491 course + 44 GEN cards) and 161 theorem cards are preserved', () => {
   const fmCards = fmHtml.match(/<div class="fmi /g) || [];
   const thmCards = thmHtml.match(/<div class="fmi /g) || [];
-  assert.equal(fmCards.length, 526, 'Expected 526 formula cards across content-fmroot.html + content-gen.html');
+  assert.equal(fmCards.length, 535, 'Expected 535 formula cards across content-fmroot.html + content-gen.html');
   assert.equal(thmCards.length, 161, 'Expected 161 theorem/definition cards in #thmroot');
+
+  for (const k of [
+    'm157-integ:17', 'm157-integ:18', 'm157-integ:19', 'm157-integ:20',
+    'm157-integ:21', 'm157-integ:22', 'm157-integ:23', 'm157-integ:24',
+    'm157-gamma:8',
+  ]) {
+    assert.ok(fmHtml.includes(`data-k="${k}"`), `Missing M157 substitution card ${k}`);
+  }
 
   const cseCompendiumKeys = [
     'cse-c:3', 'cse-c:4', 'cse-c:5', 'cse-c:6', 'cse-c:7', 'cse-c:8', 'cse-c:9',

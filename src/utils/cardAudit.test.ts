@@ -173,7 +173,7 @@ test('parseTopicSections preserves LaTeX \\sec, chemical CH_4, and C parameter (
   assert.ok(!/Sec\.\s*4\.2|Ch\.\s*3/i.test(card.bodyText), 'Must still strip Sec. 4.2 / Ch. 3 citations');
 });
 
-test('full production corpus sweep across all 79 sections and 687 cards reports 0 issues', () => {
+test('full production corpus sweep across all 79 sections and 696 cards reports 0 issues', () => {
   const report = auditContentSources([
     { name: 'src/content-fmroot.html', html: fs.readFileSync('src/content-fmroot.html', 'utf8') },
     { name: 'src/content-gen.html', html: fs.readFileSync('src/content-gen.html', 'utf8') },
@@ -181,7 +181,7 @@ test('full production corpus sweep across all 79 sections and 687 cards reports 
   ]);
 
   assert.equal(report.totalSections, 79, 'Expected 79 total sections');
-  assert.equal(report.totalCards, 687, 'Expected 687 total cards');
+  assert.equal(report.totalCards, 696, 'Expected 696 total cards');
   assert.equal(
     report.issues.length,
     0,
