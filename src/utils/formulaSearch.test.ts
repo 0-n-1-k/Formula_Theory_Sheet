@@ -1,5 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseTopicSections } from './contentParser.ts';
 import {
   normalizeSearchText,
   generateTitleInitialisms,
@@ -419,4 +423,43 @@ test('B-Tree search mechanism matches vague, conversational, prefix, and subsequ
   assert.equal(corpusTree.hasPrefix('lhop'), true);
   assert.equal(corpusTree.hasPrefix('capac'), true);
 });
+
+test('normalizeLatexForSearch strips spacing tokens, builds compact trig forms, and emits variable aliases', () => {
+  const spaced = normalizeLatexForSearch('\\cos 3\\,A = 4\\cos^3 A - 3\\cos A');
+  assert.ok(spaced.includes('cos 3a'));
+  assert.ok(spaced.includes('cos3a'));
+  assert.ok(spaced.includes('cos 3x'));
+  assert.ok(spaced.includes('cos3x'));
+  assert.ok(spaced.includes('cos 3theta'));
+  assert.ok(spaced.includes('cos3theta'));
+});
+
+test('queries cos 3a, cos3a, cos 3x, and sin 3theta rank the triple-angle laws card from content-gen.html at #1', () => {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const rootDir = path.resolve(__dirname, '..', '..');
+  const allCards = [
+    ...parseTopicSections(fs.readFileSync(path.join(rootDir, 'src', 'content-fmroot.html'), 'utf8')),
+    ...parseTopicSections(fs.readFileSync(path.join(rootDir, 'src', 'content-thmroot.html'), 'utf8')),
+    ...parseTopicSections(fs.readFileSync(path.join(rootDir, 'src', 'content-gen.html'), 'utf8')),
+  ].flatMap((s) => s.cards);
+
+  const expectedTitle = 'Compound-angle, double-angle, triple-angle & power-reduction laws';
+  const expectedCard = allCards.find((c) => c.title === expectedTitle);
+  assert.ok(expectedCard, `Expected card "${expectedTitle}" in content-gen.html`);
+
+  for (const query of ['cos 3a', 'cos3a', 'cos 3x', 'sin 3theta']) {
+    const res = filterFormulaCards(allCards, {
+      course: 'ALL',
+      status: 'all',
+      query,
+    });
+    assert.ok(res.visibleCards > 0, `Expected non-zero hits for "${query}"`);
+    assert.equal(
+      res.rankedCardIds?.[0],
+      expectedCard.id,
+      `Expected "${query}" to rank "${expectedTitle}" (${expectedCard.id}) #1, got ${res.rankedCardIds?.[0]}`
+    );
+  }
+});
+
 

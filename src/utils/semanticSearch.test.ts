@@ -160,6 +160,47 @@ describe('Semantic Search Upgrade — Phase 1 to Phase 4 & Appendix A Verificati
     assert.ok(
       computeHybridCardScore('eee-thev:0', 0, mockScores, true) >= 550
     );
+
+    // Semantic search must NEVER erase confirmed lexical matches when sim is low or card ID is missing
+    const lowSimScores = new Map<string, number>([['gen-math:3', 0.08]]);
+    assert.equal(
+      computeHybridCardScore('gen-math:3', 1450, lowSimScores, true),
+      1450,
+      'Low semantic similarity (0.08) must preserve positive lexicalScore instead of returning 0'
+    );
+    assert.equal(
+      computeHybridCardScore('missing-card-id', 920, lowSimScores, true),
+      920,
+      'Missing card ID in semanticScores must preserve positive lexicalScore instead of returning 0'
+    );
+    assert.equal(
+      computeHybridCardScore('gen-math:3', 0, lowSimScores, true),
+      0,
+      'Zero lexicalScore with low semantic similarity should still return 0'
+    );
+  });
+
+  it('Hybrid search ranks Compound-angle, double-angle, triple-angle & power-reduction laws #1 for cos 3a, cos3a, cos 3x, and sin 3theta', async () => {
+    const expectedCard = allCards.find(
+      (c) => c.title === 'Compound-angle, double-angle, triple-angle & power-reduction laws'
+    );
+    assert.ok(expectedCard, 'Expected triple-angle card in parsed corpus');
+
+    for (const query of ['cos 3a', 'cos3a', 'cos 3x', 'sin 3theta']) {
+      const res = await rankCardsHybrid(allCards, query, {
+        precomputedIndexById,
+      });
+      assert.ok(res.ranked.length > 0, `Expected hybrid results for "${query}"`);
+      assert.equal(
+        res.ranked[0]?.card.id,
+        expectedCard.id,
+        `Expected "${query}" to rank ${expectedCard.id} #1, got ${res.ranked[0]?.card.id}`
+      );
+      assert.ok(
+        res.bestLexicalConfidence >= CONFIDENT_LEXICAL_THRESHOLD,
+        `Expected "${query}" to clear CONFIDENT_LEXICAL_THRESHOLD (${CONFIDENT_LEXICAL_THRESHOLD}), got ${res.bestLexicalConfidence}`
+      );
+    }
   });
 
   it('Phase 3 & 4: exact technical keyword queries stay in lexical mode with zero regressions', async () => {

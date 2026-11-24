@@ -166,14 +166,26 @@ export function computeHybridCardScore(
   if (!useSemantic || !semanticScores) {
     return lexicalScore;
   }
-  const sim = semanticScores.get(cardId) ?? -1;
-  if (sim < minSemanticSimilarity) {
-    return 0;
-  }
-  const semanticPoints = Math.round(sim * 1000);
-  let tieBreaker = lexicalScore > 0 ? Math.min(50, Math.round(lexicalScore * 0.04)) : 0;
 
-  // Soft partial-term overlap bonus when semantic similarity is already strong (sim >= 0.36)
+  const sim = semanticScores.get(cardId) ?? -1;
+  const hasLexicalMatch = lexicalScore > 0;
+  const anchorCount =
+    queryTokens && queryTokens.length > 0 ? countQueryAnchorTokens(queryTokens) : 1;
+  // Normalize additive lexicalScore by anchor count on long natural-language queries (4+ anchors)
+  // so weak multi-word prose overlaps never swamp 0..1000 semantic scores while still staying > 0.
+  const effectiveLexical = hasLexicalMatch
+    ? anchorCount >= 4
+      ? Math.max(1, Math.round(lexicalScore / anchorCount))
+      : lexicalScore
+    : 0;
+
+  if (sim < minSemanticSimilarity) {
+    return effectiveLexical;
+  }
+
+  const semanticPoints = Math.round(sim * 1000);
+  let tieBreaker = hasLexicalMatch ? Math.min(350, Math.round(effectiveLexical * 0.25)) : 0;
+
   if (searchIndex && queryTokens && queryTokens.length > 1 && sim >= 0.36) {
     const idxLower = searchIndex.toLowerCase();
     let matchedContentTokens = 0;
@@ -195,7 +207,7 @@ export function computeHybridCardScore(
     }
   }
 
-  return semanticPoints + tieBreaker;
+  return Math.max(effectiveLexical, semanticPoints + tieBreaker);
 }
 
 export interface HybridRankOptions {

@@ -4,8 +4,11 @@ import {
   ACTIVE_STORAGE_KEY,
   BUET_LOGO_ASCII_ART,
   DEFAULT_APP_STATE,
+  MAX_IMPORT_JSON_BYTES,
   MAX_IMPORT_PAYLOAD_BYTES,
   resetToHomeFormulasState,
+  sanitizeBooleanMap,
+  sanitizeNotesMap,
   sanitizePersistedState,
   sanitizeSearchHistory,
   updateSearchHistoryList,
@@ -185,8 +188,8 @@ test('validateJsonImportPayload rejects invalid JSON, arrays, primitives, and in
     })
   );
   assert.equal(valid.ok, true);
-  assert.deepEqual(valid.data?.learned, { 'eee-basic:0': true });
-  assert.deepEqual(valid.data?.starred, { 'm157-limits:0': true });
+  assert.deepEqual({ ...valid.data?.learned }, { 'eee-basic:0': true });
+  assert.deepEqual({ ...valid.data?.starred }, { 'm157-limits:0': true });
   assert.equal(valid.data?.examDate, '2026-12-01');
 });
 
@@ -316,13 +319,14 @@ test('estimatePinnedCardSize tightly sizes short formulas and expands for multil
   assert.ok(longCode.height >= 400 && longCode.height <= 480);
 });
 
-test('validateJsonImportPayload enforces 500 KB limit and filters unrecognized card keys with exact counts', () => {
+test('validateJsonImportPayload enforces 512 KB limit and filters unrecognized card keys with exact counts', () => {
   assert.equal(ACTIVE_STORAGE_KEY, 'buet_eee_l1t1_v2_state');
+  assert.equal(MAX_IMPORT_JSON_BYTES, 512 * 1024);
 
   const oversized = `{"learned":{"a":true},"pad":"${'x'.repeat(MAX_IMPORT_PAYLOAD_BYTES + 128)}"}`;
   const oversizedResult = validateJsonImportPayload(oversized);
   assert.equal(oversizedResult.ok, false);
-  assert.equal(oversizedResult.error, 'IMPORT TOO LARGE (MAX 500 KB)');
+  assert.equal(oversizedResult.error, 'BACKUP FILE TOO LARGE (MAX 512 KB)');
 
   const known = new Set(['eee-basic:0', 'm157-limits:0', 'phy-shm:1']);
   const mixedPayload = JSON.stringify({
@@ -332,8 +336,8 @@ test('validateJsonImportPayload enforces 500 KB limit and filters unrecognized c
   });
   const filtered = validateJsonImportPayload(mixedPayload, known);
   assert.equal(filtered.ok, true);
-  assert.deepEqual(filtered.data?.learned, { 'eee-basic:0': true, 'phy-shm:1': true });
-  assert.deepEqual(filtered.data?.starred, { 'm157-limits:0': true });
+  assert.deepEqual({ ...filtered.data?.learned }, { 'eee-basic:0': true, 'phy-shm:1': true });
+  assert.deepEqual({ ...filtered.data?.starred }, { 'm157-limits:0': true });
   assert.deepEqual(filtered.stats, {
     learnedCount: 2,
     starredCount: 1,
@@ -412,7 +416,7 @@ test('sanitizePersistedState and validateJsonImportPayload handle personal margi
       'eee-basic:2': 12345,
     },
   });
-  assert.deepEqual(cleaned.notes, {
+  assert.deepEqual({ ...cleaned.notes }, {
     'eee-basic:0': 'Watch sign convention on dependent sources!',
   });
 
@@ -429,13 +433,35 @@ test('sanitizePersistedState and validateJsonImportPayload handle personal margi
     knownIds
   );
   assert.equal(imported.ok, true);
-  assert.deepEqual(imported.data?.notes, {
+  assert.deepEqual({ ...imported.data?.notes }, {
     'eee-thev:2': 'Always deactivate independent sources only.',
   });
   assert.equal(imported.stats?.notesCount, 1);
   assert.equal(imported.stats?.ignoredNotesCount, 1);
 
   assert.equal(validateJsonImportPayload('{"notes": ["bad"]}').ok, false);
+});
+
+test('sanitizeBooleanMap, sanitizeNotesMap, and validateJsonImportPayload block prototype-pollution keys', () => {
+  const maliciousJson =
+    '{"learned":{"__proto__":true,"constructor":true,"prototype":true,"eee-basic:0":true},"notes":{"__proto__":"bad","constructor":"bad","prototype":"bad","eee-basic:0":"safe note"}}';
+  const parsed = JSON.parse(maliciousJson);
+
+  const boolMap = sanitizeBooleanMap(parsed.learned);
+  assert.equal(Object.getPrototypeOf(boolMap), null);
+  assert.deepEqual(Object.keys(boolMap), ['eee-basic:0']);
+
+  const noteMap = sanitizeNotesMap(parsed.notes);
+  assert.equal(Object.getPrototypeOf(noteMap), null);
+  assert.deepEqual(Object.keys(noteMap), ['eee-basic:0']);
+
+  const res = validateJsonImportPayload(maliciousJson);
+  assert.equal(res.ok, true);
+  assert.equal(Object.getPrototypeOf(res.data?.learned), null);
+  assert.equal(Object.getPrototypeOf(res.data?.notes), null);
+  assert.deepEqual(Object.keys(res.data?.learned || {}), ['eee-basic:0']);
+  assert.deepEqual(Object.keys(res.data?.notes || {}), ['eee-basic:0']);
+  assert.equal(({} as Record<string, unknown>).polluted, undefined);
 });
 
 

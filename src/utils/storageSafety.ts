@@ -5,7 +5,9 @@ export type CourseCode = string;
 export type StatusFilter = 'all' | 'starred' | 'unlearned';
 
 export const MAX_SEARCH_HISTORY = 8;
-export const MAX_IMPORT_PAYLOAD_BYTES = 500 * 1024;
+export const MAX_IMPORT_JSON_BYTES = 512 * 1024;
+export const MAX_IMPORT_PAYLOAD_BYTES = MAX_IMPORT_JSON_BYTES;
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 export function getTermStorageKey(termId: string = CURRENT_TERM_CONFIG.termId): string {
   return `buet_eee_${termId}_v2_state`;
@@ -93,10 +95,15 @@ export function isPlainRecord(value: unknown): value is Record<string, unknown> 
 }
 
 export function sanitizeBooleanMap(input: unknown): Record<string, boolean> {
-  if (!isPlainRecord(input)) return {};
-  const out: Record<string, boolean> = {};
+  const out: Record<string, boolean> = Object.create(null);
+  if (!isPlainRecord(input)) return out;
   for (const [key, val] of Object.entries(input)) {
-    if (typeof key === 'string' && key.trim().length > 0 && Boolean(val)) {
+    if (
+      typeof key === 'string' &&
+      key.trim().length > 0 &&
+      !FORBIDDEN_KEYS.has(key) &&
+      Boolean(val)
+    ) {
       out[key] = true;
     }
   }
@@ -107,10 +114,10 @@ export function sanitizeNotesMap(
   input: unknown,
   maxLength: number = MAX_CARD_NOTE_LENGTH
 ): Record<string, string> {
-  if (!isPlainRecord(input)) return {};
-  const out: Record<string, string> = {};
+  const out: Record<string, string> = Object.create(null);
+  if (!isPlainRecord(input)) return out;
   for (const [key, val] of Object.entries(input)) {
-    if (typeof key !== 'string' || key.trim().length === 0) continue;
+    if (typeof key !== 'string' || key.trim().length === 0 || FORBIDDEN_KEYS.has(key)) continue;
     if (typeof val !== 'string') continue;
     const trimmed = val.trim();
     if (!trimmed) continue;
@@ -296,8 +303,8 @@ export function validateJsonImportPayload(
     return { ok: false, error: 'EMPTY JSON INPUT' };
   }
 
-  if (getUtf8ByteLength(rawText) > MAX_IMPORT_PAYLOAD_BYTES) {
-    return { ok: false, error: 'IMPORT TOO LARGE (MAX 500 KB)' };
+  if (rawText.length > MAX_IMPORT_JSON_BYTES || getUtf8ByteLength(rawText) > MAX_IMPORT_JSON_BYTES) {
+    return { ok: false, error: 'BACKUP FILE TOO LARGE (MAX 512 KB)' };
   }
 
   let parsed: unknown;
@@ -352,31 +359,32 @@ export function validateJsonImportPayload(
   let ignoredNotesCount = 0;
 
   if (knownCardIds && knownCardIds.size > 0) {
-    learned = {};
+    learned = Object.create(null);
     for (const key of Object.keys(rawLearned)) {
-      if (knownCardIds.has(key)) {
+      if (!FORBIDDEN_KEYS.has(key) && knownCardIds.has(key)) {
         learned[key] = true;
       } else {
         ignoredLearnedCount++;
       }
     }
-    starred = {};
+    starred = Object.create(null);
     for (const key of Object.keys(rawStarred)) {
-      if (knownCardIds.has(key)) {
+      if (!FORBIDDEN_KEYS.has(key) && knownCardIds.has(key)) {
         starred[key] = true;
       } else {
         ignoredStarredCount++;
       }
     }
     if (rawNotes) {
-      notes = {};
+      const filteredNotes: Record<string, string> = Object.create(null);
       for (const [key, val] of Object.entries(rawNotes)) {
-        if (knownCardIds.has(key)) {
-          notes[key] = val;
+        if (!FORBIDDEN_KEYS.has(key) && knownCardIds.has(key)) {
+          filteredNotes[key] = val;
         } else {
           ignoredNotesCount++;
         }
       }
+      notes = filteredNotes;
     }
   }
 

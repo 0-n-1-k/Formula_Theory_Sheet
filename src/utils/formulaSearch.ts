@@ -605,13 +605,76 @@ export function normalizeLatexForSearch(latex: string): string {
   if (!latex) return '';
   const lower = latex.toLowerCase();
   const withoutTextCmd = lower.replace(/\\(?:text|mathrm|mathbf|operatorname)\s*\{([^}]*)\}/g, '$1');
-  const strippedBraces = withoutTextCmd
+  // Strip LaTeX spacing and sizing commands before stripping backslashes so \cos 3\,A -> cos 3 a -> cos 3a
+  const withoutSpacing = withoutTextCmd.replace(
+    /\\(?:qquad|quad|left|right|displaystyle|[,;:!])/g,
+    ' '
+  );
+  const strippedBraces = withoutSpacing
     .replace(/\\/g, ' ')
     .replace(/[{}]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
   const compactSubscripts = strippedBraces.replace(/([a-z0-9])_([a-z0-9]+)/g, '$1_$2 $1$2');
-  return (lower + ' ' + strippedBraces + ' ' + compactSubscripts).replace(/\s+/g, ' ').trim();
+  const joinedCoeffVars = strippedBraces.replace(/\b(\d+)\s+([a-z])\b/g, '$1$2');
+
+  const compactForms: string[] = [];
+  const fnPattern =
+    /\b(sin|cos|tan|cot|sec|csc|sinh|cosh|tanh|log|ln)\s*(\d*)\s*(theta|phi|alpha|beta|gamma|[a-z])\b/g;
+  for (const source of [strippedBraces, joinedCoeffVars]) {
+    let match: RegExpExecArray | null;
+    fnPattern.lastIndex = 0;
+    while ((match = fnPattern.exec(source)) !== null) {
+      const fn = match[1];
+      const coeff = match[2];
+      const variable = match[3];
+      if (coeff) {
+        compactForms.push(`${coeff}${variable}`);
+        compactForms.push(`${fn} ${coeff}${variable}`);
+        compactForms.push(`${fn}${coeff}${variable}`);
+      } else {
+        compactForms.push(`${fn}${variable}`);
+      }
+    }
+  }
+
+  const aliasSource = `${strippedBraces} ${joinedCoeffVars}`;
+  const trigAliases: string[] = [];
+  if (/\b(?:sin|cos|tan)\s*2\s*(?:[a-z]|theta)\b/.test(aliasSource)) {
+    if (/\bsin\s*2\s*(?:[a-z]|theta)\b/.test(aliasSource)) {
+      trigAliases.push('sin 2x sin2x sin 2theta sin2theta');
+    }
+    if (/\bcos\s*2\s*(?:[a-z]|theta)\b/.test(aliasSource)) {
+      trigAliases.push('cos 2x cos2x cos 2theta cos2theta');
+    }
+    if (/\btan\s*2\s*(?:[a-z]|theta)\b/.test(aliasSource)) {
+      trigAliases.push('tan 2x tan2x tan 2theta tan2theta');
+    }
+  }
+  if (/\b(?:sin|cos|tan)\s*3\s*(?:[a-z]|theta)\b/.test(aliasSource)) {
+    if (/\bsin\s*3\s*(?:[a-z]|theta)\b/.test(aliasSource)) {
+      trigAliases.push('sin 3x sin3x sin 3theta sin3theta');
+    }
+    if (/\bcos\s*3\s*(?:[a-z]|theta)\b/.test(aliasSource)) {
+      trigAliases.push('cos 3x cos3x cos 3theta cos3theta');
+    }
+    if (/\btan\s*3\s*(?:[a-z]|theta)\b/.test(aliasSource)) {
+      trigAliases.push('tan 3x tan3x tan 3theta tan3theta');
+    }
+  }
+
+  return [
+    lower,
+    strippedBraces,
+    joinedCoeffVars,
+    compactSubscripts,
+    compactForms.join(' '),
+    trigAliases.join(' '),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 const cardSearchIndexWeakCache = new WeakMap<object, string>();
@@ -1197,6 +1260,9 @@ export function scoreFormulaCardSearch(
   const normBadge = stemSearchToken(normalizeSearchText(card.badge || ''));
   const normTopic = normalizeSearchText(card.topicTitle || '');
   const normQuery = normalizeSearchText(rawQuery || tokens.join(' '));
+  const compactQuery = normQuery.replace(/\s+/g, '');
+  const normLatex = normalizeSearchText(normalizeLatexForSearch(card.rawLatex || ''));
+  const compactLatex = normLatex.replace(/\s+/g, '');
 
   const rawAnchorCandidates = tokens.filter(
     (t) => !isGenericQueryTerm(t) && !isConversationalNoiseTerm(t)
@@ -1239,11 +1305,36 @@ export function scoreFormulaCardSearch(
     }
   }
 
+  // 1b. Direct formula expression match inside card.rawLatex
+  if (
+    normLatex &&
+    normQuery &&
+    (normLatex.includes(normQuery) ||
+      (compactQuery.length >= 2 && compactLatex.includes(compactQuery)))
+  ) {
+    score += 3200;
+  }
+
   // 2. Score Specific Anchor Tokens (govern 95%+ of ranking weight)
   let anchorsInTitleCount = 0;
+  let anchorsInFormulaCount = 0;
   for (const rawAnchor of anchorTokens) {
     const a = normalizeSearchText(rawAnchor);
     const aStem = stemSearchToken(a);
+    const aCompact = a.replace(/\s+/g, '');
+
+    const inFormula = Boolean(
+      normLatex &&
+        a &&
+        (a.length >= 2
+          ? normLatex.includes(a) ||
+            (aStem.length >= 3 && normLatex.includes(aStem)) ||
+            (aCompact.length >= 2 && compactLatex.includes(aCompact))
+          : new RegExp(`\\b${a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(normLatex))
+    );
+    if (inFormula) {
+      anchorsInFormulaCount++;
+    }
 
     const wordIdxInTitle = titleWords.findIndex((tw) => tw === a || tw === aStem);
     const exactWordInTitle = wordIdxInTitle !== -1;
@@ -1296,6 +1387,8 @@ export function scoreFormulaCardSearch(
       if (fuzzyInTitle) {
         score += 900;
         anchorsInTitleCount++;
+      } else if (inFormula) {
+        score += 700;
       } else if (
         normTopic.includes(a) ||
         (aStem.length >= 3 && normTopic.includes(aStem)) ||
@@ -1328,6 +1421,9 @@ export function scoreFormulaCardSearch(
     score += 2500;
     // Conciseness bonus when all anchor terms are in the title
     score += Math.max(0, 120 - normTitle.length);
+  }
+  if (anchorTokens.length > 0 && anchorsInFormulaCount === anchorTokens.length) {
+    score += 1400;
   }
 
   // 3. Score Generic Qualifier Tokens ("theorem", "formula", "law", "rule", etc.)

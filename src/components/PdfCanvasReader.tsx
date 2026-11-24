@@ -232,7 +232,10 @@ export const PdfCanvasReader = memo(function PdfCanvasReader({
       try {
         const buffer = await fetchPdfArrayBufferWithOfflineFallback(pdfUrl);
         if (cancelled) return;
-        const loadingTask = pdfjsLib.getDocument({ data: buffer });
+        const loadingTask = pdfjsLib.getDocument({
+          data: buffer,
+          isEvalSupported: false,
+        } as Parameters<typeof pdfjsLib.getDocument>[0]);
         const doc = await loadingTask.promise;
         if (cancelled) return;
         try {

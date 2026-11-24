@@ -56,6 +56,11 @@ import {
 } from './utils/mathParser';
 import { extractValidExamTag } from './utils/titleCleaner';
 import {
+  handleDeckTileEnter,
+  handleDeckTileLeave,
+  handleDeckTileMove,
+} from './utils/tileGlowPhysics';
+import {
   buildCardDeepLinkUrl,
   buildReportTypoUrl,
   createFlashcardQueue,
@@ -100,6 +105,10 @@ import {
   getPracticeModulesForCourse,
 } from './utils/practiceCatalog';
 import { PdfCanvasReader } from './components/PdfCanvasReader';
+import {
+  OnboardingTour,
+  hasSeenOnboardingTour,
+} from './components/OnboardingTour';
 import {
   OfflineIndicator,
   PWAInstallHeaderBtn,
@@ -549,16 +558,27 @@ export const FormulaCardView = memo(function FormulaCardView({
   const [isRevealed, setIsRevealed] = useState<boolean>(false);
   const [stepsOpen, setStepsOpen] = useState<boolean>(false);
   const [noteOpen, setNoteOpen] = useState<boolean>(false);
+  const [noteEditing, setNoteEditing] = useState<boolean>(false);
   const [noteDraft, setNoteDraft] = useState<string>(noteText);
+  const noteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const copyPayload = card.copyText ?? (card.rawLatex || card.codeContent || card.title);
   const typeCls = card.cardTypeClass || 'tex';
   const hasHighlight = Boolean(highlightTokens && highlightTokens.length > 0);
   const activeHighlightTokens = hasHighlight ? highlightTokens : undefined;
-  const hasSavedNote = noteText.trim().length > 0;
+  const hasNote = Boolean(noteText && noteText.trim().length > 0);
 
   useEffect(() => {
     setNoteDraft(noteText);
   }, [noteText]);
+
+  useEffect(() => {
+    if (noteOpen && noteEditing) {
+      const id = window.requestAnimationFrame(() => {
+        noteTextareaRef.current?.focus();
+      });
+      return () => window.cancelAnimationFrame(id);
+    }
+  }, [noteOpen, noteEditing]);
 
   const mainTitle = useMemo(() => {
     if (card.examTag) {
@@ -680,16 +700,33 @@ export const FormulaCardView = memo(function FormulaCardView({
           {onSaveNote ? (
             <button
               type="button"
-              className={`fmnote-btn${hasSavedNote ? ' on' : ''}`}
-              aria-label={hasSavedNote ? `Edit personal note for ${card.title}` : `Add personal note for ${card.title}`}
+              className={`fm-note-btn${hasNote ? ' has-note' : ''}${noteOpen ? ' is-open' : ''}`}
               aria-expanded={noteOpen}
-              title={hasSavedNote ? 'Edit your note' : 'Add a personal note'}
+              aria-label={
+                noteOpen
+                  ? `Hide personal note for ${card.title}`
+                  : hasNote
+                  ? `Show personal note for ${card.title}`
+                  : `Add personal note for ${card.title}`
+              }
+              title={noteOpen ? 'Hide note' : hasNote ? 'View your note' : 'Add a personal note'}
               onClick={(e) => {
                 e.stopPropagation();
-                setNoteOpen((prev) => !prev);
+                if (noteOpen) {
+                  setNoteOpen(false);
+                  setNoteEditing(false);
+                } else if (hasNote) {
+                  setNoteOpen(true);
+                  setNoteEditing(false);
+                } else {
+                  setNoteDraft('');
+                  setNoteOpen(true);
+                  setNoteEditing(true);
+                }
               }}
             >
-              {hasSavedNote ? 'NOTE •' : 'NOTE'}
+              <span className="note-led" aria-hidden="true" />
+              <span>NOTE</span>
             </button>
           ) : null}
           {onCopyDeepLink ? (
@@ -706,17 +743,6 @@ export const FormulaCardView = memo(function FormulaCardView({
               LINK
             </button>
           ) : null}
-          <a
-            href={reportTypoHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="fmtypo"
-            aria-label={`Report typo in ${card.title} on GitHub`}
-            title="Spotted a mistake? Report it"
-            onClick={(e) => e.stopPropagation()}
-          >
-            Typo
-          </a>
           <button
             type="button"
             className={`fmst${isStarred ? ' on' : ''}`}
@@ -761,6 +787,33 @@ export const FormulaCardView = memo(function FormulaCardView({
             </label>
           ) : null}
         </span>
+        <a
+          href={reportTypoHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="fmtypo"
+          aria-label={`Report Problem in ${card.title}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13.2" />
+            <circle cx="12" cy="17" r="0.85" fill="currentColor" stroke="none" />
+          </svg>
+          <span className="fmtypo-tooltip" role="tooltip">
+            Report Problem
+          </span>
+        </a>
       </div>
       <div className="fmbody">
         {card.htmlContent ? (
@@ -786,97 +839,128 @@ export const FormulaCardView = memo(function FormulaCardView({
             />
           </pre>
         ) : null}
-        {hasSavedNote && !noteOpen ? (
+        {onSaveNote || hasNote ? (
           <div
-            className="fm-personal-note"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (onSaveNote) setNoteOpen(true);
-            }}
-          >
-            <div className="fm-personal-note-head">
-              <span className="fm-personal-note-label">MY MARGIN NOTE</span>
-              {onSaveNote ? (
-                <button
-                  type="button"
-                  className="fm-note-edit-trigger"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setNoteOpen(true);
-                  }}
-                >
-                  [EDIT]
-                </button>
-              ) : null}
-            </div>
-            <p className="fm-personal-note-body">{noteText}</p>
-          </div>
-        ) : null}
-        {noteOpen && onSaveNote ? (
-          <div
-            className="fm-note-editor"
+            className={`fm-note-collapse${noteOpen ? ' is-open' : ''}`}
+            aria-hidden={!noteOpen}
+            inert={!noteOpen}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="fm-note-editor-head">
-              <span className="fm-personal-note-label">PERSONAL MARGIN NOTE</span>
-              <span className="fm-note-char-count">
-                {noteDraft.length}/{MAX_CARD_NOTE_LENGTH}
-              </span>
-            </div>
-            <textarea
-              className="fm-note-textarea"
-              rows={3}
-              maxLength={MAX_CARD_NOTE_LENGTH}
-              placeholder="Jot down professor hints, sign-convention traps, or a quick mnemonic..."
-              aria-label={`Personal margin note for ${card.title}`}
-              value={noteDraft}
-              onChange={(e) => setNoteDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                  e.preventDefault();
-                  onSaveNote(card.id, noteDraft);
-                  setNoteOpen(false);
-                } else if (e.key === 'Escape') {
-                  e.stopPropagation();
-                  setNoteDraft(noteText);
-                  setNoteOpen(false);
-                }
-              }}
-            />
-            <div className="fm-note-editor-actions">
-              {hasSavedNote ? (
-                <button
-                  type="button"
-                  className="fm-note-btn danger"
-                  onClick={() => {
-                    setNoteDraft('');
-                    onSaveNote(card.id, '');
-                    setNoteOpen(false);
-                  }}
-                >
-                  [CLEAR]
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="fm-note-btn"
-                onClick={() => {
-                  setNoteDraft(noteText);
-                  setNoteOpen(false);
-                }}
-              >
-                [CANCEL]
-              </button>
-              <button
-                type="button"
-                className="fm-note-btn primary"
-                onClick={() => {
-                  onSaveNote(card.id, noteDraft);
-                  setNoteOpen(false);
-                }}
-              >
-                [SAVE NOTE]
-              </button>
+            <div className="fm-note-collapse-inner">
+              <div className="fm-note-panel">
+                {noteEditing && onSaveNote ? (
+                  <>
+                    <div className="fm-note-editor-head">
+                      <span className="fm-personal-note-label">PERSONAL MARGIN NOTE</span>
+                      <span className="fm-note-char-count">
+                        {noteDraft.length}/{MAX_CARD_NOTE_LENGTH}
+                      </span>
+                    </div>
+                    <textarea
+                      ref={noteTextareaRef}
+                      className="fm-note-textarea"
+                      rows={3}
+                      maxLength={MAX_CARD_NOTE_LENGTH}
+                      placeholder="Jot down professor hints, sign-convention traps, or a quick mnemonic..."
+                      aria-label={`Personal margin note for ${card.title}`}
+                      value={noteDraft}
+                      onChange={(e) => setNoteDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                          e.preventDefault();
+                          const trimmed = noteDraft.trim();
+                          onSaveNote(card.id, trimmed);
+                          if (trimmed.length > 0) {
+                            setNoteOpen(true);
+                            setNoteEditing(false);
+                          } else {
+                            setNoteOpen(false);
+                            setNoteEditing(false);
+                          }
+                        } else if (e.key === 'Escape') {
+                          e.stopPropagation();
+                          setNoteDraft(noteText);
+                          if (hasNote) {
+                            setNoteEditing(false);
+                          } else {
+                            setNoteOpen(false);
+                            setNoteEditing(false);
+                          }
+                        }
+                      }}
+                    />
+                    <div className="fm-note-editor-actions">
+                      <button
+                        type="button"
+                        className="fm-note-action-btn"
+                        onClick={() => {
+                          setNoteDraft(noteText);
+                          if (hasNote) {
+                            setNoteEditing(false);
+                          } else {
+                            setNoteOpen(false);
+                            setNoteEditing(false);
+                          }
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="fm-note-action-btn primary"
+                        onClick={() => {
+                          const trimmed = noteDraft.trim();
+                          onSaveNote(card.id, trimmed);
+                          if (trimmed.length > 0) {
+                            setNoteOpen(true);
+                            setNoteEditing(false);
+                          } else {
+                            setNoteOpen(false);
+                            setNoteEditing(false);
+                          }
+                        }}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </>
+                ) : hasNote ? (
+                  <>
+                    <div className="fm-personal-note-head">
+                      <span className="fm-personal-note-label">MY MARGIN NOTE</span>
+                      {onSaveNote ? (
+                        <div className="fm-note-head-actions">
+                          <button
+                            type="button"
+                            className="fm-note-action-btn"
+                            aria-label={`Edit personal note for ${card.title}`}
+                            onClick={() => {
+                              setNoteDraft(noteText);
+                              setNoteEditing(true);
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="fm-note-action-btn danger"
+                            aria-label={`Delete personal note for ${card.title}`}
+                            onClick={() => {
+                              setNoteDraft('');
+                              onSaveNote(card.id, '');
+                              setNoteOpen(false);
+                              setNoteEditing(false);
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="fm-note-text">{noteText}</div>
+                  </>
+                ) : null}
+              </div>
             </div>
           </div>
         ) : null}
@@ -1055,7 +1139,7 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
       id={domId}
       data-c={section.course}
       style={{ '--topic-pct': `${topicPct}%` } as React.CSSProperties}
-      className={`fmt${isIndexSelected ? ' index-selected' : ''}${sectionHidden ? ' hidden' : ''}${freqScore === 5 ? ' is-high-yield' : ''}${topicPct === 100 ? ' is-mastered' : ''}`}
+      className={`fmt${isIndexSelected ? ' index-selected' : ''}${sectionHidden ? ' hidden' : ''}${freqScore === 5 ? ' is-high-yield' : ''}${topicPct === 100 ? ' is-mastered' : ''}${topicPct > 0 ? ' has-progress' : ''}`}
       open={isOpen}
       hidden={sectionHidden}
     >
@@ -1280,6 +1364,7 @@ export default function App() {
   });
   const [flashcardRevealed, setFlashcardRevealed] = useState<boolean>(false);
   const [shortcutsOpen, setShortcutsOpen] = useState<boolean>(false);
+  const [tourOpen, setTourOpen] = useState<boolean>(false);
   const [deepLinkFlashCardId, setDeepLinkFlashCardId] = useState<string>('');
   const [activeNavCardId, setActiveNavCardId] = useState<string>('');
   const [activeHudNavIndex, setActiveHudNavIndex] = useState<number>(-1);
@@ -1296,6 +1381,18 @@ export default function App() {
   const [searchFocused, setSearchFocused] = useState<boolean>(false);
   const [selectedPracticeModuleId, setSelectedPracticeModuleId] = useState<string>('m159-complex');
   const [isPdfFullscreen, setIsPdfFullscreen] = useState<boolean>(false);
+  const isPdfFullscreenRef = useRef<boolean>(false);
+  isPdfFullscreenRef.current = isPdfFullscreen;
+
+  useEffect(() => {
+    if (hasSeenOnboardingTour()) return;
+    const timer = window.setTimeout(() => {
+      if (!isPdfFullscreenRef.current) {
+        setTourOpen(true);
+      }
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, []);
   const [fsHudPointerTop, setFsHudPointerTop] = useState<boolean>(false);
   const [fsHudHovered, setFsHudHovered] = useState<boolean>(false);
   const [fsSearchFocused, setFsSearchFocused] = useState<boolean>(false);
@@ -4040,6 +4137,23 @@ export default function App() {
                   <span>Keyboard Shortcuts</span>
                   <span className="ntype-badge">[?]</span>
                 </button>
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  role="menuitem"
+                  id="quickTourMenuBtn"
+                  onClick={() => {
+                    setToolsOpen(false);
+                    if (persisted.tab === 'prac') {
+                      setPersisted((prev) => ({ ...prev, tab: 'fm' }));
+                    }
+                    setBentoOpen(true);
+                    setTourOpen(true);
+                  }}
+                >
+                  <span>Take a Quick Tour</span>
+                  <span className="ntype-badge">TOUR</span>
+                </button>
                 <div className="dropdown-divider" />
                 <div className="dropdown-sec-label">EXAM PRINT &amp; OFFLINE</div>
                 <button
@@ -4184,6 +4298,7 @@ export default function App() {
                 ref={searchInputRef}
                 type="search"
                 id="fmq"
+                maxLength={120}
                 value={searchInput}
                 onFocus={() => setSearchFocused(true)}
                 onBlur={() => setSearchFocused(false)}
@@ -4689,7 +4804,12 @@ export default function App() {
               >
                 <div className="command-deck-collapse-inner">
                   <div className="command-deck-grid">
-                    <div className="deck-tile bento-mastery-pod">
+                    <div
+                      className="deck-tile bento-mastery-pod"
+                      onMouseEnter={handleDeckTileEnter}
+                      onMouseMove={handleDeckTileMove}
+                      onMouseLeave={handleDeckTileLeave}
+                    >
                       <div className="bento-kpi-row">
                         <div className="bento-kpi-main">
                           <span className="bento-kpi-num">{masteryStats.pct}%</span>
@@ -4748,7 +4868,12 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="deck-tile bento-radar-pod">
+                    <div
+                      className="deck-tile bento-radar-pod"
+                      onMouseEnter={handleDeckTileEnter}
+                      onMouseMove={handleDeckTileMove}
+                      onMouseLeave={handleDeckTileLeave}
+                    >
                       <div
                         className="bento-status-strip"
                         role="group"
@@ -4814,7 +4939,12 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="deck-tile bento-launchpad-pod">
+                    <div
+                      className="deck-tile bento-launchpad-pod"
+                      onMouseEnter={handleDeckTileEnter}
+                      onMouseMove={handleDeckTileMove}
+                      onMouseLeave={handleDeckTileLeave}
+                    >
                       <div className="bento-launch-grid">
                         <button
                           type="button"
@@ -5161,6 +5291,7 @@ export default function App() {
                           ref={fsSearchInputRef}
                           type="search"
                           id="fsFmq"
+                          maxLength={120}
                           value={hudQuery}
                           onFocus={() => setFsSearchFocused(true)}
                           onBlur={() => setFsSearchFocused(false)}
@@ -5960,6 +6091,7 @@ export default function App() {
       </div>
 
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <OnboardingTour open={tourOpen} onClose={() => setTourOpen(false)} />
       <OfflineIndicator />
 
       <div className="floating-nav-dock" role="navigation" aria-label="Quick Navigation Controls">
