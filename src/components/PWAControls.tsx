@@ -109,7 +109,8 @@ export const PWAInstallHeaderBtn: React.FC<{ onInstalled?: () => void }> = ({
       type="button"
       id="pwaHeaderInstallBtn"
       className="pwa-header-install-btn"
-      title="Install Offline App"
+      data-tip="Install Offline App"
+      data-tip-tone="course"
       aria-label="Install Offline App"
       onClick={async () => {
         const accepted = await install();

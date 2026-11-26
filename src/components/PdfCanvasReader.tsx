@@ -425,6 +425,8 @@ export const PdfCanvasReader = memo(function PdfCanvasReader({
                   type="button"
                   className="fm-hud-btn"
                   id="pdfFitWidthBtn"
+                  data-tip="Fit page to width"
+                  data-tip-tone="neutral"
                   onClick={handleResetZoomFitWidth}
                 >
                   [FIT WIDTH]
@@ -471,6 +473,8 @@ export const PdfCanvasReader = memo(function PdfCanvasReader({
             type="button"
             className="pdf-ctrl-btn"
             aria-label="Zoom out PDF"
+            data-tip="Zoom out"
+            data-tip-tone="neutral"
             onClick={() => setScale((s) => Math.max(0.6, Number((s - 0.2).toFixed(2))))}
           >
             [-]
@@ -481,7 +485,8 @@ export const PdfCanvasReader = memo(function PdfCanvasReader({
             className={`pdf-ctrl-btn pdf-zoom-pct${zoomMenuOpen ? ' active' : ''}`}
             aria-label="Toggle PDF Zoom Slider Menu"
             aria-expanded={zoomMenuOpen}
-            title="Click to open zoom slider menu"
+            data-tip="Click to open zoom slider menu"
+            data-tip-tone="neutral"
             onClick={() => setZoomMenuOpen((o) => !o)}
           >
             {Math.round(scale * 100)}%
@@ -490,6 +495,8 @@ export const PdfCanvasReader = memo(function PdfCanvasReader({
             type="button"
             className="pdf-ctrl-btn"
             aria-label="Zoom in PDF"
+            data-tip="Zoom in"
+            data-tip-tone="neutral"
             onClick={() => setScale((s) => Math.min(3.2, Number((s + 0.2).toFixed(2))))}
           >
             [+]
@@ -528,11 +535,12 @@ export const PdfCanvasReader = memo(function PdfCanvasReader({
                   ? `Remove offline cached copy of ${title}`
                   : `Download ${title} PDF for offline use`
               }
-              title={
+              data-tip={
                 offlineState === 'cached'
                   ? 'Saved for offline reading (click to remove cached copy)'
                   : 'Download PDF into local offline cache'
               }
+              data-tip-tone="neutral"
               disabled={offlineState === 'saving'}
               onClick={handleToggleOfflineCache}
             >
@@ -551,6 +559,8 @@ export const PdfCanvasReader = memo(function PdfCanvasReader({
           className="pdf-ctrl-btn pdf-fs-btn"
           id="pdfFloatingFsBtn"
           aria-label={isFullscreen ? 'Exit Fullscreen PDF Reader' : 'Enter Fullscreen PDF Reader'}
+          data-tip={isFullscreen ? 'Exit fullscreen (F5)' : 'Enter fullscreen (F5)'}
+          data-tip-tone="neutral"
           onClick={onToggleFullscreen}
         >
           {isFullscreen ? '[EXIT FULLSCREEN]' : '[FULLSCREEN]'}

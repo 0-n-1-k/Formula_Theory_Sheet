@@ -106,8 +106,10 @@ import {
   getPracticeModulesForCourse,
 } from './utils/practiceCatalog';
 import { PdfCanvasReader } from './components/PdfCanvasReader';
+import { GlobalTooltip } from './components/GlobalTooltip';
 import {
   OnboardingTour,
+  clearOnboardingTourSeen,
   hasSeenOnboardingTour,
 } from './components/OnboardingTour';
 import {
@@ -318,7 +320,8 @@ export const DoomsdayToggleButton = memo(function DoomsdayToggleButton({
       id="goalToggleBtn"
       aria-label="Toggle Study Progress and Exam Countdown Drawer"
       aria-expanded={goalOpen}
-      title={goalOpen ? 'Hide exam countdown' : 'Set your exam date'}
+      data-tip={goalOpen ? 'Hide exam countdown' : 'Set your exam date'}
+      data-tip-tone="danger"
       onClick={onToggle}
     >
       {!goalOpen && parts ? (
@@ -679,7 +682,8 @@ export const FormulaCardView = memo(function FormulaCardView({
               type="button"
               className="fm-hud-btn fm-peek-btn"
               aria-label={`Peek full topic for ${card.title}`}
-              title="View all cards in this topic"
+              data-tip="View all cards in this topic"
+              data-tip-tone="course"
               onClick={(e) => {
                 e.stopPropagation();
                 onPeekTopic(card.topicId);
@@ -693,7 +697,8 @@ export const FormulaCardView = memo(function FormulaCardView({
               type="button"
               className={`fm-hud-btn fm-pin-btn${isPinned ? ' on' : ''}`}
               aria-label={`Pin ${card.title} to fullscreen corner dock`}
-              title={isPinned ? 'Pinned to your screen' : 'Pin this card while you practice'}
+              data-tip={isPinned ? 'Pinned to your screen' : 'Pin this card while you practice'}
+              data-tip-tone="course"
               onClick={(e) => {
                 e.stopPropagation();
                 onPinCard(card);
@@ -714,7 +719,8 @@ export const FormulaCardView = memo(function FormulaCardView({
                   ? `Show personal note for ${card.title}`
                   : `Add personal note for ${card.title}`
               }
-              title={noteOpen ? 'Hide note' : hasNote ? 'View your note' : 'Add a personal note'}
+              data-tip={noteOpen ? 'Hide note' : hasNote ? 'View your note' : 'Add a personal note'}
+              data-tip-tone="course"
               onClick={(e) => {
                 e.stopPropagation();
                 if (noteOpen) {
@@ -739,7 +745,8 @@ export const FormulaCardView = memo(function FormulaCardView({
             className={`fmst${isStarred ? ' on' : ''}`}
             aria-label={isStarred ? `Remove star from ${card.title}` : `Star ${card.title}`}
             aria-pressed={isStarred}
-            title={isStarred ? 'Remove star' : 'Star for later'}
+            data-tip={isStarred ? 'Remove star' : 'Star for later'}
+            data-tip-tone="course"
             onClick={(e) => {
               e.stopPropagation();
               onToggleStar(card.id);
@@ -751,7 +758,8 @@ export const FormulaCardView = memo(function FormulaCardView({
             <label
               className="fml"
               aria-label={`Mark ${card.title} as learned`}
-              title={isLearned ? 'Mark as not learned yet' : 'Mark as learned'}
+              data-tip={isLearned ? 'Mark as not learned yet' : 'Mark as learned'}
+              data-tip-tone="course"
               onClick={(e) => e.stopPropagation()}
             >
               <input
@@ -769,7 +777,8 @@ export const FormulaCardView = memo(function FormulaCardView({
             type="button"
             className="fmcp"
             aria-label={`Copy LaTeX for ${card.title}`}
-            title="Copy to clipboard"
+            data-tip="Copy to clipboard"
+            data-tip-tone="neutral"
             data-t={copyPayload}
             onClick={(e) => {
               e.stopPropagation();
@@ -784,7 +793,9 @@ export const FormulaCardView = memo(function FormulaCardView({
             <button
               type="button"
               className="fmlink-btn"
-              aria-label={`Share link to ${card.title}`}
+              aria-label="Copy direct link"
+              data-tip="Copy direct link"
+              data-tip-tone="neutral"
               onClick={(e) => {
                 e.stopPropagation();
                 onCopyDeepLink(card);
@@ -799,9 +810,6 @@ export const FormulaCardView = memo(function FormulaCardView({
                 height={14}
                 decoding="async"
               />
-              <span className="fmlink-tooltip" role="tooltip">
-                Share Card
-              </span>
             </button>
           ) : null}
           <a
@@ -809,7 +817,9 @@ export const FormulaCardView = memo(function FormulaCardView({
             target="_blank"
             rel="noopener noreferrer"
             className="fmtypo"
-            aria-label={`Report Problem in ${card.title}`}
+            aria-label="Report Problem"
+            data-tip="Report Problem"
+            data-tip-tone="warn"
             onClick={(e) => e.stopPropagation()}
           >
             <svg
@@ -827,9 +837,6 @@ export const FormulaCardView = memo(function FormulaCardView({
               <line x1="12" y1="9" x2="12" y2="13.2" />
               <circle cx="12" cy="17" r="0.85" fill="currentColor" stroke="none" />
             </svg>
-            <span className="fmtypo-tooltip" role="tooltip">
-              Report Problem
-            </span>
           </a>
         </span>
       </div>
@@ -1179,7 +1186,8 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
           {section.freqBadge ? (
             <span
               className={`fmfreq freq-${freqScore}`}
-              title="How often this shows up in finals (2010–2025)"
+              data-tip="How often this shows up in finals (2010–2025)"
+              data-tip-tone={freqScore === 5 ? 'warn' : 'course'}
             >
               {freqScore > 0 ? (
                 <span className="freq-dots" aria-hidden="true">
@@ -2865,6 +2873,7 @@ export default function App() {
 
   const handleResetProgress = useCallback(() => {
     if (!window.confirm('Reset all learned and starred progress? This cannot be undone.')) return;
+    clearOnboardingTourSeen();
     setPersisted((prev) => ({
       ...prev,
       learned: {},
@@ -3931,7 +3940,8 @@ export default function App() {
               aria-expanded={sidebarOpen}
               aria-hidden={sidebarOpen}
               tabIndex={sidebarOpen ? -1 : 0}
-              title="Browse all topics"
+              data-tip="Browse all topics"
+              data-tip-tone="course"
               onClick={toggleNavDrawer}
             >
               <svg
@@ -3959,7 +3969,8 @@ export default function App() {
                   aria-label="Open BUET EEE Term Archive Switcher"
                   aria-expanded={termMenuOpen}
                   aria-haspopup="menu"
-                  title="Switch semester"
+                  data-tip="Switch semester"
+                  data-tip-tone="course"
                   onClick={() => setTermMenuOpen((open) => !open)}
                 >
                   <span className="term-switcher-code">
@@ -4049,7 +4060,8 @@ export default function App() {
                 className="buet-ascii-link"
                 id="buetAsciiLink"
                 aria-label="Official BUET Website (buet.ac.bd)"
-                title="Visit BUET's official website"
+                data-tip="Visit BUET's official website"
+                data-tip-tone="danger"
               >
                 <pre
                   className="buet-ascii-art"
@@ -4064,7 +4076,8 @@ export default function App() {
                 id="brandResetBtn"
                 role="button"
                 tabIndex={0}
-                title="Return home"
+                data-tip="Return home"
+                data-tip-tone="course"
                 aria-label={`${CURRENT_TERM_CONFIG.brandTitle}: Return to Formulas for all courses and retract all sections`}
                 onClick={handleBrandReset}
                 onKeyDown={(e) => {
@@ -4142,7 +4155,8 @@ export default function App() {
                 className={`settings-icon-btn${toolsOpen ? ' active' : ''}`}
                 aria-label="Open Settings Menu"
                 aria-expanded={toolsOpen}
-                title="Settings"
+                data-tip="Settings"
+                data-tip-tone="neutral"
                 onClick={() => setToolsOpen((o) => !o)}
               >
                 <svg
@@ -4583,7 +4597,8 @@ export default function App() {
               className="sb-close-btn sidebar-close-btn"
               id="sidebarCloseBtn"
               aria-label="Close Topic Index Sidebar"
-              title="Close index"
+              data-tip="Close index"
+              data-tip-tone="neutral"
               onClick={() => setSidebarOpen(false)}
             >
               <svg
@@ -4611,7 +4626,8 @@ export default function App() {
                 rel="noopener noreferrer"
                 className="buet-ascii-link sb-phone-logo"
                 aria-label="Official BUET Website (buet.ac.bd)"
-                title="Visit BUET's official website"
+                data-tip="Visit BUET's official website"
+                data-tip-tone="danger"
               >
                 <pre className="buet-ascii-art" aria-hidden="true">
                   {BUET_LOGO_ASCII_ART}
@@ -4904,7 +4920,8 @@ export default function App() {
                         e.stopPropagation();
                         handleCramSprintToggle();
                       }}
-                      title="Exit last-night sprint"
+                      data-tip="Exit last-night sprint"
+                      data-tip-tone="course"
                     >
                       CRAM SPRINT: {filterSummary.cramSprintRemainingCount} LEFT ×
                     </button>
@@ -4918,7 +4935,8 @@ export default function App() {
                             e.stopPropagation();
                             setHighYieldOnly(false);
                           }}
-                          title="Show all topics again"
+                          data-tip="Show all topics again"
+                          data-tip-tone="course"
                         >
                           5/5 HIGH-YIELD ×
                         </button>
@@ -4931,7 +4949,8 @@ export default function App() {
                             e.stopPropagation();
                             handleStatusChange('all');
                           }}
-                          title="Show all cards again"
+                          data-tip="Show all cards again"
+                          data-tip-tone="course"
                         >
                           {persisted.status.toUpperCase()} ×
                         </button>
@@ -4998,7 +5017,8 @@ export default function App() {
                               data-c={item.code}
                               className={`bento-course-cell${isSelected ? ' active' : ''}${item.code === 'GEN' ? ' is-gen' : ''}${item.isReference ? ' is-ref' : ''}`}
                               aria-pressed={isSelected}
-                              title={item.title}
+                              data-tip={item.title}
+                              data-tip-tone="course"
                               onClick={() =>
                                 handleCourseChange(
                                   item.code === 'ALL'
@@ -5044,6 +5064,14 @@ export default function App() {
                             data-status={st}
                             aria-pressed={persisted.status === st}
                             aria-label={`Filter status: ${st}`}
+                            data-tip={
+                              st === 'all'
+                                ? 'Show all cards'
+                                : st === 'starred'
+                                ? 'Show starred cards only'
+                                : 'Show unlearned cards only'
+                            }
+                            data-tip-tone="course"
                             onClick={() => handleStatusChange(st)}
                           >
                             <span>{st.charAt(0).toUpperCase() + st.slice(1)}</span>
@@ -5059,6 +5087,12 @@ export default function App() {
                         <button
                           type="button"
                           className={`bento-action-chip high-yield${highYieldOnly ? ' active' : ''}`}
+                          data-tip={
+                            highYieldOnly
+                              ? 'Show all syllabus topics'
+                              : 'Filter to 5/5 high-yield finals topics'
+                          }
+                          data-tip-tone="course"
                           onClick={() => {
                             setHighYieldOnly((prev) => {
                               const next = !prev;
@@ -5083,7 +5117,8 @@ export default function App() {
                           id="cramSprintBtn"
                           className={`bento-action-chip cram-sprint${isCramSprintActive ? ' active' : ''}`}
                           aria-pressed={isCramSprintActive}
-                          title="Focus on high-yield unlearned cards"
+                          data-tip="Focus on high-yield unlearned cards"
+                          data-tip-tone="course"
                           onClick={handleCramSprintToggle}
                         >
                           <span className="bento-chip-label">
@@ -5107,6 +5142,12 @@ export default function App() {
                           type="button"
                           className={`bento-launch-btn${persisted.selfTest ? ' active' : ''}`}
                           aria-pressed={Boolean(persisted.selfTest)}
+                          data-tip={
+                            persisted.selfTest
+                              ? 'Disable formula blur'
+                              : 'Blur formulas for active recall'
+                          }
+                          data-tip-tone="course"
                           onClick={handleToggleSelfTest}
                         >
                           <span className="bento-launch-title">Self-Test Blur</span>
@@ -5118,6 +5159,8 @@ export default function App() {
                         <button
                           type="button"
                           className="bento-launch-btn"
+                          data-tip="Quiz a random card from current scope"
+                          data-tip-tone="course"
                           onClick={pickRandomFlashcard}
                         >
                           <span className="bento-launch-title">Random Flashcard</span>
@@ -5129,6 +5172,12 @@ export default function App() {
                           type="button"
                           className={`bento-launch-btn${persisted.hideDetails ? ' active' : ''}`}
                           aria-pressed={Boolean(persisted.hideDetails)}
+                          data-tip={
+                            persisted.hideDetails
+                              ? 'Show context & strategy footers'
+                              : 'Hide context & strategy footers'
+                          }
+                          data-tip-tone="course"
                           onClick={handleToggleHideDetails}
                         >
                           <span className="bento-launch-title">Formula-Only View</span>
@@ -5141,6 +5190,8 @@ export default function App() {
                           type="button"
                           className={`bento-launch-btn${openTopicCount === 0 ? ' is-idle' : ''}`}
                           disabled={openTopicCount === 0}
+                          data-tip="Collapse all open topics"
+                          data-tip-tone="course"
                           onClick={() => handleExpandCollapseAll(false)}
                         >
                           <span className="bento-launch-title">Fold All Topics</span>
@@ -5518,7 +5569,8 @@ export default function App() {
                             setHudCourseScope((prev) => (prev === 'COURSE' ? 'ALL' : 'COURSE'));
                             setPeekTopicId(null);
                           }}
-                          title="Switch between this course and all courses"
+                          data-tip="Switch between this course and all courses"
+                          data-tip-tone="course"
                         >
                           {hudCourseScope === 'COURSE'
                             ? `[SCOPE: ${activePracticeModule.courseBadge} (${hudCourseSections.length} TOPICS)]`
@@ -5656,7 +5708,8 @@ export default function App() {
                         role="separator"
                         aria-orientation="horizontal"
                         aria-label="Drag bottom edge to increase or decrease HUD height (double-click to reset)"
-                        title="Drag to resize · Double-click to reset"
+                        data-tip="Drag to resize · Double-click to reset"
+                        data-tip-tone="neutral"
                         onMouseDown={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -5756,7 +5809,8 @@ export default function App() {
                                     if ((e.target as HTMLElement).closest('button')) return;
                                     handleToggleMinimizePin(pCard.id);
                                   }}
-                                  title="Drag to move · Double-click to shrink"
+                                  data-tip="Drag to move · Double-click to shrink"
+                                  data-tip-tone="neutral"
                                 >
                                   <div className="fs-pinned-title">
                                     <span className="ntype-badge fs-pinned-course-badge">
@@ -5776,7 +5830,8 @@ export default function App() {
                                       type="button"
                                       className="fm-hud-btn"
                                       aria-label={`Copy ${pCard.title}`}
-                                      title="Copy this card"
+                                      data-tip="Copy this card"
+                                      data-tip-tone="neutral"
                                       onClick={() => handleCopyLatex(pinCopyPayload)}
                                     >
                                       [CPY]
@@ -5785,7 +5840,8 @@ export default function App() {
                                       type="button"
                                       className="fm-hud-btn"
                                       aria-label={`Compact mode for ${pCard.title}`}
-                                      title="Shrink to formula only"
+                                      data-tip="Shrink to formula only"
+                                      data-tip-tone="neutral"
                                       onClick={() => handleToggleMinimizePin(pCard.id)}
                                     >
                                       [_]
@@ -5794,7 +5850,8 @@ export default function App() {
                                       type="button"
                                       className="fm-hud-btn fm-unpin-btn"
                                       aria-label={`Unpin ${pCard.title}`}
-                                      title="Unpin card"
+                                      data-tip="Unpin card"
+                                      data-tip-tone="neutral"
                                       onClick={() => handleUnpinCard(pCard.id)}
                                     >
                                       [X]
@@ -5807,7 +5864,8 @@ export default function App() {
                                     type="button"
                                     className="fm-hud-btn"
                                     aria-label={`Expand pinned card ${pCard.title}`}
-                                    title="Expand card"
+                                    data-tip="Expand card"
+                                    data-tip-tone="neutral"
                                     onClick={() => handleToggleMinimizePin(pCard.id)}
                                   >
                                     [+]
@@ -5816,7 +5874,8 @@ export default function App() {
                                     type="button"
                                     className="fm-hud-btn fm-unpin-btn"
                                     aria-label={`Unpin ${pCard.title}`}
-                                    title="Unpin card"
+                                    data-tip="Unpin card"
+                                    data-tip-tone="neutral"
                                     onClick={() => handleUnpinCard(pCard.id)}
                                   >
                                     [X]
@@ -5831,11 +5890,12 @@ export default function App() {
                                     ? (e) => startDragPin(e, pCard.id, layout)
                                     : undefined
                                 }
-                                title={
+                                data-tip={
                                   sizeMode === 'formula-only'
                                     ? 'Drag to move, or pull any edge to resize'
                                     : undefined
                                 }
+                                data-tip-tone={sizeMode === 'formula-only' ? 'neutral' : undefined}
                               >
                                 {pCard.htmlContent ? (
                                   <SecondaryMathText
@@ -5911,7 +5971,8 @@ export default function App() {
                                     edge === 'n' || edge === 's' ? 'horizontal' : 'vertical'
                                   }
                                   aria-label={`Resize ${pCard.title} from ${edge.toUpperCase()} edge`}
-                                  title="Drag to resize"
+                                  data-tip="Drag to resize"
+                                  data-tip-tone="neutral"
                                   onMouseDown={(e) =>
                                     startResizePin(e, pCard.id, edge, layout)
                                   }
@@ -5926,7 +5987,8 @@ export default function App() {
                                   data-resize-dir={corner}
                                   role="separator"
                                   aria-label={`Resize ${pCard.title} from ${corner.toUpperCase()} corner`}
-                                  title="Drag to resize"
+                                  data-tip="Drag to resize"
+                                  data-tip-tone="neutral"
                                   onMouseDown={(e) =>
                                     startResizePin(e, pCard.id, corner, layout)
                                   }
@@ -6264,7 +6326,8 @@ export default function App() {
           type="button"
           className={`floating-keycap floating-top-btn${showTopBtn && !isPdfFullscreen ? ' vis' : ''}`}
           aria-label="Scroll back to top"
-          title="Back to top"
+          data-tip="Back to top"
+          data-tip-tone="neutral"
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
         >
           <svg
@@ -6291,7 +6354,8 @@ export default function App() {
           className={`floating-keycap sb-detached-tab${indexDetached && !isPdfFullscreen && !sidebarOpen ? ' visible' : ''}${sidebarOpen ? ' active' : ''}`}
           aria-label="Toggle Topic Index Sidebar"
           aria-expanded={sidebarOpen}
-          title={sidebarOpen ? 'Close topic index' : 'Open topic index'}
+          data-tip={sidebarOpen ? 'Close topic index' : 'Open topic index'}
+          data-tip-tone="course"
           onClick={toggleNavDrawer}
         >
           <svg
@@ -6311,6 +6375,8 @@ export default function App() {
           </svg>
         </button>
       </div>
+
+      <GlobalTooltip />
 
       <div id="toast" className={toastMsg ? 'show' : ''} role="status" aria-live="polite">
         {toastMsg || 'READY'}

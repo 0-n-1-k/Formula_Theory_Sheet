@@ -126,7 +126,13 @@ export function advanceTileGlowPhysics(
 
 function stepTileGlow(el: HTMLElement, nowMs: number) {
   const st = tileGlowMap.get(el);
-  if (!st) return;
+  if (!st || !el.isConnected) {
+    if (st) {
+      st.rafId = null;
+      st.hovered = false;
+    }
+    return;
+  }
 
   const { corePct, ambientPct, coreRadiusPx, diffuseRadiusPx, shouldStop, isSettled } =
     advanceTileGlowPhysics(st, nowMs);

@@ -7239,68 +7239,6 @@ table.mini,
   transform: scale(0.95);
 }
 
-.fmlink-tooltip,
-.fmtypo-tooltip {
-  position: absolute;
-  top: calc(100% + 7px);
-  right: 0;
-  z-index: 30;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: rgba(13, 14, 20, 0.96);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.55);
-  font-family: var(--font-dot);
-  font-size: var(--fs-2xs);
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  line-height: 1.25;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(-3px);
-  transition: opacity 0.16s var(--ease-out), transform 0.16s var(--ease-out);
-}
-
-.fmlink-tooltip {
-  border: 1px solid var(--course-signal-border, rgba(41, 151, 255, 0.44));
-  color: var(--text-primary);
-}
-
-.fmtypo-tooltip {
-  border: 1px solid rgba(255, 159, 10, 0.44);
-  color: #ffd48a;
-}
-
-.fmlink-tooltip::before,
-.fmtypo-tooltip::before {
-  content: '';
-  position: absolute;
-  top: -4px;
-  right: 9px;
-  width: 6px;
-  height: 6px;
-  background: rgba(13, 14, 20, 0.96);
-  transform: rotate(45deg);
-}
-
-.fmlink-tooltip::before {
-  border-top: 1px solid var(--course-signal-border, rgba(41, 151, 255, 0.44));
-  border-left: 1px solid var(--course-signal-border, rgba(41, 151, 255, 0.44));
-}
-
-.fmtypo-tooltip::before {
-  border-top: 1px solid rgba(255, 159, 10, 0.44);
-  border-left: 1px solid rgba(255, 159, 10, 0.44);
-}
-
-.fmlink-btn:hover .fmlink-tooltip,
-.fmlink-btn:focus-visible .fmlink-tooltip,
-.fmtypo:hover .fmtypo-tooltip,
-.fmtypo:focus-visible .fmtypo-tooltip {
-  opacity: 1;
-  transform: translateY(0);
-}
-
 /* Responsive two-row card header on phones & narrow 2-column cards:
    Row 1: title (left) + Share & Report Problem icons (top-right corner on same line)
    Row 2: action buttons (.fmb) full-width with flex-wrap so learned never clips */
@@ -8357,10 +8295,117 @@ table.mini,
   .tour-spotlight,
   .tour-popover,
   .tour-progress-fill,
-  details.fmt > summary::after {
+  details.fmt > summary::after,
+  #globalTooltip {
     transition: none;
   }
 }
+
+/* ======================== UNIFIED GLOBAL CUSTOM TOOLTIP ======================== */
+#globalTooltip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 20000;
+  pointer-events: none;
+  padding: 5px 10px;
+  border-radius: 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  white-space: nowrap;
+  max-width: min(280px, calc(100vw - 24px));
+  overflow: visible;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  opacity: 0;
+  transform: translateY(3px) scale(0.97);
+  transition:
+    opacity 0.14s var(--ease-out),
+    transform 0.16s var(--ease-glide);
+
+  /* Default course-matched tone */
+  --tip-accent: var(--tip-course-signal, var(--course-signal, var(--accent)));
+  --tip-bg: color-mix(in srgb, var(--tip-accent) 11%, rgba(11, 12, 18, 0.96));
+  --tip-border: color-mix(in srgb, var(--tip-accent) 55%, transparent);
+  --tip-text: color-mix(in srgb, var(--tip-accent) 72%, #ffffff);
+
+  background: var(--tip-bg);
+  border: 1px solid var(--tip-border);
+  color: var(--tip-text);
+  box-shadow:
+    0 10px 26px -6px rgba(0, 0, 0, 0.85),
+    0 0 14px -4px color-mix(in srgb, var(--tip-accent) 28%, transparent);
+}
+
+#globalTooltip .global-tooltip-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#globalTooltip.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+#globalTooltip[data-placement="top"] {
+  transform: translateY(-3px) scale(0.97);
+}
+
+#globalTooltip[data-placement="top"].is-visible {
+  transform: translateY(0) scale(1);
+}
+
+/* Pointer caret tracked to exact trigger center */
+#globalTooltip::before {
+  content: "";
+  position: absolute;
+  left: var(--tip-arrow-x, 50%);
+  width: 7px;
+  height: 7px;
+  background: var(--tip-bg);
+  pointer-events: none;
+}
+
+#globalTooltip[data-placement="bottom"]::before {
+  top: -4.5px;
+  transform: translateX(-50%) rotate(45deg);
+  border-top: 1px solid var(--tip-border);
+  border-left: 1px solid var(--tip-border);
+}
+
+#globalTooltip[data-placement="top"]::before {
+  bottom: -4.5px;
+  transform: translateX(-50%) rotate(45deg);
+  border-bottom: 1px solid var(--tip-border);
+  border-right: 1px solid var(--tip-border);
+}
+
+/* Right-side utility tones */
+#globalTooltip[data-tone="neutral"] {
+  --tip-accent: #cbd5e1;
+  --tip-bg: rgba(16, 18, 26, 0.96);
+  --tip-border: rgba(255, 255, 255, 0.22);
+  --tip-text: #eef1f7;
+}
+
+#globalTooltip[data-tone="warn"] {
+  --tip-accent: #f59e0b;
+  --tip-bg: rgba(24, 17, 7, 0.96);
+  --tip-border: rgba(245, 158, 11, 0.56);
+  --tip-text: #fbbf24;
+}
+
+#globalTooltip[data-tone="danger"] {
+  --tip-accent: #ff5c57;
+  --tip-bg: rgba(26, 11, 13, 0.96);
+  --tip-border: rgba(255, 92, 87, 0.5);
+  --tip-text: #ff8a85;
+}
+
 
 
 

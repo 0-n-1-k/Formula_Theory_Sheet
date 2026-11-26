@@ -141,6 +141,16 @@ export function markOnboardingTourSeen(): void {
   }
 }
 
+export function clearOnboardingTourSeen(): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(TOUR_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage access errors in restricted environments
+  }
+}
+
 export function hasSeenOnboardingTour(): boolean {
   try {
     if (typeof localStorage === 'undefined') return false;
