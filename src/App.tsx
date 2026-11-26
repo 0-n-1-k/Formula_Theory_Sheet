@@ -26,6 +26,7 @@ import {
   CURRENT_TERM_CONFIG,
   TERM_REGISTRY,
   buildEffectiveCoursePills,
+  formatCompactTermCode,
   syncDocumentMetaForTerm,
 } from './termConfig';
 import {
@@ -282,7 +283,7 @@ function formatDoomsdayParts(examDate: string, nowMs: number) {
   const hrs = String(Math.floor((totalSec % 86400) / 3600)).padStart(2, '0');
   const mins = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
   const secs = String(totalSec % 60).padStart(2, '0');
-  const prefix = diff >= 0 ? 'DOOMSDAY // T-MINUS' : 'DOOMSDAY // T-PLUS';
+  const prefix = diff >= 0 ? 'FINALS' : 'FINALS +';
   return { days, hrs, mins, secs, prefix };
 }
 
@@ -322,7 +323,7 @@ export const DoomsdayToggleButton = memo(function DoomsdayToggleButton({
     >
       {!goalOpen && parts ? (
         <span className="doomsday-btn-live">
-          <span className="doomsday-tag">T-MINUS</span>
+          <span className="doomsday-tag">{parts.prefix}</span>
           <span className="doomsday-segments">
             <span className="dd-seg">
               <span className="dd-val">{parts.days}</span>
@@ -350,7 +351,7 @@ export const DoomsdayToggleButton = memo(function DoomsdayToggleButton({
           {goalOpen
             ? 'Adjust exam date'
             : parts
-            ? `DOOMSDAY // ${parts.days}D ${parts.hrs}H`
+            ? `${parts.prefix} ${parts.days}D ${parts.hrs}H`
             : 'Adjust exam date'}
         </span>
       )}
@@ -378,8 +379,8 @@ export const DoomsdayDrawerClock = memo(function DoomsdayDrawerClock({
   if (!parts) {
     return (
       <span id="cdt" className="is-static">
-        <span className="doomsday-tag">STANDBY</span>
-        <span>SET EXAM DATE TO ARM DOOMSDAY CLOCK</span>
+        <span className="doomsday-tag">FINALS</span>
+        <span>Set exam date for countdown</span>
       </span>
     );
   }
@@ -652,9 +653,17 @@ export const FormulaCardView = memo(function FormulaCardView({
     >
       <div className="fmh">
         <span className="fmn">
-          {cardIndex !== undefined ? (
-            <span className="fm-idx-badge">
-              #{String(cardIndex).padStart(2, '0')}
+          {cardIndex !== undefined || card.badge || (showTopicTag && topicTitle) ? (
+            <span className="fmn-eyebrow">
+              {cardIndex !== undefined ? (
+                <span className="fm-idx-badge">
+                  #{String(cardIndex).padStart(2, '0')}
+                </span>
+              ) : null}
+              {card.badge ? <span className="thty">{card.badge}</span> : null}
+              {showTopicTag && topicTitle ? (
+                <span className="fm-card-topic-tag">{topicTitle}</span>
+              ) : null}
             </span>
           ) : null}
           <SecondaryMathText
@@ -663,10 +672,6 @@ export const FormulaCardView = memo(function FormulaCardView({
             content={mainTitle}
             highlightTokens={activeHighlightTokens}
           />
-          {card.badge ? <span className="thty">{card.badge}</span> : null}
-          {showTopicTag && topicTitle ? (
-            <span className="fm-card-topic-tag">{topicTitle}</span>
-          ) : null}
         </span>
         <span className="fmb">
           {onPeekTopic ? (
@@ -729,20 +734,6 @@ export const FormulaCardView = memo(function FormulaCardView({
               <span>NOTE</span>
             </button>
           ) : null}
-          {onCopyDeepLink ? (
-            <button
-              type="button"
-              className="fmlink-btn"
-              aria-label={`Copy direct link to ${card.title}`}
-              title="Copy direct link to this card"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCopyDeepLink(card);
-              }}
-            >
-              LINK
-            </button>
-          ) : null}
           <button
             type="button"
             className={`fmst${isStarred ? ' on' : ''}`}
@@ -755,19 +746,6 @@ export const FormulaCardView = memo(function FormulaCardView({
             }}
           >
             {isStarred ? 'STARRED' : 'Star'}
-          </button>
-          <button
-            type="button"
-            className="fmcp"
-            aria-label={`Copy LaTeX for ${card.title}`}
-            title="Copy to clipboard"
-            data-t={copyPayload}
-            onClick={(e) => {
-              e.stopPropagation();
-              onCopyLatex(copyPayload);
-            }}
-          >
-            Copy
           </button>
           {card.course !== 'GEN' ? (
             <label
@@ -786,34 +764,74 @@ export const FormulaCardView = memo(function FormulaCardView({
               learned
             </label>
           ) : null}
-        </span>
-        <a
-          href={reportTypoHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="fmtypo"
-          aria-label={`Report Problem in ${card.title}`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.9"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
+          <span className="fmb-divider" aria-hidden="true" />
+          <button
+            type="button"
+            className="fmcp"
+            aria-label={`Copy LaTeX for ${card.title}`}
+            title="Copy to clipboard"
+            data-t={copyPayload}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCopyLatex(copyPayload);
+            }}
           >
-            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-            <line x1="12" y1="9" x2="12" y2="13.2" />
-            <circle cx="12" cy="17" r="0.85" fill="currentColor" stroke="none" />
-          </svg>
-          <span className="fmtypo-tooltip" role="tooltip">
-            Report Problem
-          </span>
-        </a>
+            Copy
+          </button>
+        </span>
+        <span className="fmh-corner-actions">
+          {onCopyDeepLink ? (
+            <button
+              type="button"
+              className="fmlink-btn"
+              aria-label={`Share link to ${card.title}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCopyDeepLink(card);
+              }}
+            >
+              <img
+                src="/assets/aistudio/image_b2f5416e.png"
+                alt=""
+                aria-hidden="true"
+                className="fmlink-icon"
+                width={14}
+                height={14}
+                decoding="async"
+              />
+              <span className="fmlink-tooltip" role="tooltip">
+                Share Card
+              </span>
+            </button>
+          ) : null}
+          <a
+            href={reportTypoHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="fmtypo"
+            aria-label={`Report Problem in ${card.title}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.9"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13.2" />
+              <circle cx="12" cy="17" r="0.85" fill="currentColor" stroke="none" />
+            </svg>
+            <span className="fmtypo-tooltip" role="tooltip">
+              Report Problem
+            </span>
+          </a>
+        </span>
       </div>
       <div className="fmbody">
         {card.htmlContent ? (
@@ -1092,6 +1110,7 @@ export interface TopicSectionAccordionProps {
   sectionHidden: boolean;
   isOpen: boolean;
   isIndexSelected: boolean;
+  showCourseTag?: boolean;
   domId: string;
   keyPrefix: string;
   selfTest: boolean;
@@ -1114,6 +1133,7 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
   sectionHidden,
   isOpen,
   isIndexSelected,
+  showCourseTag = true,
   domId,
   keyPrefix,
   selfTest,
@@ -1150,7 +1170,9 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
         }}
       >
         <span className="fmtt">
-          <span className="fmt-course-tag">{section.course}</span>
+          {showCourseTag ? (
+            <span className="fmt-course-tag">{section.course}</span>
+          ) : null}
           <span className="fmt-title-text">{section.title}</span>
         </span>
         <span className="fmmeta">
@@ -1321,6 +1343,8 @@ export default function App() {
               href: `#${sec.id}`,
               targetId: sec.id,
               label: sec.title,
+              totalCards: sec.cards.length,
+              cardIds: sec.cards.map((c) => c.id),
             })),
           };
         })
@@ -1581,6 +1605,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    document.body.dataset.course = persisted.course;
+  }, [persisted.course]);
+
+  useEffect(() => {
     return () => {
       if (selectedTopicTimerRef.current !== null) {
         window.clearTimeout(selectedTopicTimerRef.current);
@@ -1749,10 +1777,8 @@ export default function App() {
         }
       }
       if (barEl) {
-        const bh = Math.ceil(barEl.getBoundingClientRect().height);
-        if (bh > 0) {
-          document.documentElement.style.setProperty('--fmbar-h', `${bh}px`);
-        }
+        const bh = barEl.hidden ? 0 : Math.ceil(barEl.getBoundingClientRect().height);
+        document.documentElement.style.setProperty('--fmbar-h', `${bh}px`);
       }
     } catch {
       // Ignore layout measurement errors in non-DOM environments
@@ -3061,6 +3087,34 @@ export default function App() {
   const totalMatchedCardsForSearch =
     filterSummary.visibleCards + genMatchedCardsCount;
 
+  const showTopicCourseTag = persisted.course === 'ALL';
+
+  const openTopicCount = useMemo(() => {
+    const activeSections =
+      persisted.tab === 'thm' && !isGenSelected ? computedThmSections : computedFmSections;
+    const hasActiveSearch = deferredTokens.length > 0;
+    let count = 0;
+    for (let idx = 0; idx < activeSections.length; idx++) {
+      const item = activeSections[idx];
+      if (item.sectionHidden) continue;
+      const defaultSearchOpen = totalMatchedCardsForSearch <= 60 || idx < 6;
+      const isOpen = hasActiveSearch
+        ? (searchToggledTopics[item.section.id] ?? defaultSearchOpen)
+        : Boolean(openTopics[item.section.id]);
+      if (isOpen) count += 1;
+    }
+    return count;
+  }, [
+    persisted.tab,
+    isGenSelected,
+    computedFmSections,
+    computedThmSections,
+    deferredTokens.length,
+    totalMatchedCardsForSearch,
+    searchToggledTopics,
+    openTopics,
+  ]);
+
   const renderedFmSections = useMemo(() => {
     if (computedFmSections.length === 0) return [];
     const hasActiveSearch = deferredTokens.length > 0;
@@ -3081,6 +3135,7 @@ export default function App() {
           sectionHidden={item.sectionHidden}
           isOpen={isSectionOpen}
           isIndexSelected={selectedTopicId === item.section.id}
+          showCourseTag={showTopicCourseTag}
           domId={item.section.id}
           keyPrefix="fm-"
           selfTest={Boolean(persisted.selfTest)}
@@ -3104,6 +3159,7 @@ export default function App() {
     searchToggledTopics,
     openTopics,
     selectedTopicId,
+    showTopicCourseTag,
     persisted.selfTest,
     persisted.notes,
     deepLinkFlashCardId,
@@ -3137,6 +3193,7 @@ export default function App() {
           sectionHidden={item.sectionHidden}
           isOpen={isSectionOpen}
           isIndexSelected={selectedTopicId === item.section.id}
+          showCourseTag={showTopicCourseTag}
           domId={item.section.id}
           keyPrefix="thm-"
           selfTest={Boolean(persisted.selfTest)}
@@ -3160,6 +3217,7 @@ export default function App() {
     searchToggledTopics,
     openTopics,
     selectedTopicId,
+    showTopicCourseTag,
     persisted.selfTest,
     persisted.notes,
     deepLinkFlashCardId,
@@ -3876,7 +3934,21 @@ export default function App() {
               title="Browse all topics"
               onClick={toggleNavDrawer}
             >
-              [INDEX]
+              <svg
+                className="sb-index-icon"
+                viewBox="0 0 18 18"
+                width="18"
+                height="18"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M2.75 4.25H4.5M7 4.25H15.25M2.75 9H4.5M7 9H14M2.75 13.75H4.5M7 13.75H12.75"
+                  stroke="currentColor"
+                  strokeWidth="1.65"
+                  strokeLinecap="round"
+                />
+              </svg>
             </button>
             <div className="brand-wrap">
               <div className="term-switcher-wrap" ref={termSwitcherWrapRef}>
@@ -3890,7 +3962,25 @@ export default function App() {
                   title="Switch semester"
                   onClick={() => setTermMenuOpen((open) => !open)}
                 >
-                  {CURRENT_TERM_CONFIG.emblemText}
+                  <span className="term-switcher-code">
+                    {formatCompactTermCode(CURRENT_TERM_CONFIG.shortCode)}
+                  </span>
+                  <svg
+                    className="term-switcher-chevron"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 12 12"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M3 4.5L6 7.5L9 4.5"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
                 </button>
                 <div
                   className={`term-archive-dropdown${termMenuOpen ? ' open' : ''}`}
@@ -4284,16 +4374,18 @@ export default function App() {
         </div>
       </header>
 
-      <section id="fmbar" ref={fmbarRef} aria-label="Search and Study Controls">
+      <section
+        id="fmbar"
+        ref={fmbarRef}
+        aria-label="Search and Study Controls"
+        hidden={persisted.tab === 'prac' && !isGenSelected}
+      >
         <div className="fmbar-inner">
           <div className="controls-utility-row">
             <div
               className={`search-wrap${hasQuery ? ' has-query' : ''}${isZeroMatch ? ' zero-match' : ''}`}
               role="search"
             >
-              <label htmlFor="fmq" className="search-prefix">
-                [/]
-              </label>
               <input
                 ref={searchInputRef}
                 type="search"
@@ -4321,23 +4413,32 @@ export default function App() {
                 autoComplete="off"
                 spellCheck={false}
               />
-              <button
-                type="button"
-                className="search-clear-btn"
-                aria-label="Clear search query"
-                hidden={!searchInput}
-                onClick={() => setSearchInput('')}
-              >
-                [CLR]
-              </button>
-              <span className="fmstat" role="status" aria-live="polite">
-                {(deferredTokens.length > 0 || persisted.status === 'starred') &&
-                persisted.course === 'ALL'
-                  ? `${filterSummary.visibleCards + genMatchedCardsCount} / ${
-                      filterSummary.totalCardsInScope +
-                      (genMatchedCardsCount > 0 ? genCardsWithIndex.length : 0)
-                    }`
-                  : `${filterSummary.visibleCards} / ${filterSummary.totalCardsInScope}`}
+              <span className="search-right-meta">
+                <button
+                  type="button"
+                  className="search-clear-btn"
+                  aria-label="Clear search query"
+                  hidden={!searchInput}
+                  onClick={() => setSearchInput('')}
+                >
+                  CLR
+                </button>
+                <kbd
+                  className="search-kbd-hint"
+                  aria-hidden="true"
+                  hidden={searchFocused || hasQuery}
+                >
+                  /
+                </kbd>
+                <span className="fmstat" role="status" aria-live="polite">
+                  {(deferredTokens.length > 0 || persisted.status === 'starred') &&
+                  persisted.course === 'ALL'
+                    ? `${filterSummary.visibleCards + genMatchedCardsCount} / ${
+                        filterSummary.totalCardsInScope +
+                        (genMatchedCardsCount > 0 ? genCardsWithIndex.length : 0)
+                      }`
+                    : `${filterSummary.visibleCards} / ${filterSummary.totalCardsInScope}`}
+                </span>
               </span>
 
               <div
@@ -4471,22 +4572,38 @@ export default function App() {
           aria-label="Topic Navigation"
         >
           <div className="focus-pill">
-            <span className="focus-pill-tag">ACTIVE SCOPE</span>
-            <strong id="focusPillText">
-              {persisted.course === 'ALL' ? 'ALL COURSES' : activeCourseBadge}
-            </strong>
+            <span className="focus-pill-left">
+              <span className="focus-pill-tag">INDEX</span>
+              <strong id="focusPillText">
+                {persisted.course === 'ALL' ? 'ALL' : activeCourseBadge}
+              </strong>
+            </span>
             <button
               type="button"
               className="sb-close-btn sidebar-close-btn"
               id="sidebarCloseBtn"
               aria-label="Close Topic Index Sidebar"
+              title="Close index"
               onClick={() => setSidebarOpen(false)}
             >
-              [CLOSE]
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M3.25 3.25L10.75 10.75M10.75 3.25L3.25 10.75"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+              </svg>
             </button>
           </div>
 
-          <div className="sidebar-phone-controls" aria-label="Mobile Term and Course Controls">
+          <div className="sidebar-phone-controls" aria-label="Mobile Term Archive Controls">
             <div className="sb-phone-brand-row">
               <a
                 href="https://www.buet.ac.bd/web/#/"
@@ -4507,8 +4624,25 @@ export default function App() {
                 aria-expanded={phoneTermOpen}
                 onClick={() => setPhoneTermOpen((prev) => !prev)}
               >
-                <span>{CURRENT_TERM_CONFIG.emblemText}</span>
-                <span className="sb-phone-term-caret">{phoneTermOpen ? '[-]' : '[+]'}</span>
+                <span className="term-switcher-code">
+                  {formatCompactTermCode(CURRENT_TERM_CONFIG.shortCode)}
+                </span>
+                <svg
+                  className="term-switcher-chevron"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M3 4.5L6 7.5L9 4.5"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </button>
             </div>
 
@@ -4517,7 +4651,7 @@ export default function App() {
                 <div className="term-archive-header">
                   <span className="sh-label">BUET EEE TERM ARCHIVE</span>
                   <span className="ntype-badge" style={{ color: 'var(--accent)', fontSize: 'var(--fs-2xs)' }}>
-                    {CURRENT_TERM_CONFIG.shortCode}
+                    {formatCompactTermCode(CURRENT_TERM_CONFIG.shortCode)}
                   </span>
                 </div>
                 {Object.values(TERM_REGISTRY).map((termItem) => {
@@ -4561,31 +4695,6 @@ export default function App() {
                 })}
               </div>
             ) : null}
-
-            <div className="sb-phone-courses" role="group" aria-label="Course Select Menu">
-              <div className="sb-phone-sec-head">
-                <span className="sh-label">COURSE SELECT</span>
-                <span className="sb-phone-sec-val">{activeCourseBadge}</span>
-              </div>
-              <div className="sb-phone-course-grid">
-                {courseOptions.map((c) => {
-                  const isActive = persisted.course === c.code;
-                  return (
-                    <button
-                      key={c.code}
-                      type="button"
-                      data-c={c.code}
-                      className={`sb-phone-course-btn${isActive ? ' active' : ''}${c.code === 'ALL' ? ' is-all' : ''}`}
-                      aria-pressed={isActive}
-                      onClick={() => handleCourseChange(c.code)}
-                    >
-                      <span className="sb-phone-course-code">{c.badge}</span>
-                      <span className="sb-phone-course-name">{c.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
           </div>
           <nav
             className="fmnav"
@@ -4603,19 +4712,46 @@ export default function App() {
                   hidden={rowHidden}
                 >
                   <b>{group.badgeText}</b>
-                  {group.links.map((link) => (
-                    <a
-                      key={link.href}
-                      href={link.href}
-                      className={`fmlink${selectedTopicId === link.targetId ? ' active' : ''}`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleSelectTopicFromNav(link.targetId, link.href);
-                      }}
-                    >
-                      {link.label}
-                    </a>
-                  ))}
+                  {group.links.map((link, idx) => {
+                    const learnedInTopic =
+                      group.course === 'GEN'
+                        ? 0
+                        : link.cardIds.reduce(
+                            (acc, cid) => acc + (persisted.learned[cid] ? 1 : 0),
+                            0
+                          );
+                    const countLabel =
+                      group.course === 'GEN'
+                        ? `${link.totalCards}`
+                        : `${learnedInTopic}/${link.totalCards}`;
+                    return (
+                      <a
+                        key={link.href}
+                        href={link.href}
+                        className={`fmlink${selectedTopicId === link.targetId ? ' active' : ''}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleSelectTopicFromNav(link.targetId, link.href);
+                        }}
+                      >
+                        <span className="fmlink-idx">
+                          {String(idx + 1).padStart(2, '0')}
+                        </span>
+                        <span className="fmlink-title">{link.label}</span>
+                        <span
+                          className={`fmlink-meta${
+                            group.course !== 'GEN' &&
+                            link.totalCards > 0 &&
+                            learnedInTopic === link.totalCards
+                              ? ' is-complete'
+                              : ''
+                          }`}
+                        >
+                          {countLabel}
+                        </span>
+                      </a>
+                    );
+                  })}
                 </div>
               );
             })}
@@ -4636,19 +4772,46 @@ export default function App() {
                   hidden={rowHidden}
                 >
                   <b>{group.badgeText}</b>
-                  {group.links.map((link) => (
-                    <a
-                      key={link.href}
-                      href={link.href}
-                      className={`fmlink${selectedTopicId === link.targetId ? ' active' : ''}`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleSelectTopicFromNav(link.targetId, link.href);
-                      }}
-                    >
-                      {link.label}
-                    </a>
-                  ))}
+                  {group.links.map((link, idx) => {
+                    const learnedInTopic =
+                      group.course === 'GEN'
+                        ? 0
+                        : link.cardIds.reduce(
+                            (acc, cid) => acc + (persisted.learned[cid] ? 1 : 0),
+                            0
+                          );
+                    const countLabel =
+                      group.course === 'GEN'
+                        ? `${link.totalCards}`
+                        : `${learnedInTopic}/${link.totalCards}`;
+                    return (
+                      <a
+                        key={link.href}
+                        href={link.href}
+                        className={`fmlink${selectedTopicId === link.targetId ? ' active' : ''}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleSelectTopicFromNav(link.targetId, link.href);
+                        }}
+                      >
+                        <span className="fmlink-idx">
+                          {String(idx + 1).padStart(2, '0')}
+                        </span>
+                        <span className="fmlink-title">{link.label}</span>
+                        <span
+                          className={`fmlink-meta${
+                            group.course !== 'GEN' &&
+                            link.totalCards > 0 &&
+                            learnedInTopic === link.totalCards
+                              ? ' is-complete'
+                              : ''
+                          }`}
+                        >
+                          {countLabel}
+                        </span>
+                      </a>
+                    );
+                  })}
                 </div>
               );
             })}
@@ -4670,7 +4833,7 @@ export default function App() {
                   hidden={rowHidden}
                 >
                   <b>{group.badge}</b>
-                  {group.modules.map((mod) => (
+                  {group.modules.map((mod, idx) => (
                     <a
                       key={mod.id}
                       href={`#prac-${mod.id}`}
@@ -4684,17 +4847,14 @@ export default function App() {
                         }
                       }}
                     >
-                      <span>{mod.title}</span>
+                      <span className="fmlink-idx">
+                        {String(idx + 1).padStart(2, '0')}
+                      </span>
+                      <span className="fmlink-title">{mod.title}</span>
                       {mod.pdfUrl ? (
-                        <span
-                          className="ntype-badge"
-                          style={{
-                            marginLeft: '6px',
-                            fontSize: 'var(--fs-2xs)',
-                            color: 'var(--success)',
-                          }}
-                        >
-                          [PDF]
+                        <span className="fmlink-meta fmlink-meta-pdf">
+                          <span className="fmlink-pdf-dot" aria-hidden="true" />
+                          PDF
                         </span>
                       ) : null}
                     </a>
@@ -4823,9 +4983,6 @@ export default function App() {
                             style={{ width: `${masteryStats.pct}%` }}
                           />
                         </div>
-                        <span className="bento-scope-chip">
-                          {filterSummary.visibleCards} CARDS IN VIEW
-                        </span>
                       </div>
                       <div
                         className="bento-course-matrix"
@@ -4949,11 +5106,13 @@ export default function App() {
                         <button
                           type="button"
                           className={`bento-launch-btn${persisted.selfTest ? ' active' : ''}`}
+                          aria-pressed={Boolean(persisted.selfTest)}
                           onClick={handleToggleSelfTest}
                         >
                           <span className="bento-launch-title">Self-Test Blur</span>
                           <span className="bento-launch-meta">
-                            {persisted.selfTest ? 'CLICK CARD TO REVEAL' : 'BLUR FORMULAS'}
+                            <span className="launch-led" aria-hidden="true" />
+                            <span>{persisted.selfTest ? 'ACTIVE · CLICK TO REVEAL' : 'OFF'}</span>
                           </span>
                         </button>
                         <button
@@ -4962,25 +5121,32 @@ export default function App() {
                           onClick={pickRandomFlashcard}
                         >
                           <span className="bento-launch-title">Random Flashcard</span>
-                          <span className="bento-launch-meta">TEST RECALL</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`bento-launch-btn${persisted.hideDetails ? ' active' : ''}`}
-                          onClick={handleToggleHideDetails}
-                        >
-                          <span className="bento-launch-title">Formula-Only View</span>
                           <span className="bento-launch-meta">
-                            {persisted.hideDetails ? 'CONTEXT HIDDEN' : 'COMPACT CARDS'}
+                            {`${filterSummary.visibleCards} IN DECK`}
                           </span>
                         </button>
                         <button
                           type="button"
-                          className="bento-launch-btn"
+                          className={`bento-launch-btn${persisted.hideDetails ? ' active' : ''}`}
+                          aria-pressed={Boolean(persisted.hideDetails)}
+                          onClick={handleToggleHideDetails}
+                        >
+                          <span className="bento-launch-title">Formula-Only View</span>
+                          <span className="bento-launch-meta">
+                            <span className="launch-led" aria-hidden="true" />
+                            <span>{persisted.hideDetails ? 'ACTIVE · CONTEXT HIDDEN' : 'OFF'}</span>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`bento-launch-btn${openTopicCount === 0 ? ' is-idle' : ''}`}
+                          disabled={openTopicCount === 0}
                           onClick={() => handleExpandCollapseAll(false)}
                         >
                           <span className="bento-launch-title">Fold All Topics</span>
-                          <span className="bento-launch-meta">CLEAN OVERVIEW</span>
+                          <span className="bento-launch-meta">
+                            {openTopicCount > 0 ? `${openTopicCount} OPEN` : 'ALL FOLDED'}
+                          </span>
                         </button>
                       </div>
                     </div>
@@ -5041,92 +5207,96 @@ export default function App() {
               className="practice-workspace"
               hidden={persisted.tab !== 'prac' || isGenSelected}
             >
-              <div
-                className="practice-course-bar"
-                id="practiceCourseBar"
-                role="group"
-                aria-label="Practice Course Filter"
-              >
-                <span className="practice-course-label">COURSE</span>
-                <button
-                  type="button"
-                  data-c="ALL"
-                  aria-pressed={persisted.course === 'ALL'}
-                  className={`practice-course-btn${persisted.course === 'ALL' ? ' active' : ''}`}
-                  onClick={() => {
-                    setPersisted((prev) => ({ ...prev, course: 'ALL' }));
-                  }}
-                >
-                  <span>ALL COURSES</span>
-                  <span className="practice-course-count">
-                    {PRACTICE_CATALOG.reduce((sum, g) => sum + g.modules.length, 0)}
-                  </span>
-                </button>
-                {PRACTICE_CATALOG.map((group) => {
-                  const isCourseActive = persisted.course === group.course;
-                  return (
-                    <button
-                      key={group.course}
-                      type="button"
-                      data-c={group.course}
-                      aria-pressed={isCourseActive}
-                      className={`practice-course-btn${isCourseActive ? ' active' : ''}`}
-                      onClick={() => {
-                        setPersisted((prev) => ({ ...prev, course: group.course }));
-                      }}
-                    >
-                      <span>{group.badge}</span>
-                      <span className="practice-course-count">{group.modules.length}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              {practiceModules.length > 0 ? (
+              <div className="practice-toolbar">
                 <div
-                  className="practice-module-bar"
-                  id="practiceModuleBar"
-                  role="tablist"
-                  aria-label="Course Practice Modules"
+                  className="practice-course-bar"
+                  id="practiceCourseBar"
+                  role="group"
+                  aria-label="Practice Course Filter"
                 >
-                  {practiceModules.map((mod) => {
-                    const isModActive = activePracticeModule?.id === mod.id;
+                  <span className="practice-course-label">COURSE</span>
+                  <button
+                    type="button"
+                    data-c="ALL"
+                    aria-pressed={persisted.course === 'ALL'}
+                    className={`practice-course-btn${persisted.course === 'ALL' ? ' active' : ''}`}
+                    onClick={() => {
+                      setPersisted((prev) => ({ ...prev, course: 'ALL' }));
+                    }}
+                  >
+                    <span>ALL COURSES</span>
+                    <span className="practice-course-count">
+                      {PRACTICE_CATALOG.reduce((sum, g) => sum + g.modules.length, 0)}
+                    </span>
+                  </button>
+                  {PRACTICE_CATALOG.map((group) => {
+                    const isCourseActive = persisted.course === group.course;
                     return (
                       <button
-                        key={mod.id}
+                        key={group.course}
                         type="button"
-                        role="tab"
-                        aria-selected={isModActive}
-                        data-mod-id={mod.id}
-                        className={`practice-mod-btn${isModActive ? ' active' : ''}`}
-                        onClick={() => setSelectedPracticeModuleId(mod.id)}
+                        data-c={group.course}
+                        aria-pressed={isCourseActive}
+                        className={`practice-course-btn${isCourseActive ? ' active' : ''}`}
+                        onClick={() => {
+                          setPersisted((prev) => ({ ...prev, course: group.course }));
+                        }}
                       >
-                        <span
-                          className="ntype-badge"
-                          style={{
-                            color: isModActive ? '#ffffff' : 'var(--accent)',
-                            fontSize: 'var(--fs-2xs)',
-                          }}
-                        >
-                          {mod.courseBadge}
-                        </span>
-                        <span>{mod.title}</span>
+                        <span>{group.badge}</span>
+                        <span className="practice-course-count">{group.modules.length}</span>
                       </button>
                     );
                   })}
                 </div>
-              ) : null}
+                {practiceModules.length > 0 ? (
+                  <div
+                    className="practice-module-bar"
+                    id="practiceModuleBar"
+                    role="tablist"
+                    aria-label="Course Practice Modules"
+                  >
+                    {practiceModules.map((mod) => {
+                      const isModActive = activePracticeModule?.id === mod.id;
+                      return (
+                        <button
+                          key={mod.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={isModActive}
+                          data-mod-id={mod.id}
+                          className={`practice-mod-btn${isModActive ? ' active' : ''}`}
+                          onClick={() => setSelectedPracticeModuleId(mod.id)}
+                        >
+                          {persisted.course === 'ALL' ? (
+                            <span className="practice-mod-course-tag">
+                              {mod.courseBadge}
+                            </span>
+                          ) : null}
+                          <span>{mod.title}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
               {activePracticeModule ? (
-                <div className="practice-slot-card" id="practiceSlotCard">
+                <div
+                  className="practice-slot-card"
+                  id="practiceSlotCard"
+                  data-c={activePracticeModule.course}
+                >
                   <div className="practice-slot-header">
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                        <span className="ntype-badge">{activePracticeModule.courseBadge}</span>
-                        <span className="thty">MODULE: {activePracticeModule.id.toUpperCase()}</span>
-                      </div>
-                      <h2 style={{ margin: '0 0 4px', fontSize: 'var(--fs-lg)' }}>
+                    <div className="practice-slot-heading-bar">
+                      <span className="practice-slot-course-tag">
+                        {activePracticeModule.courseBadge}
+                      </span>
+                      <h2 className="practice-slot-title">
                         {activePracticeModule.title}
                       </h2>
-                      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--fs-base)' }}>
+                      <span className="practice-slot-sep" aria-hidden="true">
+                        ·
+                      </span>
+                      <p className="practice-slot-subtitle">
                         {activePracticeModule.subtitle}
                       </p>
                     </div>
@@ -5135,7 +5305,9 @@ export default function App() {
                   <div
                     ref={fullscreenWrapperRef}
                     id="practiceViewerShell"
-                    className={`practice-viewer-shell${isPdfFullscreen ? ' is-fullscreen' : ''}`}
+                    className={`practice-viewer-shell${isPdfFullscreen ? ' is-fullscreen' : ''}${
+                      !activePracticeModule.pdfUrl ? ' is-pending' : ''
+                    }`}
                     onMouseMove={(e) => {
                       if (isPdfFullscreen && !fsHudPointerTop && e.clientY <= 22) {
                         setFsHudPointerTop(true);
@@ -5786,48 +5958,40 @@ export default function App() {
                       />
                     ) : (
                       <div
-                        className="pdf-canvas-reader"
+                        className="practice-pending-stage"
                         onClick={retractHud}
                       >
-                        <div
-                          className="pdf-canvas-stage"
-                          style={{
-                            padding: '24px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
+                        <div className="practice-pending-card">
+                          <span className="practice-pending-label">MODULE PENDING</span>
+                          <p className="practice-pending-desc">
+                            Past-paper problem sets for {activePracticeModule.title} are being compiled. Review the matching syllabus topics while this set is prepared.
+                          </p>
                           <div
-                            style={{
-                              fontFamily: 'var(--font-mono)',
-                              fontSize: 'var(--fs-base)',
-                              letterSpacing: '0.12em',
-                              textTransform: 'uppercase',
-                              color: 'var(--text-secondary)',
-                              textAlign: 'center',
-                            }}
+                            className="practice-pending-topics"
+                            aria-label={`Syllabus topics for ${activePracticeModule.courseBadge}`}
                           >
-                            Coming Soon
+                            {fmSections
+                              .filter((sec) => sec.course === activePracticeModule.course)
+                              .slice(0, 6)
+                              .map((sec) => (
+                                <span key={sec.id} className="practice-pending-topic-chip">
+                                  {sec.title}
+                                </span>
+                              ))}
                           </div>
-                        </div>
-
-                        <div
-                          className="pdf-floating-controls"
-                          role="toolbar"
-                          aria-label="Fullscreen Controls"
-                        >
-                          <span className="pdf-ctrl-label">[STAGE READY]</span>
-                          <span className="pdf-ctrl-divider" aria-hidden="true" />
                           <button
                             type="button"
-                            className="pdf-ctrl-btn pdf-fs-btn"
-                            id="pdfFloatingFsBtn"
-                            onClick={
-                              isPdfFullscreen ? exitPdfFullscreen : enterPdfFullscreen
-                            }
+                            className="practice-pending-cta"
+                            onClick={() => {
+                              setPersisted((prev) => ({
+                                ...prev,
+                                tab: 'fm',
+                                course: activePracticeModule.course,
+                              }));
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
                           >
-                            {isPdfFullscreen ? '[EXIT FULLSCREEN]' : '[FULLSCREEN]'}
+                            Open {activePracticeModule.courseBadge} formulas
                           </button>
                         </div>
                       </div>
@@ -6106,8 +6270,8 @@ export default function App() {
           <svg
             className="fk-icon"
             viewBox="0 0 12 12"
-            width="12"
-            height="12"
+            width="14"
+            height="14"
             fill="none"
             aria-hidden="true"
           >
@@ -6119,7 +6283,6 @@ export default function App() {
               strokeLinejoin="miter"
             />
           </svg>
-          <span className="fk-label">TOP</span>
         </button>
 
         <button
@@ -6134,8 +6297,8 @@ export default function App() {
           <svg
             className="fk-icon"
             viewBox="0 0 12 12"
-            width="12"
-            height="12"
+            width="14"
+            height="14"
             fill="none"
             aria-hidden="true"
           >
@@ -6146,7 +6309,6 @@ export default function App() {
               strokeLinecap="square"
             />
           </svg>
-          <span className="fk-label">INDEX</span>
         </button>
       </div>
 

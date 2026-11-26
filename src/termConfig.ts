@@ -9,6 +9,7 @@ export interface TermCourseConfig {
 export interface TermConfig {
   termId: TermId;
   shortCode: string;
+  compactCode: string;
   emblemText: string;
   brandTitle: string;
   brandSubtitle: string;
@@ -23,7 +24,8 @@ export const TERM_REGISTRY: Readonly<Record<TermId, TermConfig>> = {
   l1t1: {
     termId: 'l1t1',
     shortCode: 'L-1 // T-1',
-    emblemText: ':: BUET.EEE ::\nL-1 // T-1 SYS',
+    compactCode: 'L1 · T1',
+    emblemText: 'L1 · T1',
     brandTitle: 'BUET L-1/T-1 EEE — Formula & Theorem Sheet',
     brandSubtitle: 'EEE 101 · MATH 157 · MATH 159 · PHY 121/165 · CSE 109',
     archiveLabel: 'Level 1 · Term 1 (EEE 101, MATH 157/159, PHY 121, CSE 109)',
@@ -39,7 +41,8 @@ export const TERM_REGISTRY: Readonly<Record<TermId, TermConfig>> = {
   l1t2: {
     termId: 'l1t2',
     shortCode: 'L-1 // T-2',
-    emblemText: ':: BUET.EEE ::\nL-1 // T-2 SYS',
+    compactCode: 'L1 · T2',
+    emblemText: 'L1 · T2',
     brandTitle: 'BUET L-1/T-2 EEE — Formula & Theorem Sheet',
     brandSubtitle: 'EEE 105 · MATH 159/257 · CHEM 101 · HUM · GEN',
     archiveLabel: 'Level 1 · Term 2 (EEE 105, ODE & LA, CHEM 101, HUM)',
@@ -54,7 +57,8 @@ export const TERM_REGISTRY: Readonly<Record<TermId, TermConfig>> = {
   l2t1: {
     termId: 'l2t1',
     shortCode: 'L-2 // T-1',
-    emblemText: ':: BUET.EEE ::\nL-2 // T-1 SYS',
+    compactCode: 'L2 · T1',
+    emblemText: 'L2 · T1',
     brandTitle: 'BUET L-2/T-1 EEE — Formula & Theorem Sheet',
     brandSubtitle: 'EEE 201 · EEE 203 · EEE 205 · MATH 257 · GEN',
     archiveLabel: 'Level 2 · Term 1 (EEE 201, EEE 203, EEE 205, MATH 257)',
@@ -69,7 +73,8 @@ export const TERM_REGISTRY: Readonly<Record<TermId, TermConfig>> = {
   l2t2: {
     termId: 'l2t2',
     shortCode: 'L-2 // T-2',
-    emblemText: ':: BUET.EEE ::\nL-2 // T-2 SYS',
+    compactCode: 'L2 · T2',
+    emblemText: 'L2 · T2',
     brandTitle: 'BUET L-2/T-2 EEE — Formula & Theorem Sheet',
     brandSubtitle: 'EEE 207 · EEE 209 · EEE 211 · MATH 259 · GEN',
     archiveLabel: 'Level 2 · Term 2 (EEE 207, EEE 209, EEE 211, MATH 259)',
@@ -84,6 +89,10 @@ export const TERM_REGISTRY: Readonly<Record<TermId, TermConfig>> = {
 };
 
 export const CURRENT_TERM_CONFIG: TermConfig = TERM_REGISTRY[ACTIVE_TERM_ID];
+
+export function formatCompactTermCode(shortCode: string): string {
+  return shortCode.replace(/L-(\d+)\s*\/\/\s*T-(\d+)/i, 'L$1 · T$2');
+}
 
 export function buildEffectiveCoursePills(
   termConfig: TermConfig = CURRENT_TERM_CONFIG,
