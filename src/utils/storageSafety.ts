@@ -59,7 +59,7 @@ export const DEFAULT_APP_STATE: PersistedAppState = {
   hideDetails: false,
   singleCol: false,
   goalOpen: false,
-  examDate: '2027-03-15',
+  examDate: '2026-11-15',
   learned: {},
   starred: {},
   notes: {},

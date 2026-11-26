@@ -9,16 +9,13 @@ import {
   parseCardDeepLink,
   resolveCardDeepLink,
   shouldAutoWarmupSemanticModel,
-  skipFlashcardQueue,
-  stepBackFlashcardQueue,
 } from './activeRecall';
 
-test('flashcard queue re-queues Needs Review cards sooner, removes Got It cards, and supports Prev history navigation', () => {
+test('flashcard queue re-queues Needs Review cards sooner and removes Got It cards', () => {
   const deck = createFlashcardQueue(['c1', 'c2', 'c3', 'c4', 'c5'], {
     rng: () => 0.99999, // Identity shuffle
   });
   assert.deepEqual(deck.queue, ['c1', 'c2', 'c3', 'c4', 'c5']);
-  assert.deepEqual(deck.history, []);
 
   // Grade c1 as Needs Review -> c1 moves 2 slots ahead (index 2 after c2, c3)
   const r1 = gradeFlashcardQueue(deck, 'review', 2);
@@ -28,7 +25,6 @@ test('flashcard queue re-queues Needs Review cards sooner, removes Got It cards,
   assert.equal(r1.nextState.reviewedCount, 1);
   assert.equal(r1.nextState.gotItCount, 0);
   assert.equal(r1.nextState.requeuedIds.c1, 1);
-  assert.deepEqual(r1.nextState.history, ['c1']);
 
   // Grade c2 as Got It -> removed from active queue
   const r2 = gradeFlashcardQueue(r1.nextState, 'got-it', 2);
@@ -37,22 +33,6 @@ test('flashcard queue re-queues Needs Review cards sooner, removes Got It cards,
   assert.deepEqual(r2.nextState.queue, ['c3', 'c1', 'c4', 'c5']);
   assert.equal(r2.nextState.reviewedCount, 2);
   assert.equal(r2.nextState.gotItCount, 1);
-
-  // Skip c3 -> rotates to end and pushes to history
-  const skipped = skipFlashcardQueue(r2.nextState);
-  assert.equal(skipped.nextCardId, 'c1');
-  assert.deepEqual(skipped.nextState.history, ['c1', 'c2', 'c3']);
-
-  // Step back -> restores c3 to front without duplicates
-  const back1 = stepBackFlashcardQueue(skipped.nextState);
-  assert.equal(back1.prevCardId, 'c3');
-  assert.equal(back1.nextState.queue[0], 'c3');
-  assert.equal(back1.nextState.queue.filter((id) => id === 'c3').length, 1);
-
-  // Step back again -> restores c2 even though it was previously marked got-it
-  const back2 = stepBackFlashcardQueue(back1.nextState);
-  assert.equal(back2.prevCardId, 'c2');
-  assert.equal(back2.nextState.queue[0], 'c2');
 });
 
 test('card deep-link parsing, resolution, and URL construction', () => {

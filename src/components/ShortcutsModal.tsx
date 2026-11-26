@@ -1,5 +1,4 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
 
 export interface ShortcutsModalProps {
   open: boolean;
@@ -13,36 +12,33 @@ const SHORTCUT_GROUPS: ReadonlyArray<{
   {
     heading: 'SEARCH & NAVIGATION',
     items: [
-      { keys: ['/', 'Ctrl+K'], label: 'Focus search bar' },
-      { keys: ['j', '↓'], label: 'Highlight next visible card' },
-      { keys: ['k', '↑'], label: 'Highlight previous visible card' },
-      { keys: ['Enter'], label: 'Jump to highlighted card (or reveal in Self-Test)' },
+      { keys: ['/', 'Ctrl+K'], label: 'Focus search bar (or Fullscreen HUD search)' },
+      { keys: ['j', '↓'], label: 'Move to next search result / HUD card' },
+      { keys: ['k', '↑'], label: 'Move to previous search result / HUD card' },
+      { keys: ['Enter'], label: 'Jump to / pin active result card' },
       { keys: ['?'], label: 'Toggle this Keyboard Shortcuts overlay' },
-      { keys: ['Esc'], label: 'Close modal, clear search, or close menus' },
+      { keys: ['Esc'], label: 'Close modal, clear search, or exit HUD/fullscreen' },
     ],
   },
   {
     heading: 'ACTIVE RECALL FLASHCARD QUIZ',
     items: [
       { keys: ['Space'], label: 'Reveal answer, derivation steps, and context' },
-      { keys: ['P', '←'], label: 'Return to previous card in this session' },
       { keys: ['S'], label: 'Skip card and move to end of queue' },
       { keys: ['1'], label: 'Needs Review (auto-star & re-queue soon)' },
       { keys: ['2'], label: 'Got It (mark learned & advance)' },
     ],
   },
   {
-    heading: 'PRACTICE PDF READER (WHEN PDF OPEN)',
+    heading: 'PRACTICE PDF READER',
     items: [
-      { keys: ['Shift+F'], label: 'Toggle Fullscreen Practice PDF Reader' },
+      { keys: ['F5'], label: 'Toggle Fullscreen Practice PDF Reader' },
     ],
   },
 ];
 
 export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ open, onClose }) => {
-  if (typeof document === 'undefined') return null;
-
-  return createPortal(
+  return (
     <div
       className={`fcm${open ? ' open' : ''}`}
       id="shortcutsModal"
@@ -109,7 +105,6 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ open, onClose })
           ))}
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
   );
 };

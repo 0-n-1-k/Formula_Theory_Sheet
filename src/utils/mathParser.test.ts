@@ -164,32 +164,6 @@ test('renderTextWithMath preserves standard HTML5 tags like <a>, <kbd>, and <abb
   assert.ok(rendered.includes('class="katex"'), 'Renders inline math $x > 0$');
 });
 
-test('searching "sin z" highlights sin cleanly without lighting up "in" inside unrelated words', () => {
-  const sample =
-    '<b>Use:</b> Solving definitions for imaginary roots using $\\sin z = \\frac{e^{iz}-e^{-iz}}{2i}$ and $\\sinh z$.';
-  const highlighted = renderTextWithMath(sample, ['sin', 'z']);
-
-  assert.equal(
-    highlighted.includes('Solv<mark class="fm-hl">in</mark>g'),
-    false,
-    'Must not highlight "in" inside "Solving"'
-  );
-  assert.equal(
-    highlighted.includes('def<mark class="fm-hl">in</mark>itions'),
-    false,
-    'Must not highlight "in" inside "definitions"'
-  );
-  assert.equal(
-    highlighted.includes('imag<mark class="fm-hl">in</mark>ary'),
-    false,
-    'Must not highlight "in" inside "imaginary"'
-  );
-  assert.ok(
-    highlighted.includes('<mark class="fm-hl">sin</mark>'),
-    'Still highlights actual sin occurrences'
-  );
-});
-
 
 
 

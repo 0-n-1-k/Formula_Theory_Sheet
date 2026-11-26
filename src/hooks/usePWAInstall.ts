@@ -62,54 +62,20 @@ export function usePWAInstall() {
 
 export function useOnlineStatus(): boolean {
   const [isOnline, setIsOnline] = useState<boolean>(
-    typeof navigator !== 'undefined' ? navigator.onLine !== false : true
+    typeof navigator !== 'undefined' ? navigator.onLine : true
   );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    let cancelled = false;
-
-    const verifyReachability = () => {
-      if (navigator.onLine !== false) {
-        setIsOnline(true);
-        return;
-      }
-      // Some sandboxed browsers transiently report navigator.onLine === false while online.
-      // Verify with a lightweight same-origin HEAD request before keeping offline UI visible.
-      if (typeof fetch !== 'function') {
-        setIsOnline(false);
-        return;
-      }
-      fetch(window.location.origin + '/favicon.ico', {
-        method: 'HEAD',
-        cache: 'no-store',
-      })
-        .then(() => {
-          if (!cancelled) setIsOnline(true);
-        })
-        .catch(() => {
-          if (!cancelled) setIsOnline(false);
-        });
-    };
-
     const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => verifyReachability();
-    const handleVisibility = () => {
-      if (!document.hidden) verifyReachability();
-    };
+    const handleOffline = () => setIsOnline(false);
 
-    verifyReachability();
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    window.addEventListener('focus', verifyReachability);
-    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
-      cancelled = true;
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      window.removeEventListener('focus', verifyReachability);
-      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
 

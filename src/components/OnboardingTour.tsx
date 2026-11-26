@@ -141,8 +141,8 @@ function measureCombinedRect(elements: HTMLElement[]): SpotlightRect | null {
   if (!Number.isFinite(minTop)) return null;
 
   const pad = 6;
-  const vw = document.documentElement.clientWidth || window.innerWidth;
-  const vh = document.documentElement.clientHeight || window.innerHeight;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
   const top = Math.max(4, minTop - pad);
   const left = Math.max(4, minLeft - pad);
   const right = Math.min(vw - 4, maxRight + pad);
@@ -263,9 +263,9 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({
 
   // Directly paint the SVG scrim cutout and glowing reticle with zero React re-renders
   const applyGeometryToDom = useCallback((rect: SpotlightRect | null) => {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
     const svgEl = svgRef.current;
-    const vw = svgEl?.clientWidth || document.documentElement.clientWidth || window.innerWidth;
-    const vh = svgEl?.clientHeight || document.documentElement.clientHeight || window.innerHeight;
     if (svgEl) {
       svgEl.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
     }
@@ -368,39 +368,19 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({
   const measureAndSyncStep = useCallback(
     (scrollIntoSafeZone: boolean) => {
       if (!open) return;
-      const isTopChromeStep =
-        step.id === 'dashboard' ||
-        step.id === 'modes' ||
-        step.id === 'search' ||
-        step.id === 'index' ||
-        step.id === 'controls' ||
-        step.id === 'practice';
-
-      if (scrollIntoSafeZone && isTopChromeStep && window.scrollY > 4) {
-        try {
-          window.scrollTo({
-            top: 0,
-            left: 0,
-            behavior: prefersReducedMotion() ? 'auto' : 'smooth',
-          });
-        } catch {
-          window.scrollTo(0, 0);
-        }
-        activeScrollUntilRef.current = performance.now() + 620;
-      }
-
       const elements = resolveStepElements(step);
       const signal = readTargetCourseSignal(elements);
       setAccentSignal((prev) => (prev === signal ? prev : signal));
 
-      if (scrollIntoSafeZone && !isTopChromeStep && elements.length > 0) {
+      if (scrollIntoSafeZone && elements.length > 0) {
         const target = elements[0];
         const r = target.getBoundingClientRect();
         const dockReserve = (dockRef.current?.offsetHeight || 136) + 32;
         const safeTop = 76;
         const safeBottom = window.innerHeight - dockReserve;
+        const isStickyTop = r.top >= 0 && r.bottom <= 140;
 
-        if (r.top < safeTop || r.bottom > safeBottom) {
+        if (!isStickyTop && (r.top < safeTop || r.bottom > safeBottom)) {
           const desiredTop = Math.max(
             safeTop + 16,
             Math.round((window.innerHeight - dockReserve - Math.min(r.height, 260)) * 0.42)
@@ -410,13 +390,12 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({
           try {
             window.scrollTo({
               top: nextScrollY,
-              left: 0,
               behavior: prefersReducedMotion() ? 'auto' : 'smooth',
             });
           } catch {
             window.scrollTo(0, nextScrollY);
           }
-          activeScrollUntilRef.current = performance.now() + 620;
+          activeScrollUntilRef.current = performance.now() + 560;
         }
       }
 
@@ -428,7 +407,7 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({
     [open, step, startAnimationLoop, updateDockPosition]
   );
 
-  // Measure on open / step change (with follow-ups after parent collapse/scroll transitions settle)
+  // Measure on open / step change (with a micro follow-up after parent DOM updates)
   useLayoutEffect(() => {
     if (!open) {
       stopAnimationLoop();
@@ -438,22 +417,17 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({
     const rafFollowup = window.requestAnimationFrame(() => {
       measureAndSyncStep(true);
     });
-    const remeasure = () => {
+    const postScrollCheck = window.setTimeout(() => {
       const els = resolveStepElements(step);
       const rect = measureCombinedRect(els);
       targetRectRef.current = rect;
       updateDockPosition(rect);
       startAnimationLoop();
-    };
-    const midCheck = window.setTimeout(remeasure, 220);
-    const postScrollCheck = window.setTimeout(remeasure, 520);
-    const settleCheck = window.setTimeout(remeasure, 760);
+    }, 520);
 
     return () => {
       window.cancelAnimationFrame(rafFollowup);
-      window.clearTimeout(midCheck);
       window.clearTimeout(postScrollCheck);
-      window.clearTimeout(settleCheck);
     };
   }, [open, step, measureAndSyncStep, stopAnimationLoop, startAnimationLoop, updateDockPosition]);
 

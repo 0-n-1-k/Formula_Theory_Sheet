@@ -15,7 +15,6 @@ import React, {
   type ErrorInfo,
   type ReactNode,
 } from 'react';
-import { createPortal } from 'react-dom';
 import fmrootRawHtml from './content-fmroot.html?raw';
 import thmrootRawHtml from './content-thmroot.html?raw';
 import genRawHtml from './content-gen.html?raw';
@@ -63,22 +62,11 @@ import {
   handleDeckTileMove,
 } from './utils/tileGlowPhysics';
 import {
-  LONG_PRESS_COMPLETE_FADE_MS,
-  LONG_PRESS_DURATION_MS,
-  LONG_PRESS_VISUAL_DELAY_MS,
-  computeLongPressProgress,
-  computeLongPressRippleGeometry,
-  shouldAllowLongPressForPointer,
-  shouldCancelLongPressOnMove,
-} from './utils/longPressRipple';
-import {
   buildCardDeepLinkUrl,
   buildReportTypoUrl,
   createFlashcardQueue,
   gradeFlashcardQueue,
   resolveCardDeepLink,
-  skipFlashcardQueue,
-  stepBackFlashcardQueue,
   type CardDeepLinkRef,
   type FlashcardQueueState,
 } from './utils/activeRecall';
@@ -195,7 +183,7 @@ export class WorkspaceErrorBoundary extends Component<ErrorBoundaryProps, ErrorB
           </span>
           <button
             type="button"
-            className="action-reset-btn"
+            className="sb-btn"
             onClick={this.handleReset}
             aria-label="Retry rendering workspace"
           >
@@ -305,9 +293,8 @@ function formatDoomsdayParts(examDate: string, nowMs: number) {
   const hrs = String(Math.floor((totalSec % 86400) / 3600)).padStart(2, '0');
   const mins = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
   const secs = String(totalSec % 60).padStart(2, '0');
-  const isPast = diff < 0;
-  const prefix = isPast ? 'PAST EXAM' : 'FINALS';
-  return { days, hrs, mins, secs, prefix, isPast };
+  const prefix = diff >= 0 ? 'FINALS' : 'FINALS +';
+  return { days, hrs, mins, secs, prefix };
 }
 
 export interface DoomsdayToggleButtonProps {
@@ -337,17 +324,11 @@ export const DoomsdayToggleButton = memo(function DoomsdayToggleButton({
   return (
     <button
       type="button"
-      className={`goal-toggle-btn${goalOpen ? ' active' : ' is-closed-live'}${parts?.isPast ? ' is-past-due' : ''}`}
+      className={`goal-toggle-btn${goalOpen ? ' active' : ' is-closed-live'}`}
       id="goalToggleBtn"
       aria-label="Toggle Study Progress and Exam Countdown Drawer"
       aria-expanded={goalOpen}
-      data-tip={
-        goalOpen
-          ? 'Hide exam countdown'
-          : parts?.isPast
-          ? 'Exam date passed — click to update'
-          : 'Set your exam date'
-      }
+      data-tip={goalOpen ? 'Hide exam countdown' : 'Set your exam date'}
       data-tip-tone="danger"
       onClick={onToggle}
     >
@@ -416,8 +397,8 @@ export const DoomsdayDrawerClock = memo(function DoomsdayDrawerClock({
   }
 
   return (
-    <span id="cdt" className={`is-static${parts.isPast ? ' is-past-due' : ''}`}>
-      <span className="doomsday-tag">{parts.isPast ? 'PAST EXAM +' : parts.prefix}</span>
+    <span id="cdt" className="is-static">
+      <span className="doomsday-tag">{parts.prefix}</span>
       <span className="doomsday-segments">
         <span className="dd-seg">
           <span className="dd-val">{parts.days}</span>
@@ -492,14 +473,10 @@ export function shouldCardSpanFullWidth(card: FormulaCardRecord): boolean {
   if (card.codeContent) {
     const lines = card.codeContent.split('\n');
     const maxLineLen = lines.reduce((m, l) => Math.max(m, l.length), 0);
-    if (lines.length >= 24 || maxLineLen >= 96) return true;
+    if (lines.length >= 12 || maxLineLen >= 68) return true;
   }
-  if (card.rawLatex) {
-    const latexLines = card.rawLatex.split(/\\\\/);
-    const maxLatexLine = latexLines.reduce((m, l) => Math.max(m, l.trim().length), 0);
-    if (maxLatexLine > 95 || card.rawLatex.length > 185) {
-      return true;
-    }
+  if (card.rawLatex && card.rawLatex.length > 290) {
+    return true;
   }
   if (card.steps && card.steps.length >= 10) {
     return true;
@@ -609,13 +586,7 @@ export const FormulaCardView = memo(function FormulaCardView({
   useEffect(() => {
     if (noteOpen && noteEditing) {
       const id = window.requestAnimationFrame(() => {
-        const ta = noteTextareaRef.current;
-        if (ta) {
-          const collapseInner = ta.closest<HTMLElement>('.fm-note-collapse-inner');
-          if (collapseInner) collapseInner.scrollTop = 0;
-          ta.focus({ preventScroll: true });
-          if (collapseInner) collapseInner.scrollTop = 0;
-        }
+        noteTextareaRef.current?.focus();
       });
       return () => window.cancelAnimationFrame(id);
     }
@@ -1234,154 +1205,19 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
 
   const rowLayout = useMemo(() => computeGridRowLayout(visibleCards), [visibleCards]);
 
-  const summaryRef = useRef<HTMLElement | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
-  const longPressRafRef = useRef<number | null>(null);
-  const completeCleanupTimerRef = useRef<number | null>(null);
-  const touchStartRef = useRef<{
-    x: number;
-    y: number;
-    startPerfMs: number;
-    pointerId: number;
-  } | null>(null);
-  const midHapticFiredRef = useRef<boolean>(false);
-  const suppressNextClickRef = useRef<boolean>(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const suppressClickUntilRef = useRef<number>(0);
 
-  const resetLongPressVisuals = useCallback((el?: HTMLElement | null) => {
-    const target = el ?? summaryRef.current;
-    if (!target) return;
-    target.classList.remove('is-long-pressing', 'is-press-mid', 'is-press-complete');
-    target.style.setProperty('--press-progress', '0');
-    target.style.setProperty('--press-eased', '0');
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    touchStartRef.current = null;
   }, []);
 
-  const clearLongPressTimer = useCallback(
-    (preserveCompletionPulse = false) => {
-      if (longPressTimerRef.current !== null) {
-        window.clearTimeout(longPressTimerRef.current);
-        longPressTimerRef.current = null;
-      }
-      if (longPressRafRef.current !== null) {
-        window.cancelAnimationFrame(longPressRafRef.current);
-        longPressRafRef.current = null;
-      }
-      touchStartRef.current = null;
-      midHapticFiredRef.current = false;
-      if (preserveCompletionPulse && suppressNextClickRef.current) {
-        suppressClickUntilRef.current = Date.now() + 450;
-      }
-      if (!preserveCompletionPulse) {
-        if (completeCleanupTimerRef.current !== null) {
-          window.clearTimeout(completeCleanupTimerRef.current);
-          completeCleanupTimerRef.current = null;
-        }
-        resetLongPressVisuals();
-      }
-    },
-    [resetLongPressVisuals]
-  );
-
-  const startLongPress = useCallback(
-    (
-      startX: number,
-      startY: number,
-      pointerId: number,
-      summaryEl: HTMLElement
-    ) => {
-      if (!onOpenTopicContextMenu) return;
-      suppressNextClickRef.current = false;
-      clearLongPressTimer(false);
-      summaryRef.current = summaryEl;
-
-      const rect = summaryEl.getBoundingClientRect();
-      const geom = computeLongPressRippleGeometry(startX, startY, rect);
-      summaryEl.style.setProperty('--press-x', `${geom.localX}px`);
-      summaryEl.style.setProperty('--press-y', `${geom.localY}px`);
-      summaryEl.style.setProperty('--press-r', `${geom.maxRadius}px`);
-      summaryEl.style.setProperty('--press-progress', '0');
-      summaryEl.style.setProperty('--press-eased', '0');
-
-      const startPerfMs = performance.now();
-      touchStartRef.current = { x: startX, y: startY, startPerfMs, pointerId };
-      midHapticFiredRef.current = false;
-
-      const stepFrame = (nowPerfMs: number) => {
-        if (!summaryEl.isConnected || !touchStartRef.current) {
-          longPressRafRef.current = null;
-          return;
-        }
-        const elapsedMs = Math.max(0, nowPerfMs - startPerfMs);
-        const progressState = computeLongPressProgress(
-          elapsedMs,
-          LONG_PRESS_DURATION_MS,
-          LONG_PRESS_VISUAL_DELAY_MS
-        );
-
-        if (progressState.isVisuallyActive) {
-          summaryEl.classList.add('is-long-pressing');
-          summaryEl.style.setProperty(
-            '--press-progress',
-            progressState.visualProgress.toFixed(4)
-          );
-          summaryEl.style.setProperty(
-            '--press-eased',
-            progressState.easedProgress.toFixed(4)
-          );
-        }
-
-        if (progressState.shouldTriggerMidHaptic && !midHapticFiredRef.current) {
-          midHapticFiredRef.current = true;
-          summaryEl.classList.add('is-press-mid');
-          try {
-            navigator.vibrate?.(6);
-          } catch {
-            // Ignore unsupported vibration API
-          }
-        }
-
-        if (!progressState.isComplete) {
-          longPressRafRef.current = window.requestAnimationFrame(stepFrame);
-        } else {
-          longPressRafRef.current = null;
-        }
-      };
-
-      longPressRafRef.current = window.requestAnimationFrame(stepFrame);
-
-      longPressTimerRef.current = window.setTimeout(() => {
-        longPressTimerRef.current = null;
-        if (longPressRafRef.current !== null) {
-          window.cancelAnimationFrame(longPressRafRef.current);
-          longPressRafRef.current = null;
-        }
-        touchStartRef.current = null;
-        suppressNextClickRef.current = true;
-        suppressClickUntilRef.current = Date.now() + 800;
-
-        if (summaryEl.isConnected) {
-          summaryEl.classList.remove('is-long-pressing');
-          summaryEl.classList.add('is-press-complete');
-          summaryEl.style.setProperty('--press-progress', '1');
-          summaryEl.style.setProperty('--press-eased', '1');
-          completeCleanupTimerRef.current = window.setTimeout(() => {
-            completeCleanupTimerRef.current = null;
-            resetLongPressVisuals(summaryEl);
-          }, LONG_PRESS_COMPLETE_FADE_MS);
-        }
-
-        try {
-          navigator.vibrate?.(14);
-        } catch {
-          // Ignore unsupported vibration API
-        }
-        onOpenTopicContextMenu(section, startX, startY, 'touch', summaryEl);
-      }, LONG_PRESS_DURATION_MS);
-    },
-    [clearLongPressTimer, onOpenTopicContextMenu, resetLongPressVisuals, section]
-  );
-
-  useEffect(() => () => clearLongPressTimer(false), [clearLongPressTimer]);
+  useEffect(() => clearLongPressTimer, [clearLongPressTimer]);
 
   return (
     <details
@@ -1397,15 +1233,9 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
       hidden={sectionHidden}
     >
       <summary
-        ref={summaryRef}
         onClick={(e) => {
           e.preventDefault();
-          if (
-            suppressNextClickRef.current ||
-            Date.now() < suppressClickUntilRef.current
-          ) {
-            suppressNextClickRef.current = false;
-            suppressClickUntilRef.current = 0;
+          if (Date.now() < suppressClickUntilRef.current) {
             e.stopPropagation();
             return;
           }
@@ -1415,55 +1245,42 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
           if (!onOpenTopicContextMenu) return;
           e.preventDefault();
           e.stopPropagation();
-          // Ignore browser-synthesized touch contextmenu while a touch long-press is charging or just completed
-          if (
-            touchStartRef.current !== null ||
-            suppressNextClickRef.current ||
-            Date.now() < suppressClickUntilRef.current
-          ) {
-            return;
-          }
-          clearLongPressTimer(false);
           onOpenTopicContextMenu(section, e.clientX, e.clientY, 'mouse', e.currentTarget);
         }}
-        onPointerDown={(e) => {
-          if (!onOpenTopicContextMenu) return;
-          if (!shouldAllowLongPressForPointer(e.pointerType, e.button, e.isPrimary)) {
-            if (touchStartRef.current) {
-              clearLongPressTimer(false);
+        onTouchStart={(e) => {
+          if (!onOpenTopicContextMenu || e.touches.length !== 1) return;
+          clearLongPressTimer();
+          const touch = e.touches[0];
+          const startX = touch.clientX;
+          const startY = touch.clientY;
+          const summaryEl = e.currentTarget;
+          touchStartRef.current = { x: startX, y: startY };
+          longPressTimerRef.current = window.setTimeout(() => {
+            longPressTimerRef.current = null;
+            touchStartRef.current = null;
+            suppressClickUntilRef.current = Date.now() + 550;
+            try {
+              navigator.vibrate?.(12);
+            } catch {
+              // Ignore unsupported vibration API
             }
+            onOpenTopicContextMenu(section, startX, startY, 'touch', summaryEl);
+          }, 480);
+        }}
+        onTouchMove={(e) => {
+          if (!touchStartRef.current || e.touches.length !== 1) {
+            clearLongPressTimer();
             return;
           }
-          startLongPress(e.clientX, e.clientY, e.pointerId, e.currentTarget);
-        }}
-        onPointerMove={(e) => {
-          if (!touchStartRef.current || e.pointerId !== touchStartRef.current.pointerId) {
-            return;
-          }
-          if (
-            shouldCancelLongPressOnMove(
-              touchStartRef.current.x,
-              touchStartRef.current.y,
-              e.clientX,
-              e.clientY
-            )
-          ) {
-            clearLongPressTimer(false);
+          const touch = e.touches[0];
+          const dx = touch.clientX - touchStartRef.current.x;
+          const dy = touch.clientY - touchStartRef.current.y;
+          if (Math.hypot(dx, dy) > 10) {
+            clearLongPressTimer();
           }
         }}
-        onPointerUp={(e) => {
-          if (touchStartRef.current && e.pointerId === touchStartRef.current.pointerId) {
-            clearLongPressTimer(false);
-          } else {
-            clearLongPressTimer(true);
-          }
-        }}
-        onPointerCancel={() => clearLongPressTimer(false)}
-        onPointerLeave={(e) => {
-          if (touchStartRef.current && e.pointerId === touchStartRef.current.pointerId) {
-            clearLongPressTimer(false);
-          }
-        }}
+        onTouchEnd={clearLongPressTimer}
+        onTouchCancel={clearLongPressTimer}
         onKeyDown={(e) => {
           if (!onOpenTopicContextMenu) return;
           if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
@@ -1480,11 +1297,6 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
           }
         }}
       >
-        <span className="fmt-press-feedback" aria-hidden="true">
-          <span className="fmt-press-ripple-wave" />
-          <span className="fmt-press-ripple-ring" />
-          <span className="fmt-press-charge-bar" />
-        </span>
         <span className="fmtt">
           {showCourseTag ? (
             <span className="fmt-course-tag">{section.course}</span>
@@ -1682,18 +1494,7 @@ export default function App() {
     )
   );
   const [searchInput, setSearchInput] = useState<string>('');
-  const [debouncedQuery, setDebouncedQuery] = useState<string>('');
-  useEffect(() => {
-    if (searchInput.trim() === '') {
-      setDebouncedQuery('');
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setDebouncedQuery(searchInput);
-    }, 90);
-    return () => window.clearTimeout(timer);
-  }, [searchInput]);
-  const deferredQuery = searchInput.trim() === '' ? '' : debouncedQuery;
+  const deferredQuery = useDeferredValue(searchInput);
   const [semanticResult, setSemanticResult] = useState<{
     query: string;
     scores: Map<string, number>;
@@ -1710,33 +1511,10 @@ export default function App() {
   const [activeFlashcard, setActiveFlashcard] = useState<FormulaCardRecord | null>(null);
   const [flashcardQueue, setFlashcardQueue] = useState<FlashcardQueueState>({
     queue: [],
-    history: [],
     reviewedCount: 0,
     gotItCount: 0,
     requeuedIds: {},
   });
-  const appModalRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    document.documentElement.dataset.theme = 'dark';
-  }, []);
-
-  useEffect(() => {
-    if (!modalOpen) return;
-    const id = window.requestAnimationFrame(() => {
-      appModalRef.current?.focus({ preventScroll: true });
-    });
-    return () => window.cancelAnimationFrame(id);
-  }, [modalOpen]);
-
-  const handleClearSearch = useCallback(() => {
-    setSearchInput('');
-    setDebouncedQuery('');
-    setSemanticResult(null);
-    setSearchToggledTopics({});
-    searchInputRef.current?.focus({ preventScroll: true });
-  }, []);
   const [flashcardRevealed, setFlashcardRevealed] = useState<boolean>(false);
   const [flashcardTopicScope, setFlashcardTopicScope] = useState<TopicSectionRecord | null>(null);
   const [topicContextMenu, setTopicContextMenu] = useState<TopicContextMenuState | null>(null);
@@ -2308,21 +2086,7 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const activeTag = document.activeElement?.tagName || '';
-      const isInputFocused =
-        activeTag === 'INPUT' ||
-        activeTag === 'TEXTAREA' ||
-        (document.activeElement as HTMLElement | null)?.isContentEditable;
-
-      if (
-        e.shiftKey &&
-        !e.ctrlKey &&
-        !e.metaKey &&
-        !e.altKey &&
-        e.key.toLowerCase() === 'f' &&
-        !isInputFocused &&
-        (isPdfFullscreen || (persisted.tab === 'prac' && Boolean(activePracticeModule?.pdfUrl)))
-      ) {
+      if (e.key === 'F5' && (isPdfFullscreen || persisted.tab === 'prac')) {
         e.preventDefault();
         e.stopPropagation();
         if (isPdfFullscreen) {
@@ -2333,8 +2097,14 @@ export default function App() {
         return;
       }
 
+      const activeTag = document.activeElement?.tagName || '';
+      const isInputFocused =
+        activeTag === 'INPUT' ||
+        activeTag === 'TEXTAREA' ||
+        (document.activeElement as HTMLElement | null)?.isContentEditable;
+
       if (
-        (e.key === '?' || (e.shiftKey && (e.code === 'Slash' || e.key === '/'))) &&
+        e.key === '?' &&
         !isInputFocused &&
         !e.ctrlKey &&
         !e.metaKey &&
@@ -2346,7 +2116,7 @@ export default function App() {
       }
 
       if (
-        (e.key === '/' && !e.shiftKey && !isInputFocused) ||
+        (e.key === '/' && !isInputFocused) ||
         ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')
       ) {
         e.preventDefault();
@@ -2376,14 +2146,16 @@ export default function App() {
           return;
         }
         if (document.activeElement === searchInputRef.current && searchInput) {
-          handleClearSearch();
+          setSearchInput('');
         }
         setSearchFocused(false);
         setToolsOpen(false);
         setTermMenuOpen(false);
         setModalOpen(false);
         setActiveNavCardId('');
-        setSidebarOpen(false);
+        if (typeof window !== 'undefined' && window.innerWidth <= 1024) {
+          setSidebarOpen(false);
+        }
       }
     };
 
@@ -2415,14 +2187,12 @@ export default function App() {
     shortcutsOpen,
     isPdfFullscreen,
     persisted.tab,
-    activePracticeModule?.pdfUrl,
     fsHudPointerTop,
     fsHudHovered,
     fsSearchFocused,
     retractHud,
     enterPdfFullscreen,
     exitPdfFullscreen,
-    handleClearSearch,
   ]);
 
   // Pre-index all formula, theorem, and GEN cards once per session
@@ -2536,7 +2306,7 @@ export default function App() {
           badge: c.badge,
           displayLabel: 'GEN MATH',
           statLabel: `${total} REF`,
-          title: `General math reference (${total} cards)`,
+          title: `Open general math reference (${total} cards)`,
           total,
           learned: total,
           pct: 100,
@@ -2856,9 +2626,8 @@ export default function App() {
 
   const handleCourseChange = useCallback(
     (course: CourseCode) => {
+      setPersisted((prev) => ({ ...prev, course }));
       if (course === 'GEN') {
-        setPersisted((prev) => ({ ...prev, course: 'GEN', tab: 'fm' }));
-        setThmFilter('all');
         setOpenTopics((prev) => {
           const next = { ...prev };
           for (const sec of genSections) {
@@ -2866,9 +2635,7 @@ export default function App() {
           }
           return next;
         });
-        return;
       }
-      setPersisted((prev) => ({ ...prev, course }));
     },
     [genSections]
   );
@@ -2922,14 +2689,10 @@ export default function App() {
       setSidebarOpen(false);
       if (typeof window !== 'undefined') {
         window.requestAnimationFrame(() => {
-          window.requestAnimationFrame(() => {
-            const el = document.getElementById(targetId);
-            if (el) {
-              const rect = el.getBoundingClientRect();
-              const targetTop = Math.max(0, Math.round(window.scrollY + rect.top - 16));
-              window.scrollTo({ top: targetTop, left: 0, behavior: 'smooth' });
-            }
-          });
+          const el = document.getElementById(targetId);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
         });
         if (window.history?.replaceState) {
           window.history.replaceState(null, '', href);
@@ -3425,9 +3188,6 @@ export default function App() {
 
   const handleTourStepEnter = useCallback(
     (stepId: string) => {
-      setSidebarOpen(false);
-      setToolsOpen(false);
-      setTermMenuOpen(false);
       if (stepId === 'dashboard') {
         setBentoOpen(true);
         setPersisted((prev) => (prev.tab === 'prac' ? { ...prev, tab: 'fm' } : prev));
@@ -3487,21 +3247,16 @@ export default function App() {
   );
 
   const handleSkipFlashcard = useCallback(() => {
-    const result = skipFlashcardQueue(flashcardQueue);
-    setFlashcardQueue(result.nextState);
-    setFlashcardRevealed(false);
-    if (result.nextCardId) {
-      setActiveFlashcard(cardById.get(result.nextCardId) || null);
+    if (flashcardQueue.queue.length <= 1) {
+      setFlashcardRevealed(false);
+      return;
     }
-  }, [flashcardQueue, cardById]);
-
-  const handlePrevFlashcard = useCallback(() => {
-    const result = stepBackFlashcardQueue(flashcardQueue);
-    if (!result.prevCardId) return;
-    setFlashcardQueue(result.nextState);
+    const [current, ...rest] = flashcardQueue.queue;
+    const rotated = [...rest, current];
+    setFlashcardQueue((prev) => ({ ...prev, queue: rotated }));
     setFlashcardRevealed(false);
-    setActiveFlashcard(cardById.get(result.prevCardId) || null);
-  }, [flashcardQueue, cardById]);
+    setActiveFlashcard(cardById.get(rotated[0]) || null);
+  }, [flashcardQueue.queue, cardById]);
 
   const handleExpandCollapseAll = useCallback(
     (expand: boolean) => {
@@ -4473,31 +4228,21 @@ export default function App() {
       if (modalOpen && modalMode === 'flashcard' && !isTextInput) {
         if ((e.key === ' ' || e.code === 'Space') && activeFlashcard && !flashcardRevealed) {
           e.preventDefault();
-          e.stopPropagation();
           setFlashcardRevealed(true);
           return;
         }
         if ((e.key === 's' || e.key === 'S') && activeFlashcard && !flashcardRevealed) {
           e.preventDefault();
-          e.stopPropagation();
           handleSkipFlashcard();
-          return;
-        }
-        if ((e.key === 'p' || e.key === 'P' || e.key === 'ArrowLeft') && flashcardQueue.history.length > 0) {
-          e.preventDefault();
-          e.stopPropagation();
-          handlePrevFlashcard();
           return;
         }
         if (e.key === '1' && activeFlashcard && flashcardRevealed) {
           e.preventDefault();
-          e.stopPropagation();
           handleGradeFlashcard('review');
           return;
         }
         if (e.key === '2' && activeFlashcard && flashcardRevealed) {
           e.preventDefault();
-          e.stopPropagation();
           handleGradeFlashcard('got-it');
           return;
         }
@@ -4595,18 +4340,16 @@ export default function App() {
       }
     };
 
-    window.addEventListener('keydown', handlePowerKeys, { capture: true });
-    return () => window.removeEventListener('keydown', handlePowerKeys, { capture: true });
+    window.addEventListener('keydown', handlePowerKeys);
+    return () => window.removeEventListener('keydown', handlePowerKeys);
   }, [
     modalOpen,
     modalMode,
     shortcutsOpen,
     activeFlashcard,
-    flashcardQueue.history.length,
     flashcardRevealed,
     handleGradeFlashcard,
     handleSkipFlashcard,
-    handlePrevFlashcard,
     isPdfFullscreen,
     fsHudOpen,
     hudVisibleCards,
@@ -4712,23 +4455,23 @@ export default function App() {
                       ? 'open'
                       : 'soon';
 
-                    const isDisabled = !isCurrentTerm && !hasDeployedUrl;
                     return (
                       <button
                         key={termItem.termId}
                         type="button"
                         role="menuitem"
-                        disabled={isDisabled}
-                        aria-disabled={isDisabled}
                         data-term-id={termItem.termId}
-                        className={`term-archive-item${isCurrentTerm ? ' active' : ''}${isDisabled ? ' is-soon' : ''}`}
+                        className={`term-archive-item${isCurrentTerm ? ' active' : ''}`}
                         onClick={() => {
-                          if (isDisabled) return;
                           setTermMenuOpen(false);
                           if (isCurrentTerm) {
                             showToast(`${termItem.shortCode} // ACTIVE WORKSPACE`);
                           } else if (termItem.deployedUrl) {
                             window.location.href = termItem.deployedUrl;
+                          } else {
+                            showToast(
+                              `${termItem.shortCode} CONFIG PRE-LOADED IN termConfig.ts`
+                            );
                           }
                         }}
                       >
@@ -5124,8 +4867,7 @@ export default function App() {
                   className="search-clear-btn"
                   aria-label="Clear search query"
                   hidden={!searchInput}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={handleClearSearch}
+                  onClick={() => setSearchInput('')}
                 >
                   CLR
                 </button>
@@ -5261,20 +5003,22 @@ export default function App() {
         </div>
       </section>
 
-      {typeof document !== 'undefined'
-        ? createPortal(
-            <>
-              <div
-                className={`sidebar-backdrop${sidebarOpen ? ' open' : ''}`}
-                id="sidebarBackdrop"
-                aria-hidden="true"
-                onClick={() => setSidebarOpen(false)}
-              />
-              <aside
-                className={`sidebar${sidebarOpen ? ' mobile-open' : ''}`}
-                id="sidebar"
-                aria-label="Topic Navigation"
-              >
+      <div
+        className={`sidebar-backdrop${sidebarOpen ? ' open' : ''}`}
+        id="sidebarBackdrop"
+        aria-hidden="true"
+        onClick={() => setSidebarOpen(false)}
+      />
+
+      <div
+        className={`app-layout${sidebarOpen ? '' : ' sidebar-collapsed'}`}
+        id="appLayout"
+      >
+        <aside
+          className={`sidebar${sidebarOpen ? ' mobile-open' : ''}`}
+          id="sidebar"
+          aria-label="Topic Navigation"
+        >
           <div className="focus-pill">
             <span className="focus-pill-left">
               <span className="focus-pill-tag">INDEX</span>
@@ -5374,22 +5118,20 @@ export default function App() {
                     ? 'open'
                     : 'soon';
 
-                  const isDisabled = !isCurrentTerm && !hasDeployedUrl;
                   return (
                     <button
                       key={termItem.termId}
                       type="button"
                       role="menuitem"
-                      disabled={isDisabled}
-                      aria-disabled={isDisabled}
-                      className={`term-archive-item${isCurrentTerm ? ' active' : ''}${isDisabled ? ' is-soon' : ''}`}
+                      className={`term-archive-item${isCurrentTerm ? ' active' : ''}`}
                       onClick={() => {
-                        if (isDisabled) return;
                         setPhoneTermOpen(false);
                         if (isCurrentTerm) {
                           showToast(`${termItem.shortCode} // ACTIVE WORKSPACE`);
                         } else if (termItem.deployedUrl) {
                           window.location.href = termItem.deployedUrl;
+                        } else {
+                          showToast(`${termItem.shortCode} CONFIG PRE-LOADED IN termConfig.ts`);
                         }
                       }}
                     >
@@ -5576,7 +5318,9 @@ export default function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         setSelectedPracticeModuleId(mod.id);
-                        setSidebarOpen(false);
+                        if (typeof window !== 'undefined' && window.innerWidth <= 1024) {
+                          setSidebarOpen(false);
+                        }
                       }}
                     >
                       <span className="fmlink-idx">
@@ -5595,16 +5339,8 @@ export default function App() {
               );
             })}
           </nav>
-              </aside>
-            </>,
-            document.body
-          )
-        : null}
+        </aside>
 
-      <div
-        className={`app-layout${sidebarOpen ? '' : ' sidebar-collapsed'}`}
-        id="appLayout"
-      >
         <div className="content-col">
           {persisted.tab !== 'prac' ? (
             <section
@@ -5939,9 +5675,9 @@ export default function App() {
               </p>
               <button
                 type="button"
-                className="action-reset-btn"
+                className="sb-btn"
                 onClick={() => {
-                  handleClearSearch();
+                  setSearchInput('');
                   setHighYieldOnly(false);
                   setPersisted((prev) => ({ ...prev, course: 'ALL', status: 'all' }));
                   setThmFilter('all');
@@ -6765,19 +6501,22 @@ export default function App() {
                         onClick={retractHud}
                       >
                         <div className="practice-pending-card">
-                          <span className="practice-pending-label">PAST PAPERS · COMING SOON</span>
+                          <span className="practice-pending-label">MODULE PENDING</span>
                           <p className="practice-pending-desc">
-                            Curated BUET past-paper PDFs for {activePracticeModule.title} are on the syllabus roadmap and will unlock automatically when published. In the meantime, drill the exact formulas covering these module topics:
+                            Past-paper problem sets for {activePracticeModule.title} are being compiled. Review the matching syllabus topics while this set is prepared.
                           </p>
                           <div
                             className="practice-pending-topics"
-                            aria-label={`Topics covered in ${activePracticeModule.title}`}
+                            aria-label={`Syllabus topics for ${activePracticeModule.courseBadge}`}
                           >
-                            {activePracticeModule.topics.map((topicLabel) => (
-                              <span key={topicLabel} className="practice-pending-topic-chip">
-                                {topicLabel}
-                              </span>
-                            ))}
+                            {fmSections
+                              .filter((sec) => sec.course === activePracticeModule.course)
+                              .slice(0, 6)
+                              .map((sec) => (
+                                <span key={sec.id} className="practice-pending-topic-chip">
+                                  {sec.title}
+                                </span>
+                              ))}
                           </div>
                           <button
                             type="button"
@@ -6788,7 +6527,7 @@ export default function App() {
                                 tab: 'fm',
                                 course: activePracticeModule.course,
                               }));
-                              window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
                             }}
                           >
                             Open {activePracticeModule.courseBadge} formulas
@@ -6804,344 +6543,310 @@ export default function App() {
         </div>
       </div>
 
-      {typeof document !== 'undefined'
-        ? createPortal(
-            <div
-              ref={appModalRef}
-              tabIndex={-1}
-              className={`fcm${modalOpen ? ' open' : ''}`}
-              id="appModal"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Study Tool Modal"
-              aria-hidden={!modalOpen}
-              inert={!modalOpen}
-              onClick={(e) => {
-                if (e.target === e.currentTarget) {
-                  setModalOpen(false);
-                }
-              }}
-            >
-              <div
-                className="fcb"
-                data-c={
-                  modalMode === 'flashcard'
-                    ? activeFlashcard?.course || flashcardTopicScope?.course
-                    : undefined
-                }
-              >
-                <div className="fc-modal-head">
-                  <div className="fc-modal-head-left">
-                    <span className="modal-eyebrow">
-                      {modalMode === 'flashcard' ? 'ACTIVE RECALL' : 'PROGRESS BACKUP'}
+      <div
+        className={`fcm${modalOpen ? ' open' : ''}`}
+        id="appModal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Study Tool Modal"
+        aria-hidden={!modalOpen}
+        inert={!modalOpen}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            setModalOpen(false);
+          }
+        }}
+      >
+        <div
+          className="fcb"
+          data-c={
+            modalMode === 'flashcard'
+              ? activeFlashcard?.course || flashcardTopicScope?.course
+              : undefined
+          }
+        >
+          <div className="fc-modal-head">
+            <div className="fc-modal-head-left">
+              <span className="modal-eyebrow">
+                {modalMode === 'flashcard' ? 'ACTIVE RECALL' : 'PROGRESS BACKUP'}
+              </span>
+              {modalMode === 'flashcard' ? (
+                <>
+                  {activeFlashcard || flashcardTopicScope ? (
+                    <span className="fc-course-pill">
+                      {courseBadgeByCode.get(
+                        activeFlashcard?.course || flashcardTopicScope!.course
+                      ) ||
+                        activeFlashcard?.course ||
+                        flashcardTopicScope!.course}
                     </span>
-                    {modalMode === 'flashcard' ? (
-                      <>
-                        {activeFlashcard || flashcardTopicScope ? (
-                          <span className="fc-course-pill">
-                            {courseBadgeByCode.get(
-                              activeFlashcard?.course || flashcardTopicScope!.course
-                            ) ||
-                              activeFlashcard?.course ||
-                              flashcardTopicScope!.course}
-                          </span>
-                        ) : null}
-                        <span className="fc-queue-stat">
-                          {flashcardQueue.queue.length} left · {flashcardQueue.gotItCount} got it
-                        </span>
-                      </>
-                    ) : (
-                      <span className="fc-modal-sub">Import / Export JSON</span>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="modal-close-btn"
-                    id="modalClose"
-                    aria-label="Close"
-                    data-tip="Close (Esc)"
-                    data-tip-tone="neutral"
-                    onClick={() => setModalOpen(false)}
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.75"
-                      strokeLinecap="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M3.5 3.5L12.5 12.5M12.5 3.5L3.5 12.5" />
-                    </svg>
-                  </button>
+                  ) : null}
+                  <span className="fc-queue-stat">
+                    {flashcardQueue.queue.length} left · {flashcardQueue.gotItCount} got it
+                  </span>
+                </>
+              ) : (
+                <span className="fc-modal-sub">Import / Export JSON</span>
+              )}
+            </div>
+            <button
+              type="button"
+              className="modal-close-btn"
+              id="modalClose"
+              aria-label="Close"
+              data-tip="Close (Esc)"
+              data-tip-tone="neutral"
+              onClick={() => setModalOpen(false)}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                aria-hidden="true"
+              >
+                <path d="M3.5 3.5L12.5 12.5M12.5 3.5L3.5 12.5" />
+              </svg>
+            </button>
+          </div>
+
+          {modalMode === 'flashcard' ? (
+            activeFlashcard ? (
+              <div className="fcbody">
+                <div className="fc-meta-row">
+                  <span className="fc-topic-eyebrow">
+                    <span className="fc-topic-code">{activeFlashcard.course}</span>
+                    <span className="fc-topic-sep" aria-hidden="true">
+                      ·
+                    </span>
+                    <span className="fc-topic-name">
+                      {activeFlashcard.topicTitle ||
+                        topicTitleById.get(activeFlashcard.topicId) ||
+                        activeFlashcard.topicId}
+                    </span>
+                  </span>
+                  {activeFlashcard.badge ? (
+                    <span className="thty">{activeFlashcard.badge}</span>
+                  ) : null}
+                  {flashcardQueue.requeuedIds[activeFlashcard.id] ? (
+                    <span className="fc-requeue-badge">
+                      Retry #{flashcardQueue.requeuedIds[activeFlashcard.id]}
+                    </span>
+                  ) : null}
                 </div>
 
-                {modalMode === 'flashcard' ? (
-                  activeFlashcard ? (
-                    <>
-                      <div className="fcbody">
-                        <div className="fc-meta-row">
-                          <span className="fc-topic-eyebrow">
-                            <span className="fc-topic-code">{activeFlashcard.course}</span>
-                            <span className="fc-topic-sep" aria-hidden="true">
-                              ·
-                            </span>
-                            <span className="fc-topic-name">
-                              {activeFlashcard.topicTitle ||
-                                topicTitleById.get(activeFlashcard.topicId) ||
-                                activeFlashcard.topicId}
-                            </span>
-                          </span>
-                          {activeFlashcard.badge ? (
-                            <span className="thty">{activeFlashcard.badge}</span>
-                          ) : null}
-                          {flashcardQueue.requeuedIds[activeFlashcard.id] ? (
-                            <span className="fc-requeue-badge">
-                              Retry #{flashcardQueue.requeuedIds[activeFlashcard.id]}
-                            </span>
-                          ) : null}
-                        </div>
+                <div className="fc-card-title">
+                  <SecondaryMathText className="" as="span" content={activeFlashcard.title} />
+                </div>
 
-                        <div className="fc-card-title">
-                          <SecondaryMathText className="" as="span" content={activeFlashcard.title} />
-                        </div>
-
-                        {!flashcardRevealed ? (
-                          <div className="fc-front" id="fcFrontStage">
-                            <p className="fc-front-prompt">
-                              Recall the exact equation, sign conventions, and derivation before revealing.
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="fc-back" id="fcBackStage">
-                            {activeFlashcard.htmlContent ? (
-                              <SecondaryMathText
-                                className="fmhtml"
-                                content={activeFlashcard.htmlContent}
-                              />
-                            ) : null}
-                            {activeFlashcard.rawLatex ? (
-                              <KatexMathBlock
-                                latex={activeFlashcard.rawLatex}
-                                displayMode={activeFlashcard.fmmDisplayMode ?? true}
-                              />
-                            ) : null}
-                            {activeFlashcard.codeContent ? (
-                              <pre className="fmcode">
-                                <code
-                                  dangerouslySetInnerHTML={{
-                                    __html: highlightCppCodeToHtml(activeFlashcard.codeContent),
-                                  }}
-                                />
-                              </pre>
-                            ) : null}
-                            {activeFlashcard.steps && activeFlashcard.steps.length > 0 ? (
-                              <details className="fmd" open>
-                                <summary>
-                                  <span className="fmd-summary-text">
-                                    {activeFlashcard.stepsSummary || 'Derivation & Steps'}
-                                  </span>
-                                  <span className="fmd-toggle" aria-hidden="true">
-                                    <span className="fmd-toggle-label fmd-toggle-closed">Steps</span>
-                                    <span className="fmd-toggle-label fmd-toggle-open">Hide</span>
-                                    <svg
-                                      className="fmd-chevron"
-                                      width="13"
-                                      height="13"
-                                      viewBox="0 0 16 16"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="1.75"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                    >
-                                      <path d="M4 6l4 4 4-4" />
-                                    </svg>
-                                  </span>
-                                </summary>
-                                <ol className="fmsteps">
-                                  {activeFlashcard.steps.map((st, idx) => (
-                                    <li key={idx}>
-                                      <SecondaryMathText className="" as="span" content={st} />
-                                    </li>
-                                  ))}
-                                </ol>
-                              </details>
-                            ) : null}
-                            {activeFlashcard.bodyText || activeFlashcard.useText ? (
-                              <div className="fmdet">
-                                {activeFlashcard.bodyText ? (
-                                  <div className="fm-spec-pod fmw-pod">
-                                    <span className="fm-spec-label">PARAMETERS // CONTEXT</span>
-                                    <SecondaryMathText
-                                      className="fmw"
-                                      content={activeFlashcard.bodyText}
-                                    />
-                                  </div>
-                                ) : null}
-                                {activeFlashcard.useText ? (
-                                  <div className="fm-spec-pod fmu-pod">
-                                    <span className="fm-spec-label">APPLICATION // STRATEGY</span>
-                                    <SecondaryMathText
-                                      className="fmu"
-                                      content={activeFlashcard.useText}
-                                    />
-                                  </div>
-                                ) : null}
-                              </div>
-                            ) : null}
-                            {persisted.notes?.[activeFlashcard.id] ? (
-                              <div className="fm-personal-note">
-                                <div className="fm-personal-note-head">
-                                  <span className="fm-personal-note-label">MY MARGIN NOTE</span>
-                                </div>
-                                <p className="fm-personal-note-body">
-                                  {persisted.notes[activeFlashcard.id]}
-                                </p>
-                              </div>
-                            ) : null}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="fc-modal-footer">
-                        {!flashcardRevealed ? (
-                          <div className="fc-front-actions">
-                            <button
-                              type="button"
-                              id="fcPrevBtn"
-                              className="fc-btn fc-skip-btn fc-prev-btn"
-                              disabled={flashcardQueue.history.length === 0}
-                              onClick={handlePrevFlashcard}
-                            >
-                              <span>Prev</span>
-                              <kbd className="shortcut-kbd">P</kbd>
-                            </button>
-                            <button
-                              type="button"
-                              id="fcRevealBtn"
-                              className="fc-btn fc-reveal-btn"
-                              onClick={() => setFlashcardRevealed(true)}
-                            >
-                              <span>Reveal Answer</span>
-                              <kbd className="shortcut-kbd">Space</kbd>
-                            </button>
-                            <button
-                              type="button"
-                              id="fcSkipBtn"
-                              className="fc-btn fc-skip-btn"
-                              onClick={handleSkipFlashcard}
-                            >
-                              <span>Skip</span>
-                              <kbd className="shortcut-kbd">S</kbd>
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="fc-grade-bar fc-grade-bar-with-prev">
-                            <button
-                              type="button"
-                              id="fcPrevBtn"
-                              className="fc-btn fc-skip-btn fc-prev-btn fc-prev-grade"
-                              disabled={flashcardQueue.history.length === 0}
-                              onClick={handlePrevFlashcard}
-                            >
-                              <span>Prev</span>
-                              <kbd className="shortcut-kbd">P</kbd>
-                            </button>
-                            <button
-                              type="button"
-                              id="fcGradeReviewBtn"
-                              className="fc-grade-btn fc-grade-review"
-                              onClick={() => handleGradeFlashcard('review')}
-                            >
-                              <span className="fc-grade-main">
-                                <kbd className="shortcut-kbd">1</kbd>
-                                <span>Needs Review</span>
-                              </span>
-                              <span className="fc-grade-sub">Auto-star · re-queue</span>
-                            </button>
-                            <button
-                              type="button"
-                              id="fcGradeGotItBtn"
-                              className="fc-grade-btn fc-grade-gotit"
-                              onClick={() => handleGradeFlashcard('got-it')}
-                            >
-                              <span className="fc-grade-main">
-                                <kbd className="shortcut-kbd">2</kbd>
-                                <span>Got It</span>
-                              </span>
-                              <span className="fc-grade-sub">Mark learned · next</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="fc-complete" id="fcDeckComplete">
-                      <div className="fc-course-pill">Deck Complete</div>
-                      <p className="fc-complete-text">
-                        You cleared all cards in this active-recall deck ({flashcardQueue.gotItCount}{' '}
-                        mastered across {flashcardQueue.reviewedCount} checks).
-                      </p>
-                      <div className="fc-complete-actions">
-                        <button
-                          type="button"
-                          className="fc-btn fc-skip-btn"
-                          onClick={() => setModalOpen(false)}
-                        >
-                          Close
-                        </button>
-                        <button
-                          type="button"
-                          className="fc-btn fc-reveal-btn"
-                          onClick={() =>
-                            flashcardTopicScope
-                              ? handleTopicQuiz(flashcardTopicScope)
-                              : pickRandomFlashcard()
-                          }
-                        >
-                          {flashcardTopicScope ? 'Quiz Topic Again' : 'Start Fresh Deck'}
-                        </button>
-                      </div>
-                    </div>
-                  )
-                ) : (
-                  <div className="fc-json-panel">
-                    <textarea
-                      aria-label="Backup JSON state"
-                      className="fc-json-textarea"
-                      value={importJsonText}
-                      onChange={(e) => setImportJsonText(e.target.value)}
-                    />
-                    <div className="fc-json-actions">
+                {!flashcardRevealed ? (
+                  <div className="fc-front" id="fcFrontStage">
+                    <p className="fc-front-prompt">
+                      Recall the exact equation, sign conventions, and derivation before revealing.
+                    </p>
+                    <div className="fc-front-actions">
                       <button
                         type="button"
-                        className="fc-btn fc-skip-btn"
-                        onClick={async () => {
-                          const ok = await copyTextToClipboard(importJsonText);
-                          showToast(ok ? 'BACKUP JSON COPIED' : 'COPY FAILED — SELECT MANUALLY');
-                        }}
+                        id="fcRevealBtn"
+                        className="fc-btn fc-reveal-btn"
+                        onClick={() => setFlashcardRevealed(true)}
                       >
-                        Copy JSON
+                        <span>Reveal Answer</span>
+                        <kbd className="shortcut-kbd">Space</kbd>
                       </button>
                       <button
                         type="button"
-                        className="fc-btn fc-reveal-btn"
-                        aria-label="Import JSON state"
-                        onClick={handleImportSubmit}
+                        id="fcSkipBtn"
+                        className="fc-btn fc-skip-btn"
+                        onClick={handleSkipFlashcard}
                       >
-                        Import State
+                        <span>Skip</span>
+                        <kbd className="shortcut-kbd">S</kbd>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="fc-back" id="fcBackStage">
+                    {activeFlashcard.htmlContent ? (
+                      <SecondaryMathText
+                        className="fmhtml"
+                        content={activeFlashcard.htmlContent}
+                      />
+                    ) : null}
+                    {activeFlashcard.rawLatex ? (
+                      <KatexMathBlock
+                        latex={activeFlashcard.rawLatex}
+                        displayMode={activeFlashcard.fmmDisplayMode ?? true}
+                      />
+                    ) : null}
+                    {activeFlashcard.codeContent ? (
+                      <pre className="fmcode">
+                        <code
+                          dangerouslySetInnerHTML={{
+                            __html: highlightCppCodeToHtml(activeFlashcard.codeContent),
+                          }}
+                        />
+                      </pre>
+                    ) : null}
+                    {activeFlashcard.steps && activeFlashcard.steps.length > 0 ? (
+                      <details className="fmd" open>
+                        <summary>
+                          <span className="fmd-summary-text">
+                            {activeFlashcard.stepsSummary || 'Derivation & Steps'}
+                          </span>
+                          <span className="fmd-toggle" aria-hidden="true">
+                            <span className="fmd-toggle-label fmd-toggle-closed">Steps</span>
+                            <span className="fmd-toggle-label fmd-toggle-open">Hide</span>
+                            <svg
+                              className="fmd-chevron"
+                              width="13"
+                              height="13"
+                              viewBox="0 0 16 16"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.75"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M4 6l4 4 4-4" />
+                            </svg>
+                          </span>
+                        </summary>
+                        <ol className="fmsteps">
+                          {activeFlashcard.steps.map((st, idx) => (
+                            <li key={idx}>
+                              <SecondaryMathText className="" as="span" content={st} />
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
+                    ) : null}
+                    {activeFlashcard.bodyText || activeFlashcard.useText ? (
+                      <div className="fmdet">
+                        {activeFlashcard.bodyText ? (
+                          <div className="fm-spec-pod fmw-pod">
+                            <span className="fm-spec-label">PARAMETERS // CONTEXT</span>
+                            <SecondaryMathText
+                              className="fmw"
+                              content={activeFlashcard.bodyText}
+                            />
+                          </div>
+                        ) : null}
+                        {activeFlashcard.useText ? (
+                          <div className="fm-spec-pod fmu-pod">
+                            <span className="fm-spec-label">APPLICATION // STRATEGY</span>
+                            <SecondaryMathText
+                              className="fmu"
+                              content={activeFlashcard.useText}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {persisted.notes?.[activeFlashcard.id] ? (
+                      <div className="fm-personal-note">
+                        <div className="fm-personal-note-head">
+                          <span className="fm-personal-note-label">MY MARGIN NOTE</span>
+                        </div>
+                        <p className="fm-personal-note-body">
+                          {persisted.notes[activeFlashcard.id]}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    <div className="fc-grade-bar">
+                      <button
+                        type="button"
+                        id="fcGradeReviewBtn"
+                        className="fc-grade-btn fc-grade-review"
+                        onClick={() => handleGradeFlashcard('review')}
+                      >
+                        <span className="fc-grade-main">
+                          <kbd className="shortcut-kbd">1</kbd>
+                          <span>Needs Review</span>
+                        </span>
+                        <span className="fc-grade-sub">Auto-star · re-queue</span>
+                      </button>
+                      <button
+                        type="button"
+                        id="fcGradeGotItBtn"
+                        className="fc-grade-btn fc-grade-gotit"
+                        onClick={() => handleGradeFlashcard('got-it')}
+                      >
+                        <span className="fc-grade-main">
+                          <kbd className="shortcut-kbd">2</kbd>
+                          <span>Got It</span>
+                        </span>
+                        <span className="fc-grade-sub">Mark learned · next</span>
                       </button>
                     </div>
                   </div>
                 )}
               </div>
-            </div>,
-            document.body
-          )
-        : null}
+            ) : (
+              <div className="fc-complete" id="fcDeckComplete">
+                <div className="fc-course-pill">Deck Complete</div>
+                <p className="fc-complete-text">
+                  You cleared all cards in this active-recall deck ({flashcardQueue.gotItCount}{' '}
+                  mastered across {flashcardQueue.reviewedCount} checks).
+                </p>
+                <div className="fc-complete-actions">
+                  <button
+                    type="button"
+                    className="fc-btn fc-skip-btn"
+                    onClick={() => setModalOpen(false)}
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    className="fc-btn fc-reveal-btn"
+                    onClick={() =>
+                      flashcardTopicScope
+                        ? handleTopicQuiz(flashcardTopicScope)
+                        : pickRandomFlashcard()
+                    }
+                  >
+                    {flashcardTopicScope ? 'Quiz Topic Again' : 'Start Fresh Deck'}
+                  </button>
+                </div>
+              </div>
+            )
+          ) : (
+            <div className="fc-json-panel">
+              <textarea
+                aria-label="Backup JSON state"
+                className="fc-json-textarea"
+                value={importJsonText}
+                onChange={(e) => setImportJsonText(e.target.value)}
+              />
+              <div className="fc-json-actions">
+                <button
+                  type="button"
+                  className="fc-btn fc-skip-btn"
+                  onClick={async () => {
+                    const ok = await copyTextToClipboard(importJsonText);
+                    showToast(ok ? 'BACKUP JSON COPIED' : 'COPY FAILED — SELECT MANUALLY');
+                  }}
+                >
+                  Copy JSON
+                </button>
+                <button
+                  type="button"
+                  className="fc-btn fc-reveal-btn"
+                  aria-label="Import JSON state"
+                  onClick={handleImportSubmit}
+                >
+                  Import State
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <OnboardingTour
@@ -7159,14 +6864,7 @@ export default function App() {
           aria-label="Scroll back to top"
           data-tip="Back to top"
           data-tip-tone="neutral"
-          onClick={() => {
-            window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
-            window.setTimeout(() => {
-              if (window.scrollY > 2) {
-                window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-              }
-            }, 650);
-          }}
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
         >
           <svg
             className="fk-icon"

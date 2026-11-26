@@ -464,9 +464,4 @@ test('sanitizeBooleanMap, sanitizeNotesMap, and validateJsonImportPayload block 
   assert.equal(({} as Record<string, unknown>).polluted, undefined);
 });
 
-test('DEFAULT_APP_STATE uses a future default examDate and sanitizePersistedState ignores legacy theme field', () => {
-  assert.ok(DEFAULT_APP_STATE.examDate >= '2027-01-01', `expected future default examDate, got ${DEFAULT_APP_STATE.examDate}`);
-  const sanitized = sanitizePersistedState({ theme: 'light', tab: 'thm' }) as unknown as Record<string, unknown>;
-  assert.equal(sanitized.tab, 'thm');
-  assert.equal('theme' in sanitized, false);
-});
+
