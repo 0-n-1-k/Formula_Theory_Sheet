@@ -4,6 +4,7 @@ export const GITHUB_REPO_ISSUES_URL =
 
 export interface FlashcardQueueState {
   queue: string[];
+  history: string[];
   reviewedCount: number;
   gotItCount: number;
   requeuedIds: Record<string, number>;
@@ -39,6 +40,7 @@ export function createFlashcardQueue(
   }
   return {
     queue: shuffled,
+    history: [],
     reviewedCount: 0,
     gotItCount: 0,
     requeuedIds: {},
@@ -63,6 +65,7 @@ export function gradeFlashcardQueue(
     return { nextState: state, gradedCardId: null, nextCardId: null };
   }
   const [current, ...rest] = state.queue;
+  const nextHistory = [...state.history, current].slice(-50);
   if (grade === 'review') {
     const safeOffset = Math.max(1, Math.min(rest.length, requeueOffset));
     const nextQueue = [...rest];
@@ -74,6 +77,7 @@ export function gradeFlashcardQueue(
     return {
       nextState: {
         queue: nextQueue,
+        history: nextHistory,
         reviewedCount: state.reviewedCount + 1,
         gotItCount: state.gotItCount,
         requeuedIds: nextRequeued,
@@ -86,12 +90,58 @@ export function gradeFlashcardQueue(
   return {
     nextState: {
       queue: rest,
+      history: nextHistory,
       reviewedCount: state.reviewedCount + 1,
       gotItCount: state.gotItCount + 1,
       requeuedIds: state.requeuedIds,
     },
     gradedCardId: current,
     nextCardId: rest[0] ?? null,
+  };
+}
+
+/**
+ * Moves the current card to the back of the queue while recording it in history so Prev can return to it.
+ */
+export function skipFlashcardQueue(state: FlashcardQueueState): {
+  nextState: FlashcardQueueState;
+  nextCardId: string | null;
+} {
+  if (state.queue.length <= 1) {
+    return { nextState: state, nextCardId: state.queue[0] ?? null };
+  }
+  const [current, ...rest] = state.queue;
+  const rotated = [...rest, current];
+  return {
+    nextState: {
+      ...state,
+      queue: rotated,
+      history: [...state.history, current].slice(-50),
+    },
+    nextCardId: rotated[0] ?? null,
+  };
+}
+
+/**
+ * Steps back to the previously viewed flashcard in the current session, placing it at the front of the queue.
+ */
+export function stepBackFlashcardQueue(state: FlashcardQueueState): {
+  nextState: FlashcardQueueState;
+  prevCardId: string | null;
+} {
+  if (state.history.length === 0) {
+    return { nextState: state, prevCardId: null };
+  }
+  const nextHistory = state.history.slice(0, -1);
+  const prevCardId = state.history[state.history.length - 1];
+  const dedupedRest = state.queue.filter((id) => id !== prevCardId);
+  return {
+    nextState: {
+      ...state,
+      queue: [prevCardId, ...dedupedRest],
+      history: nextHistory,
+    },
+    prevCardId,
   };
 }
 

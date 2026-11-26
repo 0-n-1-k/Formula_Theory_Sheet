@@ -130,11 +130,21 @@ export function expandHighlightTerms(tokens: readonly string[]): string[] {
       }
     }
 
+    const NON_SUBSCRIPT_WORDS = new Set([
+      'sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'min', 'max', 'bin', 'pin',
+      'tin', 'lin', 'win', 'out', 'sum', 'sub', 'sup', 'lim', 'log', 'exp',
+      'arg', 'mod', 'det', 'dim', 'deg', 'ker', 'div', 'rot', 'abs', 'sgn',
+    ]);
+    const CIRCUIT_BASE_VARS = new Set(['v', 'i', 'r', 'z', 'p', 'g', 'c', 'l', 'e', 'f', 't', 'a', 'w']);
     const subMatch = t.match(
-      /^[a-z](th|rms|oc|sc|eq|max|min|in|out|avg|eff|crit|tot|net|pk|pp|dc|ac|ph)$/i
+      /^([a-z])(th|rms|oc|sc|eq|max|min|in|out|avg|eff|crit|tot|net|pk|pp|dc|ac|ph)$/i
     );
-    if (subMatch && subMatch[1].length >= 2) {
-      set.add(subMatch[1].toLowerCase());
+    if (
+      subMatch &&
+      !NON_SUBSCRIPT_WORDS.has(t.toLowerCase()) &&
+      (subMatch[2].length >= 3 || CIRCUIT_BASE_VARS.has(subMatch[1].toLowerCase()))
+    ) {
+      set.add(subMatch[2].toLowerCase());
     }
   }
 
@@ -150,7 +160,12 @@ function termToDiacriticPattern(term: string): string {
     }
     return ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   });
-  return parts.join("(?:'|’|ʼ)?");
+  const core = parts.join("(?:'|’|ʼ)?");
+  // Prevent short 2-char alphanumeric tokens (e.g. 'in', 'dc', 'ac', 'th') from lighting up inside unrelated longer prose words
+  if (term.length <= 2 && /^[a-z0-9]+$/i.test(term)) {
+    return `\\b${core}\\b`;
+  }
+  return core;
 }
 
 export function buildHighlightRegex(tokens: readonly string[]): RegExp | null {
