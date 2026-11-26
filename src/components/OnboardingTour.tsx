@@ -13,39 +13,39 @@ interface TourStep {
 const TOUR_STEPS: readonly TourStep[] = [
   {
     id: 'dashboard',
-    title: 'Your study home base',
-    body: 'Pick a course, check your overall mastery, filter All / Starred / Unlearned cards, isolate 5/5 High-Yield finals topics, or jump straight into Self-Test Blur and Random Flashcards.',
+    title: 'Page Home',
+    body: 'Select courses, practice flash-cards, filter cards based on priority',
     selectors: ['#commandDeck'],
   },
   {
     id: 'modes',
     title: 'Formulas, Theory, and Practice',
-    body: 'Switch anytime between compact Formulas, full Theorems & Definitions, and past-paper Practice PDFs without losing your place or progress.',
+    body: 'Switch between formulas, definitions/theory and practice',
     selectors: ['.tabs'],
   },
   {
     id: 'search',
-    title: 'Find anything in seconds',
-    body: 'Press / or Ctrl+K anywhere on the page. Type exact keywords like "thevenin" or "cif", or describe what you need in plain English — semantic search activates automatically when needed.',
+    title: 'Search bar',
+    body: 'Even vague searches work, try it',
     selectors: ['#fmq'],
   },
   {
     id: 'index',
     title: 'Jump straight to any chapter',
-    body: 'Open the slide-over topic list from here to jump directly to any chapter. As you scroll down the sheet, this docks neatly into a floating Index tab in the corner.',
+    body: 'Easily switch between topics from wherever you are',
     selectors: ['#sbBtn', '#sbDetachedTab'],
   },
   {
     id: 'controls',
-    title: 'Countdown & workspace controls',
-    body: 'Set your exam date for the live countdown, and open Settings to switch to 1-column wide cards, expand or collapse all topics, back up or restore your progress JSON, or replay this tour anytime.',
+    title: 'Calender and Settings',
+    body: 'Set your exam date, Reset the site, Print formula sheets',
     selectors: ['#goalToggleBtn', '#settingsBtn'],
     combineSelectors: true,
   },
   {
     id: 'cards',
-    title: 'Hover to reveal context & tools',
-    body: 'Click any topic bar to open it, then hover a card to light up its Parameters and Exam Strategy footer. You can star tricky formulas, add personal margin notes, copy LaTeX, or check them off as learned.',
+    title: 'Formula Cards',
+    body: 'Add notes, copy the formulas, share the cards, etc',
     selectors: [
       'main:not([hidden]) details.fmt[open] .fmi:not(.hidden)',
       'main:not([hidden]) details.fmt:not(.hidden)',
@@ -55,8 +55,8 @@ const TOUR_STEPS: readonly TourStep[] = [
   },
   {
     id: 'practice',
-    title: 'Solve papers without switching tabs',
-    body: 'Open any Practice PDF in Fullscreen (F5), move your cursor to the top edge to pull down the Quick-Glance Search HUD, and pin formulas directly onto the PDF while you solve.',
+    title: 'Practice',
+    body: 'You can search formulas/theorems while you practice',
     selectors: ['#tabPrac'],
   },
 ];
