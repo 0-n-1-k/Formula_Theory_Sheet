@@ -62,7 +62,7 @@ export default defineConfig(() => {
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,ttf}'],
           globIgnores: ['**/*.wasm', '**/*.onnx', '**/ort-wasm*'],
-          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+          maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/404\.html$/, /^\/sitemap\./, /^\/robots\.txt$/],
           runtimeCaching: [

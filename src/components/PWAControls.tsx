@@ -60,13 +60,27 @@ export const PWAInstallMenuItem: React.FC<PWAInstallProps> = ({
         >
           <div className="fcb pwa-guide-card">
             <div className="pwa-guide-head">
-              <span className="ntype-badge">INSTALL OFFLINE PWA</span>
+              <span className="modal-eyebrow">INSTALL OFFLINE APP</span>
               <button
                 type="button"
-                className="sb-btn"
+                className="modal-close-btn"
+                aria-label="Close install guide"
+                data-tip="Close (Esc)"
+                data-tip-tone="neutral"
                 onClick={() => setShowIOSGuide(false)}
               >
-                [X CLOSE]
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3.5 3.5L12.5 12.5M12.5 3.5L3.5 12.5" />
+                </svg>
               </button>
             </div>
             {isIOS ? (
@@ -132,7 +146,7 @@ export const OfflineIndicator: React.FC = () => {
   return (
     <div className="offline-status-banner" role="status" aria-live="polite">
       <span className="offline-status-dot" aria-hidden="true" />
-      <span>OFFLINE MODE // SERVING CACHED REFERENCE</span>
+      <span>Offline mode · serving cached reference</span>
     </div>
   );
 };

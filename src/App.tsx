@@ -1030,10 +1030,27 @@ export const FormulaCardView = memo(function FormulaCardView({
             >
               <SecondaryMathText
                 as="span"
-                className=""
+                className="fmd-summary-text"
                 content={card.stepsSummary || 'Proof & derivation steps'}
                 highlightTokens={activeHighlightTokens}
               />
+              <span className="fmd-toggle" aria-hidden="true">
+                <span className="fmd-toggle-label fmd-toggle-closed">Steps</span>
+                <span className="fmd-toggle-label fmd-toggle-open">Hide</span>
+                <svg
+                  className="fmd-chevron"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M4 6l4 4 4-4" />
+                </svg>
+              </span>
             </summary>
             <div
               className={`fmd-collapse${stepsOpen ? ' is-open' : ''}`}
@@ -4214,6 +4231,11 @@ export default function App() {
           setFlashcardRevealed(true);
           return;
         }
+        if ((e.key === 's' || e.key === 'S') && activeFlashcard && !flashcardRevealed) {
+          e.preventDefault();
+          handleSkipFlashcard();
+          return;
+        }
         if (e.key === '1' && activeFlashcard && flashcardRevealed) {
           e.preventDefault();
           handleGradeFlashcard('review');
@@ -4327,6 +4349,7 @@ export default function App() {
     activeFlashcard,
     flashcardRevealed,
     handleGradeFlashcard,
+    handleSkipFlashcard,
     isPdfFullscreen,
     fsHudOpen,
     hudVisibleCards,
@@ -6371,7 +6394,7 @@ export default function App() {
                                     <summary>
                                       <SecondaryMathText
                                         as="span"
-                                        className=""
+                                        className="fmd-summary-text"
                                         content={
                                           pCard.stepsSummary ||
                                           'Proof & derivation steps'
@@ -6380,6 +6403,23 @@ export default function App() {
                                           hudTokens.length > 0 ? hudTokens : undefined
                                         }
                                       />
+                                      <span className="fmd-toggle" aria-hidden="true">
+                                        <span className="fmd-toggle-label fmd-toggle-closed">Steps</span>
+                                        <span className="fmd-toggle-label fmd-toggle-open">Hide</span>
+                                        <svg
+                                          className="fmd-chevron"
+                                          width="13"
+                                          height="13"
+                                          viewBox="0 0 16 16"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          strokeWidth="1.75"
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                        >
+                                          <path d="M4 6l4 4 4-4" />
+                                        </svg>
+                                      </span>
                                     </summary>
                                     <ol className="fmsteps">
                                       {pCard.steps.map((stepHtml, sIdx) => (
@@ -6517,30 +6557,59 @@ export default function App() {
           }
         }}
       >
-        <div className="fcb">
+        <div
+          className="fcb"
+          data-c={
+            modalMode === 'flashcard'
+              ? activeFlashcard?.course || flashcardTopicScope?.course
+              : undefined
+          }
+        >
           <div className="fc-modal-head">
             <div className="fc-modal-head-left">
-              <span className="ntype-badge">
-                {modalMode === 'flashcard'
-                  ? activeFlashcard
-                    ? `ACTIVE RECALL // ${activeFlashcard.course}`
-                    : 'ACTIVE RECALL // DECK COMPLETE'
-                  : 'EXPORT / IMPORT PROGRESS JSON'}
+              <span className="modal-eyebrow">
+                {modalMode === 'flashcard' ? 'ACTIVE RECALL' : 'PROGRESS BACKUP'}
               </span>
               {modalMode === 'flashcard' ? (
-                <span className="fc-queue-stat">
-                  {flashcardQueue.queue.length} LEFT · {flashcardQueue.gotItCount} GOT IT
-                </span>
-              ) : null}
+                <>
+                  {activeFlashcard || flashcardTopicScope ? (
+                    <span className="fc-course-pill">
+                      {courseBadgeByCode.get(
+                        activeFlashcard?.course || flashcardTopicScope!.course
+                      ) ||
+                        activeFlashcard?.course ||
+                        flashcardTopicScope!.course}
+                    </span>
+                  ) : null}
+                  <span className="fc-queue-stat">
+                    {flashcardQueue.queue.length} left · {flashcardQueue.gotItCount} got it
+                  </span>
+                </>
+              ) : (
+                <span className="fc-modal-sub">Import / Export JSON</span>
+              )}
             </div>
             <button
               type="button"
-              className="sb-btn"
+              className="modal-close-btn"
               id="modalClose"
-              aria-label="Close modal"
+              aria-label="Close"
+              data-tip="Close (Esc)"
+              data-tip-tone="neutral"
               onClick={() => setModalOpen(false)}
             >
-              [X CLOSE]
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                aria-hidden="true"
+              >
+                <path d="M3.5 3.5L12.5 12.5M12.5 3.5L3.5 12.5" />
+              </svg>
             </button>
           </div>
 
@@ -6548,18 +6617,23 @@ export default function App() {
             activeFlashcard ? (
               <div className="fcbody">
                 <div className="fc-meta-row">
-                  <span className="fc-topic-label" data-c={activeFlashcard.course}>
-                    {activeFlashcard.course} ·{' '}
-                    {activeFlashcard.topicTitle ||
-                      topicTitleById.get(activeFlashcard.topicId) ||
-                      activeFlashcard.topicId}
+                  <span className="fc-topic-eyebrow">
+                    <span className="fc-topic-code">{activeFlashcard.course}</span>
+                    <span className="fc-topic-sep" aria-hidden="true">
+                      ·
+                    </span>
+                    <span className="fc-topic-name">
+                      {activeFlashcard.topicTitle ||
+                        topicTitleById.get(activeFlashcard.topicId) ||
+                        activeFlashcard.topicId}
+                    </span>
                   </span>
                   {activeFlashcard.badge ? (
                     <span className="thty">{activeFlashcard.badge}</span>
                   ) : null}
                   {flashcardQueue.requeuedIds[activeFlashcard.id] ? (
                     <span className="fc-requeue-badge">
-                      RETRY #{flashcardQueue.requeuedIds[activeFlashcard.id]}
+                      Retry #{flashcardQueue.requeuedIds[activeFlashcard.id]}
                     </span>
                   ) : null}
                 </div>
@@ -6577,18 +6651,20 @@ export default function App() {
                       <button
                         type="button"
                         id="fcRevealBtn"
-                        className="fc-reveal-btn"
+                        className="fc-btn fc-reveal-btn"
                         onClick={() => setFlashcardRevealed(true)}
                       >
-                        <span>REVEAL ANSWER</span>
+                        <span>Reveal Answer</span>
                         <kbd className="shortcut-kbd">Space</kbd>
                       </button>
                       <button
                         type="button"
-                        className="sb-btn"
+                        id="fcSkipBtn"
+                        className="fc-btn fc-skip-btn"
                         onClick={handleSkipFlashcard}
                       >
-                        Skip
+                        <span>Skip</span>
+                        <kbd className="shortcut-kbd">S</kbd>
                       </button>
                     </div>
                   </div>
@@ -6617,7 +6693,28 @@ export default function App() {
                     ) : null}
                     {activeFlashcard.steps && activeFlashcard.steps.length > 0 ? (
                       <details className="fmd" open>
-                        <summary>{activeFlashcard.stepsSummary || 'Derivation & Steps'}</summary>
+                        <summary>
+                          <span className="fmd-summary-text">
+                            {activeFlashcard.stepsSummary || 'Derivation & Steps'}
+                          </span>
+                          <span className="fmd-toggle" aria-hidden="true">
+                            <span className="fmd-toggle-label fmd-toggle-closed">Steps</span>
+                            <span className="fmd-toggle-label fmd-toggle-open">Hide</span>
+                            <svg
+                              className="fmd-chevron"
+                              width="13"
+                              height="13"
+                              viewBox="0 0 16 16"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.75"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M4 6l4 4 4-4" />
+                            </svg>
+                          </span>
+                        </summary>
                         <ol className="fmsteps">
                           {activeFlashcard.steps.map((st, idx) => (
                             <li key={idx}>
@@ -6667,9 +6764,11 @@ export default function App() {
                         className="fc-grade-btn fc-grade-review"
                         onClick={() => handleGradeFlashcard('review')}
                       >
-                        <kbd className="shortcut-kbd">1</kbd>
-                        <span>Needs Review</span>
-                        <span className="fc-grade-sub">Auto-star &amp; re-queue</span>
+                        <span className="fc-grade-main">
+                          <kbd className="shortcut-kbd">1</kbd>
+                          <span>Needs Review</span>
+                        </span>
+                        <span className="fc-grade-sub">Auto-star · re-queue</span>
                       </button>
                       <button
                         type="button"
@@ -6677,9 +6776,11 @@ export default function App() {
                         className="fc-grade-btn fc-grade-gotit"
                         onClick={() => handleGradeFlashcard('got-it')}
                       >
-                        <kbd className="shortcut-kbd">2</kbd>
-                        <span>Got It</span>
-                        <span className="fc-grade-sub">Mark learned &amp; next</span>
+                        <span className="fc-grade-main">
+                          <kbd className="shortcut-kbd">2</kbd>
+                          <span>Got It</span>
+                        </span>
+                        <span className="fc-grade-sub">Mark learned · next</span>
                       </button>
                     </div>
                   </div>
@@ -6687,7 +6788,7 @@ export default function App() {
               </div>
             ) : (
               <div className="fc-complete" id="fcDeckComplete">
-                <div className="ntype-badge">SESSION COMPLETE</div>
+                <div className="fc-course-pill">Deck Complete</div>
                 <p className="fc-complete-text">
                   You cleared all cards in this active-recall deck ({flashcardQueue.gotItCount}{' '}
                   mastered across {flashcardQueue.reviewedCount} checks).
@@ -6695,14 +6796,14 @@ export default function App() {
                 <div className="fc-complete-actions">
                   <button
                     type="button"
-                    className="sb-btn"
+                    className="fc-btn fc-skip-btn"
                     onClick={() => setModalOpen(false)}
                   >
                     Close
                   </button>
                   <button
                     type="button"
-                    className="fc-reveal-btn"
+                    className="fc-btn fc-reveal-btn"
                     onClick={() =>
                       flashcardTopicScope
                         ? handleTopicQuiz(flashcardTopicScope)
@@ -6715,41 +6816,31 @@ export default function App() {
               </div>
             )
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div className="fc-json-panel">
               <textarea
                 aria-label="Backup JSON state"
+                className="fc-json-textarea"
                 value={importJsonText}
                 onChange={(e) => setImportJsonText(e.target.value)}
-                style={{
-                  width: '100%',
-                  minHeight: '160px',
-                  background: 'rgba(0,0,0,0.55)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border-crisp)',
-                  borderRadius: '10px',
-                  padding: '10px',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 'var(--fs-sm)',
-                }}
               />
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <div className="fc-json-actions">
                 <button
                   type="button"
-                  className="sb-btn"
+                  className="fc-btn fc-skip-btn"
                   onClick={async () => {
                     const ok = await copyTextToClipboard(importJsonText);
                     showToast(ok ? 'BACKUP JSON COPIED' : 'COPY FAILED — SELECT MANUALLY');
                   }}
                 >
-                  COPY JSON
+                  Copy JSON
                 </button>
                 <button
                   type="button"
-                  className="course-pill active"
+                  className="fc-btn fc-reveal-btn"
                   aria-label="Import JSON state"
                   onClick={handleImportSubmit}
                 >
-                  IMPORT STATE
+                  Import State
                 </button>
               </div>
             </div>

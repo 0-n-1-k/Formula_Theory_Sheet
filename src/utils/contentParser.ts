@@ -452,20 +452,31 @@ export function sanitizeHtmlContentArtifacts(html?: string): string | undefined 
     ''
   );
 
-  // Strip exam-year/question citations inside bold definition sub-headings
+  // Strip exam-year/question citations inside bold definition and derivation step headings
   // e.g. "<b>Sliding Load Between Two Sources (2018–19 Q.1c):</b>" -> "<b>Sliding Load Between Two Sources:</b>"
+  // e.g. "<b>Highway Police Speeding Ticket Problem (2018–19 Q1c):</b>" -> "<b>Highway Police Speeding Ticket Problem:</b>"
+  // e.g. "<b>(2024–25 Q1c &amp; 2013–14 Q2b-ii):</b> Using..." -> "Using..."
   out = out.replace(
-    /(<(?:b|strong)>)([\s\S]*?)(<\/(?:b|strong)>)/gi,
-    (_, openTag: string, inner: string, closeTag: string) => {
+    /(<(?:b|strong)>)([\s\S]*?)(<\/(?:b|strong)>)(\s*)/gi,
+    (_, openTag: string, inner: string, closeTag: string, trailingWs: string) => {
       const cleanedInner = inner
         .replace(
-          /\s*\(\s*(?:BUET\s+)?(?:(?:19|20)\d{2}\s*[–-]\s*(?:\d{2}|\d{4})|Q\.?\s*\d+[a-z]?)[^()]*\)/gi,
+          /\s*\(\s*(?:BUET\s+)?(?:(?:19|20)\d{2}\s*[–-]\s*(?:\d{2}|\d{4})(?:\s*,?\s*Q\.?\s*\d+[a-z]?(?:-[ivx]+)?)?|Q\.?\s*\d+[a-z]?(?:-[ivx]+)?)[^()]*\)/gi,
           ''
         )
+        .replace(
+          /,\s*(?:BUET\s+)?(?:(?:19|20)\d{2}\s*[–-]\s*(?:\d{2}|\d{4})(?:\s*,?\s*Q\.?\s*\d+[a-z]?(?:-[ivx]+)?)?|Q\.?\s*\d+[a-z]?(?:-[ivx]+)?)(?=\s*[,)])/gi,
+          ''
+        )
+        .replace(/\(\s*\)/g, '')
+        .replace(/\s+\)/g, ')')
         .replace(/\s+:/g, ':')
         .replace(/\s{2,}/g, ' ')
         .trim();
-      return `${openTag}${cleanedInner}${closeTag}`;
+      if (!cleanedInner || cleanedInner.replace(/[:\s]+/g, '').length === 0) {
+        return '';
+      }
+      return `${openTag}${cleanedInner}${closeTag}${trailingWs}`;
     }
   );
 
@@ -1071,17 +1082,31 @@ export function parseTopicSections(html: string): TopicSectionRecord[] {
       );
       let stepsSummary: string | undefined;
       let steps: string[] | undefined;
+      let searchableKeywords = keywords;
       if (fmdMatch) {
+        const rawFmdText = decodeHtmlEntities(`${fmdMatch[1]} ${fmdMatch[2]}`).replace(/<[^>]+>/g, ' ');
+        const examCitations = rawFmdText.match(
+          /(?:19|20)\d{2}\s*[–-]\s*(?:\d{2}|\d{4})(?:\s*,?\s*Q\.?\s*\d+[a-z]?(?:-[ivx]+)?)?/gi
+        );
+        if (examCitations && examCitations.length > 0) {
+          const lowerKeywords = searchableKeywords.toLowerCase();
+          const missing = examCitations.filter((c) => !lowerKeywords.includes(c.toLowerCase()));
+          if (missing.length > 0) {
+            searchableKeywords = `${searchableKeywords} ${missing.join(' ')}`.trim();
+          }
+        }
         stepsSummary = decodeHtmlEntities(fmdMatch[1])
           .replace(
-            /\s*\(\s*(?:BUET\s+)?(?:(?:19|20)\d{2}\s*[–-]\s*(?:\d{2}|\d{4})|Q\.?\s*\d+[a-z]?)[^()]*\)/gi,
+            /\s*\(\s*(?:BUET\s+)?(?:(?:19|20)\d{2}\s*[–-]\s*(?:\d{2}|\d{4})(?:\s*,?\s*Q\.?\s*\d+[a-z]?(?:-[ivx]+)?)?|Q\.?\s*\d+[a-z]?(?:-[ivx]+)?)[^()]*\)/gi,
             ''
           )
           .replace(/\s{2,}/g, ' ')
           .trim();
         const stepsListHtml = fmdMatch[2];
         const liMatches = [...stepsListHtml.matchAll(/<li>([\s\S]*?)<\/li>/g)];
-        steps = liMatches.map((m) => m[1].trim());
+        steps = liMatches
+          .map((m) => (sanitizeHtmlContentArtifacts(m[1].trim()) || '').trim())
+          .filter(Boolean);
       }
 
       cards.push({
@@ -1095,7 +1120,7 @@ export function parseTopicSections(html: string): TopicSectionRecord[] {
         badge,
         cardTypeClass,
         copyText,
-        keywords,
+        keywords: searchableKeywords,
         rawLatex,
         fmmDisplayMode,
         htmlContent,

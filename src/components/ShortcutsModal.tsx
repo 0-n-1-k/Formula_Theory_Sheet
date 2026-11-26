@@ -24,6 +24,7 @@ const SHORTCUT_GROUPS: ReadonlyArray<{
     heading: 'ACTIVE RECALL FLASHCARD QUIZ',
     items: [
       { keys: ['Space'], label: 'Reveal answer, derivation steps, and context' },
+      { keys: ['S'], label: 'Skip card and move to end of queue' },
       { keys: ['1'], label: 'Needs Review (auto-star & re-queue soon)' },
       { keys: ['2'], label: 'Got It (mark learned & advance)' },
     ],
@@ -54,15 +55,30 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ open, onClose })
     >
       <div className="fcb shortcuts-modal-box">
         <div className="shortcuts-modal-head">
-          <span className="ntype-badge">KEYBOARD SHORTCUTS // POWER FLOW</span>
+          <div className="fc-modal-head-left">
+            <span className="modal-eyebrow">KEYBOARD SHORTCUTS</span>
+          </div>
           <button
             type="button"
-            className="sb-btn"
+            className="modal-close-btn"
             id="shortcutsModalClose"
             aria-label="Close Keyboard Shortcuts"
+            data-tip="Close (Esc)"
+            data-tip-tone="neutral"
             onClick={onClose}
           >
-            [X CLOSE]
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="M3.5 3.5L12.5 12.5M12.5 3.5L3.5 12.5" />
+            </svg>
           </button>
         </div>
 

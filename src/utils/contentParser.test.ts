@@ -312,6 +312,34 @@ test('parseTopicSections strips exam-year citations from bold definition heading
     thmWorked.htmlContent && thmWorked.htmlContent.includes('<b>Sliding Load Between Two Sources:</b>'),
     'Trailing colons inside bold definition headings must be preserved cleanly'
   );
+
+  // Verify details.fmd step headings also strip exam-year citations (both dotted and undotted Q numbers)
+  const mvtWorked = cardById.get('t-m1571:9');
+  assert.ok(mvtWorked && mvtWorked.steps && mvtWorked.steps.length > 0, 'Expected t-m1571:9 to have steps');
+  assert.ok(
+    mvtWorked.steps.every((st) => !/\((?:BUET\s+)?(?:19|20)\d{2}[–-]\d{2,4}[^()]*\)/.test(st)),
+    'Bold step headings inside details.fmd must not display parenthetical exam-year citations'
+  );
+  assert.ok(
+    mvtWorked.steps[0].includes('</b>') && mvtWorked.steps[0].includes(':</b>'),
+    'Trailing colons in derivation step bold headings must be preserved cleanly'
+  );
+  assert.ok(
+    mvtWorked.keywords.includes('2023–24 Q2b') || mvtWorked.keywords.toLowerCase().includes('2023–24 q2b'),
+    'Stripped step exam-year citations must remain searchable in keywords'
+  );
+
+  // Verify steps whose bold tag was ONLY an exam-year citation don't leave a stray empty <b>:</b>
+  const limitDeriv = cardById.get('m157-limits:7');
+  assert.ok(limitDeriv && limitDeriv.steps && limitDeriv.steps.length > 0, 'Expected m157-limits:7 to have steps');
+  assert.ok(
+    limitDeriv.steps.every((st) => !/<b>\s*:?\s*<\/b>/i.test(st)),
+    'Stripping a citation-only bold prefix must not leave an empty <b>:</b> tag'
+  );
+  assert.ok(
+    limitDeriv.steps.every((st) => !/\(2024[–-]25\s*Q1c/i.test(st) && !/\(2010[–-]11\s*Q1b\)/i.test(st)),
+    'Citation-only bold prefixes in details.fmd must be cleanly removed'
+  );
 });
 
 
