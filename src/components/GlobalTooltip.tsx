@@ -198,6 +198,10 @@ export const GlobalTooltip: React.FC = () => {
       hideTooltip(false);
     };
 
+    const handleContextMenu = () => {
+      hideTooltip(false);
+    };
+
     const handleScroll = () => {
       hideTooltip(false);
     };
@@ -217,6 +221,7 @@ export const GlobalTooltip: React.FC = () => {
     document.addEventListener('focusin', handleFocusIn);
     document.addEventListener('focusout', handleFocusOut);
     document.addEventListener('mousedown', handleMouseDown, true);
+    document.addEventListener('contextmenu', handleContextMenu, true);
     document.addEventListener('scroll', handleScroll, true);
     document.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('blur', handleBlur);
@@ -228,6 +233,7 @@ export const GlobalTooltip: React.FC = () => {
       document.removeEventListener('focusin', handleFocusIn);
       document.removeEventListener('focusout', handleFocusOut);
       document.removeEventListener('mousedown', handleMouseDown, true);
+      document.removeEventListener('contextmenu', handleContextMenu, true);
       document.removeEventListener('scroll', handleScroll, true);
       document.removeEventListener('keydown', handleKeyDown, true);
       window.removeEventListener('blur', handleBlur);

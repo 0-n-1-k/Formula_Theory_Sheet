@@ -108,6 +108,10 @@ import {
 import { PdfCanvasReader } from './components/PdfCanvasReader';
 import { GlobalTooltip } from './components/GlobalTooltip';
 import {
+  TopicContextMenu,
+  type TopicContextMenuState,
+} from './components/TopicContextMenu';
+import {
   OnboardingTour,
   clearOnboardingTourSeen,
   hasSeenOnboardingTour,
@@ -118,6 +122,10 @@ import {
   PWAInstallMenuItem,
 } from './components/PWAControls';
 import { ShortcutsModal } from './components/ShortcutsModal';
+import {
+  buildTopicDeepLinkUrl,
+  formatTopicFormulasForCopy,
+} from './utils/topicContextMenu';
 
 const STORAGE_KEY = ACTIVE_STORAGE_KEY;
 const QUICK_SHORTCUTS = ['cif', 'divergence theorem', 'thevenin', 'mvt', 'shm', 'leibnitz'] as const;
@@ -801,15 +809,22 @@ export const FormulaCardView = memo(function FormulaCardView({
                 onCopyDeepLink(card);
               }}
             >
-              <img
-                src="/assets/aistudio/image_b2f5416e.png"
-                alt=""
-                aria-hidden="true"
+              <svg
                 className="fmlink-icon"
-                width={14}
-                height={14}
-                decoding="async"
-              />
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M10 4H6a3 3 0 0 0-3 3v11a3 3 0 0 0 3 3h11a3 3 0 0 0 3-3v-3" />
+                <path d="M16 3l5 5-5 5" />
+                <path d="M21 8h-6.5a6.5 6.5 0 0 0-6.5 6.5V16" />
+              </svg>
             </button>
           ) : null}
           <a
@@ -1117,6 +1132,8 @@ export interface TopicSectionAccordionProps {
   sectionHidden: boolean;
   isOpen: boolean;
   isIndexSelected: boolean;
+  isContextMenuOpen?: boolean;
+  isPrintTarget?: boolean;
   showCourseTag?: boolean;
   domId: string;
   keyPrefix: string;
@@ -1126,6 +1143,13 @@ export interface TopicSectionAccordionProps {
   activeNavCardId?: string;
   highlightTokens?: readonly string[];
   onToggleTopic: (topicId: string) => void;
+  onOpenTopicContextMenu?: (
+    section: TopicSectionRecord,
+    anchorX: number,
+    anchorY: number,
+    source: 'mouse' | 'touch' | 'keyboard',
+    triggerEl: HTMLElement | null
+  ) => void;
   onToggleStar: (id: string) => void;
   onToggleLearned: (id: string, checked: boolean) => void;
   onCopyLatex: (latex: string) => void;
@@ -1140,6 +1164,8 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
   sectionHidden,
   isOpen,
   isIndexSelected,
+  isContextMenuOpen = false,
+  isPrintTarget = false,
   showCourseTag = true,
   domId,
   keyPrefix,
@@ -1149,6 +1175,7 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
   activeNavCardId,
   highlightTokens,
   onToggleTopic,
+  onOpenTopicContextMenu,
   onToggleStar,
   onToggleLearned,
   onCopyLatex,
@@ -1161,19 +1188,96 @@ export const TopicSectionAccordion = memo(function TopicSectionAccordion({
 
   const rowLayout = useMemo(() => computeGridRowLayout(visibleCards), [visibleCards]);
 
+  const longPressTimerRef = useRef<number | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const suppressClickUntilRef = useRef<number>(0);
+
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    touchStartRef.current = null;
+  }, []);
+
+  useEffect(() => clearLongPressTimer, [clearLongPressTimer]);
+
   return (
     <details
       id={domId}
       data-c={section.course}
       style={{ '--topic-pct': `${topicPct}%` } as React.CSSProperties}
-      className={`fmt${isIndexSelected ? ' index-selected' : ''}${sectionHidden ? ' hidden' : ''}${freqScore === 5 ? ' is-high-yield' : ''}${topicPct === 100 ? ' is-mastered' : ''}${topicPct > 0 ? ' has-progress' : ''}`}
+      className={`fmt${isIndexSelected ? ' index-selected' : ''}${
+        isContextMenuOpen ? ' is-context-active' : ''
+      }${isPrintTarget ? ' is-print-target' : ''}${sectionHidden ? ' hidden' : ''}${
+        freqScore === 5 ? ' is-high-yield' : ''
+      }${topicPct === 100 ? ' is-mastered' : ''}${topicPct > 0 ? ' has-progress' : ''}`}
       open={isOpen}
       hidden={sectionHidden}
     >
       <summary
         onClick={(e) => {
           e.preventDefault();
+          if (Date.now() < suppressClickUntilRef.current) {
+            e.stopPropagation();
+            return;
+          }
           onToggleTopic(section.id);
+        }}
+        onContextMenu={(e) => {
+          if (!onOpenTopicContextMenu) return;
+          e.preventDefault();
+          e.stopPropagation();
+          onOpenTopicContextMenu(section, e.clientX, e.clientY, 'mouse', e.currentTarget);
+        }}
+        onTouchStart={(e) => {
+          if (!onOpenTopicContextMenu || e.touches.length !== 1) return;
+          clearLongPressTimer();
+          const touch = e.touches[0];
+          const startX = touch.clientX;
+          const startY = touch.clientY;
+          const summaryEl = e.currentTarget;
+          touchStartRef.current = { x: startX, y: startY };
+          longPressTimerRef.current = window.setTimeout(() => {
+            longPressTimerRef.current = null;
+            touchStartRef.current = null;
+            suppressClickUntilRef.current = Date.now() + 550;
+            try {
+              navigator.vibrate?.(12);
+            } catch {
+              // Ignore unsupported vibration API
+            }
+            onOpenTopicContextMenu(section, startX, startY, 'touch', summaryEl);
+          }, 480);
+        }}
+        onTouchMove={(e) => {
+          if (!touchStartRef.current || e.touches.length !== 1) {
+            clearLongPressTimer();
+            return;
+          }
+          const touch = e.touches[0];
+          const dx = touch.clientX - touchStartRef.current.x;
+          const dy = touch.clientY - touchStartRef.current.y;
+          if (Math.hypot(dx, dy) > 10) {
+            clearLongPressTimer();
+          }
+        }}
+        onTouchEnd={clearLongPressTimer}
+        onTouchCancel={clearLongPressTimer}
+        onKeyDown={(e) => {
+          if (!onOpenTopicContextMenu) return;
+          if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+            e.preventDefault();
+            e.stopPropagation();
+            const rect = e.currentTarget.getBoundingClientRect();
+            onOpenTopicContextMenu(
+              section,
+              Math.round(rect.left + 24),
+              Math.round(rect.bottom + 4),
+              'keyboard',
+              e.currentTarget
+            );
+          }
         }}
       >
         <span className="fmtt">
@@ -1395,6 +1499,9 @@ export default function App() {
     requeuedIds: {},
   });
   const [flashcardRevealed, setFlashcardRevealed] = useState<boolean>(false);
+  const [flashcardTopicScope, setFlashcardTopicScope] = useState<TopicSectionRecord | null>(null);
+  const [topicContextMenu, setTopicContextMenu] = useState<TopicContextMenuState | null>(null);
+  const [printOnlyTopicId, setPrintOnlyTopicId] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState<boolean>(false);
   const [tourOpen, setTourOpen] = useState<boolean>(false);
   const [deepLinkFlashCardId, setDeepLinkFlashCardId] = useState<string>('');
@@ -1418,6 +1525,10 @@ export default function App() {
 
   useEffect(() => {
     if (hasSeenOnboardingTour()) return;
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('autostart') === '1') return;
+    }
     const timer = window.setTimeout(() => {
       if (!isPdfFullscreenRef.current) {
         setTourOpen(true);
@@ -2789,6 +2900,7 @@ export default function App() {
       { currentCardId: activeFlashcard?.id ?? null }
     );
     const firstCard = nextQueue.queue[0] ? cardById.get(nextQueue.queue[0]) || pool[0] : pool[0];
+    setFlashcardTopicScope(null);
     setFlashcardQueue(nextQueue);
     setActiveFlashcard(firstCard);
     setFlashcardRevealed(false);
@@ -2796,6 +2908,293 @@ export default function App() {
     setToolsOpen(false);
     setModalOpen(true);
   }, [filterSummary.visibleIds, activeIndexedPool, activeFlashcard, cardById, showToast]);
+
+  const sectionById = useMemo(() => {
+    const map = new Map<string, TopicSectionRecord>();
+    for (const sec of allSections) {
+      map.set(sec.id, sec);
+    }
+    return map;
+  }, [allSections]);
+
+  const courseBadgeByCode = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of courseOptions) {
+      map.set(c.code, c.badge);
+    }
+    return map;
+  }, [courseOptions]);
+
+  const handleOpenTopicContextMenu = useCallback(
+    (
+      section: TopicSectionRecord,
+      anchorX: number,
+      anchorY: number,
+      source: 'mouse' | 'touch' | 'keyboard',
+      triggerEl: HTMLElement | null
+    ) => {
+      let liveSignal = '';
+      if (triggerEl && typeof window !== 'undefined') {
+        try {
+          liveSignal = window
+            .getComputedStyle(triggerEl)
+            .getPropertyValue('--course-signal')
+            .trim();
+        } catch {
+          liveSignal = '';
+        }
+      }
+      setToolsOpen(false);
+      setTermMenuOpen(false);
+      setTopicContextMenu({
+        section,
+        courseBadge: courseBadgeByCode.get(section.course) || section.course,
+        anchorX,
+        anchorY,
+        source,
+        courseSignal: liveSignal,
+        triggerEl,
+      });
+    },
+    [courseBadgeByCode]
+  );
+
+  const handleCloseTopicContextMenu = useCallback(() => {
+    setTopicContextMenu(null);
+  }, []);
+
+  const handleTopicMarkAllLearned = useCallback(
+    (section: TopicSectionRecord) => {
+      if (section.course === 'GEN' || section.cards.length === 0) return;
+      setPersisted((prev) => {
+        const nextLearned = { ...prev.learned };
+        for (const card of section.cards) {
+          nextLearned[card.id] = true;
+        }
+        return { ...prev, learned: nextLearned };
+      });
+      showToast(`MARKED ${section.cards.length} LEARNED // ${section.title}`);
+    },
+    [showToast]
+  );
+
+  const handleTopicMarkAllUnlearned = useCallback(
+    (section: TopicSectionRecord) => {
+      if (section.course === 'GEN' || section.cards.length === 0) return;
+      setPersisted((prev) => {
+        const nextLearned = { ...prev.learned };
+        for (const card of section.cards) {
+          delete nextLearned[card.id];
+        }
+        return { ...prev, learned: nextLearned };
+      });
+      showToast(`CLEARED LEARNED // ${section.title}`);
+    },
+    [showToast]
+  );
+
+  const handleTopicStarAll = useCallback(
+    (section: TopicSectionRecord) => {
+      if (section.cards.length === 0) return;
+      setPersisted((prev) => {
+        const nextStarred = { ...prev.starred };
+        for (const card of section.cards) {
+          nextStarred[card.id] = true;
+        }
+        return { ...prev, starred: nextStarred };
+      });
+      showToast(`STARRED ${section.cards.length} CARDS // ${section.title}`);
+    },
+    [showToast]
+  );
+
+  const handleTopicUnstarAll = useCallback(
+    (section: TopicSectionRecord) => {
+      if (section.cards.length === 0) return;
+      setPersisted((prev) => {
+        const nextStarred = { ...prev.starred };
+        for (const card of section.cards) {
+          delete nextStarred[card.id];
+        }
+        return { ...prev, starred: nextStarred };
+      });
+      showToast(`UNSTARRED ALL // ${section.title}`);
+    },
+    [showToast]
+  );
+
+  const handleTopicQuiz = useCallback(
+    (section: TopicSectionRecord) => {
+      if (section.cards.length === 0) {
+        showToast('NO CARDS IN THIS TOPIC');
+        return;
+      }
+      const nextQueue = createFlashcardQueue(
+        section.cards.map((c) => c.id),
+        { currentCardId: null }
+      );
+      const firstCard = nextQueue.queue[0]
+        ? cardById.get(nextQueue.queue[0]) || section.cards[0]
+        : section.cards[0];
+      setFlashcardTopicScope(section);
+      setFlashcardQueue(nextQueue);
+      setActiveFlashcard(firstCard);
+      setFlashcardRevealed(false);
+      setModalMode('flashcard');
+      setToolsOpen(false);
+      setSidebarOpen(false);
+      setModalOpen(true);
+    },
+    [cardById, showToast]
+  );
+
+  const handleTopicFocusOnly = useCallback(
+    (section: TopicSectionRecord) => {
+      const targetSections = isGenSelected
+        ? genSections
+        : persisted.tab === 'thm'
+        ? [...thmSections, ...genSections]
+        : [...fmSections, ...genSections];
+      setOpenTopics((prev) => {
+        const next = { ...prev };
+        for (const sec of targetSections) {
+          next[sec.id] = sec.id === section.id;
+        }
+        next[section.id] = true;
+        return next;
+      });
+      if (deferredTokens.length > 0) {
+        setSearchToggledTopics(() => {
+          const next: Record<string, boolean> = {};
+          for (const sec of targetSections) {
+            next[sec.id] = sec.id === section.id;
+          }
+          return next;
+        });
+      }
+      setSidebarOpen(false);
+      pulseSelectedTopic(section.id);
+      if (typeof window !== 'undefined') {
+        window.requestAnimationFrame(() => {
+          document.getElementById(section.id)?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+          });
+        });
+      }
+      showToast(`FOCUSED // ${section.title}`);
+    },
+    [
+      isGenSelected,
+      persisted.tab,
+      fmSections,
+      thmSections,
+      genSections,
+      deferredTokens.length,
+      pulseSelectedTopic,
+      showToast,
+    ]
+  );
+
+  const handleTopicCopyLink = useCallback(
+    async (section: TopicSectionRecord) => {
+      const pathname =
+        typeof window !== 'undefined' && window.location?.pathname
+          ? window.location.pathname
+          : '/';
+      const url = buildTopicDeepLinkUrl(section.id, undefined, pathname);
+      if (typeof window !== 'undefined' && window.history?.replaceState) {
+        window.history.replaceState(null, '', `${pathname}#${encodeURIComponent(section.id)}`);
+      }
+      const ok = await copyTextToClipboard(url);
+      showToast(ok ? `COPIED LINK // #${section.id}` : 'TOPIC HASH UPDATED IN ADDRESS BAR');
+    },
+    [showToast]
+  );
+
+  const handleTopicCopyAllFormulas = useCallback(
+    async (section: TopicSectionRecord, courseBadge: string) => {
+      const { text, count } = formatTopicFormulasForCopy(section, courseBadge);
+      if (count === 0) {
+        showToast('NO FORMULAS TO COPY');
+        return;
+      }
+      const ok = await copyTextToClipboard(text);
+      showToast(
+        ok ? `COPIED ${count} FORMULAS // ${section.title}` : 'COPY FAILED — SELECT MANUALLY'
+      );
+    },
+    [showToast]
+  );
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (printOnlyTopicId) {
+      document.body.dataset.printTopic = printOnlyTopicId;
+    } else {
+      delete document.body.dataset.printTopic;
+    }
+    return () => {
+      delete document.body.dataset.printTopic;
+    };
+  }, [printOnlyTopicId]);
+
+  const handleTopicPrint = useCallback(
+    (section: TopicSectionRecord) => {
+      if (typeof window === 'undefined') return;
+      setSidebarOpen(false);
+      setOpenTopics((prev) => ({ ...prev, [section.id]: true }));
+      if (deferredTokens.length > 0) {
+        setSearchToggledTopics((prev) => ({ ...prev, [section.id]: true }));
+      }
+      setPrintOnlyTopicId(section.id);
+      showToast(`PREPARING A4 PRINT // ${section.title}`);
+
+      const cleanup = () => {
+        setPrintOnlyTopicId(null);
+        window.removeEventListener('afterprint', cleanup);
+      };
+      window.addEventListener('afterprint', cleanup);
+
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          window.setTimeout(() => {
+            window.print();
+            // Fallback cleanup if browser suppresses afterprint event
+            window.setTimeout(cleanup, 1500);
+          }, 120);
+        });
+      });
+    },
+    [deferredTokens.length, showToast]
+  );
+
+  const handleTourStepEnter = useCallback(
+    (stepId: string) => {
+      if (stepId === 'dashboard') {
+        setBentoOpen(true);
+        setPersisted((prev) => (prev.tab === 'prac' ? { ...prev, tab: 'fm' } : prev));
+      } else if (stepId === 'topic-actions') {
+        setPersisted((prev) => (prev.tab === 'prac' ? { ...prev, tab: 'fm' } : prev));
+      } else if (stepId === 'cards') {
+        setPersisted((prev) => (prev.tab === 'prac' ? { ...prev, tab: 'fm' } : prev));
+        setOpenTopics((prev) => {
+          const activeList =
+            persisted.tab === 'thm' && !isGenSelected ? thmSections : fmSections;
+          const visibleCandidate = activeList.find(
+            (s) => persisted.course === 'ALL' || s.course === persisted.course
+          );
+          if (!visibleCandidate) return prev;
+          const anyAlreadyOpen = activeList.some(
+            (s) => (persisted.course === 'ALL' || s.course === persisted.course) && prev[s.id]
+          );
+          if (anyAlreadyOpen) return prev;
+          return { ...prev, [visibleCandidate.id]: true };
+        });
+      }
+    },
+    [persisted.tab, persisted.course, isGenSelected, fmSections, thmSections]
+  );
 
   const handleGradeFlashcard = useCallback(
     (grade: 'review' | 'got-it') => {
@@ -3144,6 +3543,8 @@ export default function App() {
           sectionHidden={item.sectionHidden}
           isOpen={isSectionOpen}
           isIndexSelected={selectedTopicId === item.section.id}
+          isContextMenuOpen={topicContextMenu?.section.id === item.section.id}
+          isPrintTarget={printOnlyTopicId === item.section.id}
           showCourseTag={showTopicCourseTag}
           domId={item.section.id}
           keyPrefix="fm-"
@@ -3153,6 +3554,7 @@ export default function App() {
           activeNavCardId={activeNavCardId}
           highlightTokens={activeHighlightTokensForTab}
           onToggleTopic={handleToggleTopic}
+          onOpenTopicContextMenu={handleOpenTopicContextMenu}
           onToggleStar={handleToggleStar}
           onToggleLearned={handleToggleLearned}
           onCopyLatex={handleCopyLatex}
@@ -3168,6 +3570,8 @@ export default function App() {
     searchToggledTopics,
     openTopics,
     selectedTopicId,
+    topicContextMenu?.section.id,
+    printOnlyTopicId,
     showTopicCourseTag,
     persisted.selfTest,
     persisted.notes,
@@ -3175,6 +3579,7 @@ export default function App() {
     activeNavCardId,
     activeHighlightTokensForTab,
     handleToggleTopic,
+    handleOpenTopicContextMenu,
     handleToggleStar,
     handleToggleLearned,
     handleCopyLatex,
@@ -3202,6 +3607,8 @@ export default function App() {
           sectionHidden={item.sectionHidden}
           isOpen={isSectionOpen}
           isIndexSelected={selectedTopicId === item.section.id}
+          isContextMenuOpen={topicContextMenu?.section.id === item.section.id}
+          isPrintTarget={printOnlyTopicId === item.section.id}
           showCourseTag={showTopicCourseTag}
           domId={item.section.id}
           keyPrefix="thm-"
@@ -3211,6 +3618,7 @@ export default function App() {
           activeNavCardId={activeNavCardId}
           highlightTokens={activeHighlightTokensForTab}
           onToggleTopic={handleToggleTopic}
+          onOpenTopicContextMenu={handleOpenTopicContextMenu}
           onToggleStar={handleToggleStar}
           onToggleLearned={handleToggleLearned}
           onCopyLatex={handleCopyLatex}
@@ -3226,6 +3634,8 @@ export default function App() {
     searchToggledTopics,
     openTopics,
     selectedTopicId,
+    topicContextMenu?.section.id,
+    printOnlyTopicId,
     showTopicCourseTag,
     persisted.selfTest,
     persisted.notes,
@@ -3233,6 +3643,7 @@ export default function App() {
     activeNavCardId,
     activeHighlightTokensForTab,
     handleToggleTopic,
+    handleOpenTopicContextMenu,
     handleToggleStar,
     handleToggleLearned,
     handleCopyLatex,
@@ -4749,6 +5160,19 @@ export default function App() {
                           e.preventDefault();
                           handleSelectTopicFromNav(link.targetId, link.href);
                         }}
+                        onContextMenu={(e) => {
+                          const targetSec = sectionById.get(link.targetId);
+                          if (!targetSec) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleOpenTopicContextMenu(
+                            targetSec,
+                            e.clientX,
+                            e.clientY,
+                            'mouse',
+                            e.currentTarget
+                          );
+                        }}
                       >
                         <span className="fmlink-idx">
                           {String(idx + 1).padStart(2, '0')}
@@ -4808,6 +5232,19 @@ export default function App() {
                         onClick={(e) => {
                           e.preventDefault();
                           handleSelectTopicFromNav(link.targetId, link.href);
+                        }}
+                        onContextMenu={(e) => {
+                          const targetSec = sectionById.get(link.targetId);
+                          if (!targetSec) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleOpenTopicContextMenu(
+                            targetSec,
+                            e.clientX,
+                            e.clientY,
+                            'mouse',
+                            e.currentTarget
+                          );
                         }}
                       >
                         <span className="fmlink-idx">
@@ -6266,9 +6703,13 @@ export default function App() {
                   <button
                     type="button"
                     className="fc-reveal-btn"
-                    onClick={pickRandomFlashcard}
+                    onClick={() =>
+                      flashcardTopicScope
+                        ? handleTopicQuiz(flashcardTopicScope)
+                        : pickRandomFlashcard()
+                    }
                   >
-                    Start Fresh Deck
+                    {flashcardTopicScope ? 'Quiz Topic Again' : 'Start Fresh Deck'}
                   </button>
                 </div>
               </div>
@@ -6317,7 +6758,11 @@ export default function App() {
       </div>
 
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-      <OnboardingTour open={tourOpen} onClose={() => setTourOpen(false)} />
+      <OnboardingTour
+        open={tourOpen}
+        onClose={() => setTourOpen(false)}
+        onStepEnter={handleTourStepEnter}
+      />
       <OfflineIndicator />
 
       <div className="floating-nav-dock" role="navigation" aria-label="Quick Navigation Controls">
@@ -6375,6 +6820,22 @@ export default function App() {
           </svg>
         </button>
       </div>
+
+      <TopicContextMenu
+        menu={topicContextMenu}
+        learnedMap={persisted.learned}
+        starredMap={persisted.starred}
+        onClose={handleCloseTopicContextMenu}
+        onMarkAllLearned={handleTopicMarkAllLearned}
+        onMarkAllUnlearned={handleTopicMarkAllUnlearned}
+        onStarAll={handleTopicStarAll}
+        onUnstarAll={handleTopicUnstarAll}
+        onQuizTopic={handleTopicQuiz}
+        onFocusOnlyTopic={handleTopicFocusOnly}
+        onCopyTopicLink={handleTopicCopyLink}
+        onCopyAllFormulas={handleTopicCopyAllFormulas}
+        onPrintTopic={handleTopicPrint}
+      />
 
       <GlobalTooltip />
 
